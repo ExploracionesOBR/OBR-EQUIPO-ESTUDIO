@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v6.1.39 (LOCAL MEDIA PLAYER)</title> 
+    <title>CAMARA OBR PRO v6.1.40 (120FPS & NON-INVASIVE MIC)</title> 
     
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
@@ -225,7 +225,7 @@
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.39 (LOCAL MEDIA PLAYER)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.40 (120FPS & NON-INVASIVE MIC)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -303,7 +303,7 @@
 
     // GUARDIAN DE IMAGEN (FRAME PACING)
     let lastFrameTime = 0;
-    const fpsInterval = 1000 / 60; // FIX: Objetivo 60 FPS
+    const fpsInterval = 1000 / 120; // FIX: Objetivo 60-120 FPS (desbloqueado)
 
     const animState = { hudScale: 1.0, hudTarget: 1.0, aiScale: 0.0, aiTarget: 0.0 };
     const el = { 
@@ -526,18 +526,19 @@
         try {
             updateProgress(10, "INICIANDO SENSOR...");
             // MEJORA 4: AUDIO NO INVASIVO (Evita secuestro de micrófono en iOS/TikTok)
-            // MEJORA 5: RESOLUCION 4K / 1080P @ 60FPS
+            // MEJORA 5: RESOLUCION 4K / 1080P @ 60-120FPS
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { 
                     echoCancellation: false, 
                     autoGainControl: false, 
-                    noiseSuppression: false 
+                    noiseSuppression: false,
+                    channelCount: 1 // Minimizar invasividad del hardware
                 }, 
                 video: { 
                     facingMode: 'environment', 
                     width: { ideal: 1920, max: 3840 }, 
                     height: { ideal: 1080, max: 2160 }, 
-                    frameRate: { ideal: 60, min: 30 } 
+                    frameRate: { ideal: 60, max: 120 } // Permitir hasta 120fps si el equipo lo soporta
                 } 
             });
             videoStream = stream; el.video.srcObject = stream; el.video.play();
@@ -589,13 +590,18 @@
     function initAudioEngine() {
         if (!audioCtx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AudioContext({ latencyHint: 'playback' }); // Optimización de latencia
+            audioCtx = new AudioContext({ latencyHint: 'interactive' }); // Optimización: no invasivo
             const source = audioCtx.createMediaStreamSource(videoStream);
             audioAnalyser = audioCtx.createAnalyser();
             audioAnalyser.fftSize = 2048; 
             source.connect(audioAnalyser);
             audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
             
+            // FIX: Suspender contexto inmediatamente para evitar secuestro de audio (iOS/Android)
+            if(audioCtx.state === 'running') {
+                audioCtx.suspend();
+            }
+
             // Speech Recognition BLINDADO
             if ('webkitSpeechRecognition' in window) {
                 speechRec = new webkitSpeechRecognition();
@@ -637,6 +643,8 @@
             if(speechRec) try { speechRec.start(); } catch(e){}
         } else {
             btn.classList.remove('active');
+            // FIX: Suspender contexto para liberar recursos del sistema
+            if(audioCtx && audioCtx.state === 'running') audioCtx.suspend();
             if(speechRec) try { speechRec.stop(); } catch(e){}
         }
     }
