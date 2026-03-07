@@ -615,6 +615,7 @@
           const [backupIndex, setBackupIndex] = useState(0);
           
           const [forceCam1Audio, setForceCam1Audio] = useState(false);
+          const [isMonitorMode, setIsMonitorMode] = useState(false); // ESTADO PARA PANTALLA COMPLETA MOVIL
           
           const [blobAssets, setBlobAssets] = useState(initialBlobAssets || {}); 
           const [assetStatus, setAssetStatus] = useState(() => {
@@ -1003,6 +1004,29 @@
               notify("LINK OBS COPIADO");
               alert("ENLACE LOCAL GENERADO:\n\n1. Ve a OBS en esta PC.\n2. Agrega 'Navegador'.\n3. Pega el enlace.\n\n" + url);
           };
+          
+          const enterMonitorMode = async () => {
+              triggerHaptic(20);
+              try {
+                  if (document.documentElement.requestFullscreen) {
+                      await document.documentElement.requestFullscreen();
+                  } else if (document.documentElement.webkitRequestFullscreen) {
+                      await document.documentElement.webkitRequestFullscreen();
+                  }
+              } catch (e) { console.warn("Fullscreen API not available"); }
+              setIsMonitorMode(true);
+          };
+
+          const exitMonitorMode = async () => {
+              try {
+                  if (document.exitFullscreen) {
+                      await document.exitFullscreen();
+                  } else if (document.webkitExitFullscreen) {
+                      await document.webkitExitFullscreen();
+                  }
+              } catch (e) { console.warn("Exit Fullscreen API not available"); }
+              setIsMonitorMode(false);
+          };
 
           const previewCam = previewId ? cameras[previewId] : null;
           const camList = Object.values(cameras);
@@ -1019,6 +1043,21 @@
                 <ToastContainer notifications={notifications} />
                 {isShareModalOpen && <ShareModal onClose={() => setIsShareModalOpen(false)} dockId={myId} />}
                 {zoomedCamId && cameras[zoomedCamId] && <ZoomModal stream={cameras[zoomedCamId].stream} name={cameras[zoomedCamId].name} onClose={() => setZoomedCamId(null)} />}
+                
+                {/* MONITOR MODE OVERLAY (PANTALLA COMPLETA REC) */}
+                {isMonitorMode && (
+                    <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center">
+                        {cameras[programId]?.stream ? (
+                            <VideoPeer stream={cameras[programId]?.stream} className="w-full h-full object-cover" muted={isProgramMuted} />
+                        ) : (
+                            <div className="text-neutral-900 font-bold text-xl animate-pulse tracking-widest font-mono opacity-30">ESPERANDO PROGRAM...</div>
+                        )}
+                        <MediaOverlay activeMedia={activeMedia} blobAssets={blobAssets} />
+                        <button onClick={exitMonitorMode} className="absolute top-6 right-6 z-[10000] bg-black/10 hover:bg-red-600 text-white p-4 rounded-full transition-all opacity-5 hover:opacity-100 cursor-pointer">
+                            <X size={24}/>
+                        </button>
+                    </div>
+                )}
                 
                 <div className="h-12 bg-black border-b border-[#222] flex items-center justify-center relative shrink-0">
                     <div className="absolute left-4 flex items-center">
@@ -1044,6 +1083,7 @@
 
                     <div className="absolute right-4 flex items-center gap-4">
                         <div className="font-mono text-cyan-400 text-[10px] bg-[#111] px-2 py-1 border border-[#333] rounded cursor-pointer uppercase tracking-widest" onClick={() => { navigator.clipboard.writeText(myId); notify("Copiado"); }}>ID: {myId || '---'}</div>
+                        <button onClick={enterMonitorMode} className="text-[10px] bg-green-900/30 text-green-200 border border-green-800 px-3 py-1 rounded font-bold uppercase flex items-center gap-1 shadow-lg active:scale-95 transition-all"><Maximize size={12}/> Monitor Rec</button>
                         <button onClick={generateObsLink} className="text-[10px] bg-blue-900/30 text-blue-200 border border-blue-800 px-3 py-1 rounded font-bold uppercase flex items-center gap-1 shadow-lg active:scale-95 transition-all"><Link size={12}/> Link Local OBS</button>
                     </div>
                 </div>
