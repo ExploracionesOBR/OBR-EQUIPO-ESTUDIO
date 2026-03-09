@@ -9,7 +9,11 @@
     <link rel="apple-touch-icon" href="obr-logo.png">
     <meta name="theme-color" content="#000000">
     
-    <link rel="manifest" href='data:application/manifest+json,{"name":"OBR CAM PRO","short_name":"OBR CAM","start_url":".","display":"fullscreen","orientation":"landscape","categories":["games","entertainment"],"background_color":"#000000","theme_color":"#000000","icons":[{"src":"obr-logo.png","sizes":"192x192","type":"image/png"},{"src":"obr-logo.png","sizes":"512x512","type":"image/png"}]}'>
+   <!-- Reemplazamos el manifest viejo por el nuevo archivo -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#000000">
+    
+    <!-- CONSERVA ESTAS LÍNEAS PARA IPHONE/IPAD -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
@@ -131,22 +135,17 @@
         #zoom-target-indicator.active { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     </style>
 </head>
-    <!-- REGISTRO DEL SERVICE WORKER (PWA) -->
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(registration => {
-                    console.log('🛡️ OBR Guardian Network (PWA) Activado:', registration.scope);
-                })
-                .catch(error => {
-                    console.error('Fallo en OBR Guardian (PWA):', error);
-                });
-        });
-    }
-</script>
-<body>
-
+<!-- Iniciar el Guardián de Red (Service Worker PWA) -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('🛡️ OBR Network Shield Activo:', reg.scope))
+                    .catch(err => console.error('Fallo en escudo OBR:', err));
+            });
+        }
+    </script>
+</body>
     <div id="orientation-lock">
         <i class="fas fa-mobile-alt text-4xl mb-4 rotate-90 text-red-500"></i>
         <h2 class="text-xl font-bold font-orbitron tracking-widest text-red-500">GIRAR DISPOSITIVO</h2>
