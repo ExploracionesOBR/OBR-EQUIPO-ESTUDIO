@@ -1,6 +1,6 @@
 {
   "name": "OBR Equipo Especial PRO",
-  "short_name": "OBR PRO",
+  "short_name": "OBR PRO 2.1",
   "description": "Sistema de escaneo y transmisión OBR",
   "start_url": "./camara.html",
   "display": "standalone",
