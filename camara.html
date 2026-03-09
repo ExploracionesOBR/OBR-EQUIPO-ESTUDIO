@@ -166,6 +166,8 @@
         <div id="toast-container"></div>
         <div id="tally-border" class="preview"></div>
         
+        <div id="recovery-indicator" class="absolute bottom-12 left-5 text-sm pointer-events-none transition-opacity duration-500 z-50" style="opacity: 0; display: none; filter: drop-shadow(0px 0px 4px rgba(0,0,0,0.8));">🚀</div>
+        
         <div id="link-status" class="absolute bottom-4 left-4 text-[10px] font-mono text-gray-400 bg-black/60 px-2 py-1 rounded border border-gray-800 flex items-center gap-2">
             <div id="status-dot" class="w-2 h-2 rounded-full bg-red-900"></div>
             <span id="status-text">PREVIEW</span>
@@ -186,9 +188,6 @@
             <div id="network-indicator" class="flex items-center gap-2 text-gray-400 bg-black/60 border border-gray-700 px-3 py-1 rounded-full text-[10px] font-mono backdrop-blur-sm transition-colors duration-300">
                 <i class="fas fa-wifi"></i>
                 <span id="network-type">LINK</span>
-            </div>
-            <div class="interactive text-gray-400 p-2 bg-black/60 border border-gray-700 rounded-full hover:text-white hover:border-blue-500 transition-colors backdrop-blur-sm" onclick="togglePiP()" title="Ventana Flotante">
-                <i class="fas fa-images text-xl"></i>
             </div>
             <div class="interactive text-gray-400 p-2 bg-black/60 border border-gray-700 rounded-full hover:text-white hover:border-red-500 transition-colors backdrop-blur-sm" onclick="openSettings()">
                 <i class="fas fa-cog text-xl"></i>
@@ -255,10 +254,15 @@
                 </div>
                 <div class="bg-black/50 p-3 rounded border border-gray-800">
                     <h3 className="text-xs font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1">IA ANALYZER</h3>
-                    <label class="text-[9px] text-gray-500 font-mono mb-1 block">API KEY</label>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-[9px] text-gray-500 font-mono block uppercase">API KEY</label>
+                        <div class="flex gap-1">
+                            <button onclick="window.open('https://aistudio.google.com/api-keys', '_blank')" class="bg-blue-900/40 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-800 text-[8px] px-2 py-0.5 rounded transition-colors font-bold tracking-widest" title="Obtener Llave Gemini">GEM</button>
+                            <button onclick="window.open('https://console.groq.com/keys', '_blank')" class="bg-orange-900/40 text-orange-400 hover:bg-orange-600 hover:text-white border border-orange-800 text-[8px] px-2 py-0.5 rounded transition-colors font-bold tracking-widest" title="Obtener Llave Groq">GRQ</button>
+                        </div>
+                    </div>
                     <div class="relative w-full mb-2">
-                        <input type="password" id="api-key-internal" placeholder="GEMINI KEY" class="w-full bg-black border border-gray-700 p-2 pr-10 text-white text-xs rounded outline-none focus:border-red-500">
-                        <button onclick="window.open('https://aistudio.google.com/api-keys', '_blank')" class="absolute right-2 top-1/2 -translate-y-1/2 text-base hover:scale-110 transition-transform leading-none" title="Crear API Key">📲</button>
+                        <input type="password" id="api-key-internal" placeholder="GEMINI O GROQ KEY" class="w-full bg-black border border-gray-700 p-2 text-white text-xs rounded outline-none focus:border-red-500">
                     </div>
                     <button id="btn-validate-api" onclick="validateAndSaveKey()" class="w-full border border-green-800 text-green-500 hover:bg-green-900/30 py-1 rounded text-[10px] font-bold">VALIDAR KEY</button>
                     <div id="api-status-msg" class="text-[9px] font-mono mt-1 text-center text-yellow-500 h-3"></div>
@@ -271,12 +275,18 @@
 
 <script>
     const AI_SENSITIVITY = 0.2; 
-    const state = { apiKey: localStorage.getItem("obr_gemini_key") || "", aiModel: localStorage.getItem("obr_ai_model") || "gemini-2.5-flash-preview-09-2025", studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 };
+    const state = { 
+        apiKey: localStorage.getItem("obr_ai_key") || localStorage.getItem("obr_gemini_key") || "", 
+        aiProvider: localStorage.getItem("obr_ai_provider") || "gemini",
+        aiModel: localStorage.getItem("obr_ai_model") || "gemini-2.5-flash", 
+        studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 
+    };
     
     const PEER_CONFIG = { config: { iceServers: [{ urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }] } };
     
-    let GEMINI_API_KEY = state.apiKey;
+    let AI_API_KEY = state.apiKey;
     let CURRENT_AI_MODEL = state.aiModel;
+    let CURRENT_AI_PROVIDER = state.aiProvider;
     let isAIProcessing = false;
     let isPareidoliaActive = false;
     let pareidoliaInterval = null;
@@ -337,13 +347,17 @@
 
     let logoImg = new Image(); logoImg.src = 'obr-logo.png';
 
-    // LIMPIADOR DE CACHÉ (MEMORY CLEANER)
-    setInterval(systemGC, 30000);
+    // LIMPIADOR DE CACHÉ SILENCIOSO (MEMORY CLEANER - IA VISION)
+    // OPTIMIZADO: Ahora corre cada 15s para prevenir bloqueos de memoria y caída de FPS
+    setInterval(systemGC, 15000);
     function systemGC() {
-        if (canvasScanBoxes.length > 50) canvasScanBoxes = [];
-        ctx.beginPath(); 
-        audioLayerCtx.beginPath();
-        console.log("Sistema OBR: Limpieza de Memoria Ejecutada");
+        if (canvasScanBoxes.length > 20) canvasScanBoxes = canvasScanBoxes.slice(-20); 
+        if (poses.length > 15) poses.length = 15;
+        if(ctx && ctx.beginPath) ctx.beginPath(); 
+        if(audioLayerCtx && audioLayerCtx.beginPath) audioLayerCtx.beginPath();
+        if (!state.isPareidolia && !state.isSLS) {
+            currentAiImage = null; // Liberar buffer zombie
+        }
     }
 
     // MEDIOS LOCALES (PRECARGA Y LOGICA)
@@ -429,34 +443,67 @@
         }
     }
 
-    async function togglePiP() {
-        try {
-            if (document.pictureInPictureElement) {
-                await document.exitPictureInPicture();
-            } else if (document.pictureInPictureEnabled && el.video.readyState === 4) {
-                await el.video.requestPictureInPicture();
-            } else {
-                showToast("PIP NO SOPORTADO O VIDEO NO LISTO", true);
-            }
-        } catch (e) {
-            showToast("ERROR PIP: " + e.message, true);
-        }
-    }
-
-    // --- PIP & BACKGROUND HANDLER (Auto-attempt) ---
+    // --- BACKGROUND HANDLER (Auto-attempt & Guardian check) ---
     document.addEventListener("visibilitychange", async () => {
-        if (document.visibilityState === "hidden" && el.video.readyState === 4) {
-             try {
-                if (el.video !== document.pictureInPictureElement && document.pictureInPictureEnabled) {
-                      await el.video.requestPictureInPicture(); 
-                }
-             } catch(e) {}
-        }
         // RE-ACTIVAR WAKE LOCK SI SE PIERDE FOCO Y SE REGRESA
         if (document.visibilityState === 'visible') {
             requestWakeLock();
+            // GUARDIAN: Validación inmediata al regresar de background
+            if (videoStream) {
+                const track = videoStream.getVideoTracks()[0];
+                if (!track || track.readyState === 'ended' || track.muted || el.video.paused) {
+                    console.log("GUARDIAN: Recuperando cámara tras cambio de foco...");
+                    restartCamera();
+                } else {
+                    el.video.play().catch(e => restartCamera());
+                }
+            }
         }
     });
+
+    // GUARDIAN DE CÁMARA: SISTEMA DE RECUPERACIÓN ANTI-CONGELAMIENTO Y GRABACIÓN (TIKTOK)
+    async function restartCamera() {
+        console.log("GUARDIAN: Fallo detectado. Reiniciando hardware de cámara...");
+        try {
+            if (videoStream) {
+                videoStream.getTracks().forEach(t => t.stop());
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { channelCount: 1, echoCancellation: false, autoGainControl: false, noiseSuppression: false }, 
+                video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 120 } } 
+            });
+            videoStream = stream; 
+            el.video.srcObject = stream; 
+            await el.video.play();
+            
+            // Re-aplicar Zoom si existía
+            if (state.zoom > 1) {
+                 const track = stream.getVideoTracks()[0];
+                 const caps = track.getCapabilities ? track.getCapabilities() : {};
+                 if(caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, state.zoom) }] }).catch(()=>{});
+            }
+
+            // Reconectar Analizador de Audio si estaba activo
+            if (audioCtx && audioCtx.state !== 'closed' && audioAnalyser) {
+                try {
+                    const source = audioCtx.createMediaStreamSource(stream);
+                    source.connect(audioAnalyser);
+                } catch(e) {}
+            }
+            
+            const recInd = document.getElementById('recovery-indicator');
+            if (recInd) {
+                recInd.style.display = 'block';
+                setTimeout(() => { recInd.style.opacity = '0.67'; }, 20); // Aparece al 67%
+                setTimeout(() => {
+                    recInd.style.opacity = '0'; // Comienza a desvanecerse
+                    setTimeout(() => { if(recInd.style.opacity === '0') recInd.style.display = 'none'; }, 500);
+                }, 2500); // Se oculta tras 2.5 segundos
+            }
+        } catch(e) {
+            console.error("Fallo crítico en Guardian:", e);
+        }
+    }
 
     window.onload = () => { 
         document.getElementById('api-key-internal').value = state.apiKey; 
@@ -526,7 +573,7 @@
         try {
             updateProgress(10, "INICIANDO SENSOR...");
             // MEJORA 4: AUDIO NO INVASIVO (Evita secuestro de micrófono en iOS/TikTok)
-            // MEJORA 5: RESOLUCION 4K / 1080P @ 60-120FPS
+            // MEJORA 5: RESOLUCION 1080P @ 60-120FPS (Límites corregidos para evitar bloqueo a 30fps en iOS)
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { 
                     echoCancellation: false, 
@@ -536,9 +583,9 @@
                 }, 
                 video: { 
                     facingMode: 'environment', 
-                    width: { ideal: 1920, max: 3840 }, 
-                    height: { ideal: 1080, max: 2160 }, 
-                    frameRate: { ideal: 60, max: 120 } // Permitir hasta 120fps si el equipo lo soporta
+                    width: { ideal: 1920 }, 
+                    height: { ideal: 1080 }, 
+                    frameRate: { ideal: 120 } // Forzar ideal alto; iOS bajará a 60fps de forma segura en 1080p
                 } 
             });
             videoStream = stream; el.video.srcObject = stream; el.video.play();
@@ -789,8 +836,12 @@
     function drawBurnInHUD(ctx, width, height, scale) {
         if(scale <= 0.01) return;
         ctx.save();
+        
+        // AUMENTO QUIRÚRGICO DEL 35% AL HUD
+        const adjustedScale = scale * 1.35; 
+        
         const centerX = 20 + 80; const centerY = 20 + 20; 
-        ctx.translate(centerX, centerY); ctx.scale(scale, scale); ctx.translate(-centerX, -centerY);
+        ctx.translate(centerX, centerY); ctx.scale(adjustedScale, adjustedScale); ctx.translate(-centerX, -centerY);
         ctx.shadowColor = "black"; ctx.shadowBlur = 4;
         if(logoImg.complete) ctx.drawImage(logoImg, 20, 20, 40, 40);
         ctx.fillStyle = "white"; ctx.font = "bold 16px 'Orbitron', sans-serif";
@@ -1025,6 +1076,34 @@
         const clockEl = document.getElementById('hud-time'); if (clockEl) clockEl.innerText = `${dateStr} - ${timeStr}`;
     }
 
+    // --- EL PERRO GUARDIÁN (WATCHDOG) DE CÁMARA ---
+    let watchdogZeroFps = 0;
+    setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+
+        // 1. Detección de caída de FPS (Congelamiento por uso prolongado)
+        if (currentFps === 0 && el.video.readyState >= 2) {
+            watchdogZeroFps++;
+            if (watchdogZeroFps >= 4) { // Si pasa 4 segundos en 0 FPS
+                console.warn("GUARDIAN: 0 FPS detectado. Reiniciando hardware...");
+                restartCamera();
+                watchdogZeroFps = 0;
+            }
+        } else {
+            watchdogZeroFps = 0;
+        }
+
+        // 2. Detección de Track Muerto (Pantalla Negra al grabar con TikTok/iOS)
+        if (videoStream) {
+            const track = videoStream.getVideoTracks()[0];
+            // La grabación de pantalla suele poner el track 'muted' o 'ended'
+            if (track && (track.readyState === 'ended' || track.muted) && !el.video.paused) {
+                console.warn("GUARDIAN: Track de cámara muerto o silenciado. Reiniciando...");
+                restartCamera();
+            }
+        }
+    }, 1000);
+
     function telemetryLoop() {
         const now = performance.now(); const elapsed = now - lastTime;
         if (elapsed >= 1000) { currentFps = Math.round((frameCount * 1000) / elapsed); frameCount = 0; lastTime = now; }
@@ -1157,23 +1236,45 @@
     function stopScanningEffect() { clearInterval(scanInterval); const overlay = document.getElementById('ai-scan-overlay'); overlay.innerHTML = ''; overlay.style.display = 'none'; canvasScanBoxes = []; }
 
     async function triggerPareidolia() {
-        const video = el.video; if(!GEMINI_API_KEY) return; if(isAIProcessing || window.speechSynthesis.speaking) return;
+        const video = el.video; if(!AI_API_KEY) return; if(isAIProcessing || window.speechSynthesis.speaking) return;
         const now = Date.now(); if (now - lastPareidoliaCall < 12000) return; lastPareidoliaCall = now;
         isAIProcessing = true; currentAiText = "búsqueda de señal..."; currentAiImage = null; startScanningEffect();
         const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360; canvas.getContext('2d').drawImage(video, 0, 0, 640, 360);
         const snapshot = new Image(); snapshot.src = canvas.toDataURL('image/jpeg', 0.8);
         const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         const prompt = "Actúa como un médium digital. Describe en primera persona lo que ves. Usa frases como 'Veo...', 'Hay algo en...', 'Está...'. Busca caras en las sombras. Sé siniestro. Max 12 palabras.";
+        
         try {
-            let attempts = 0, success = false, data = null;
+            let attempts = 0, success = false, textResult = "SEÑAL DEBIL...";
             while(attempts < 3 && !success) {
                 try {
-                    const modelToUse = CURRENT_AI_MODEL || "gemini-2.5-flash-preview-09-2025";
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${GEMINI_API_KEY}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }] }) });
-                    data = await resp.json(); if (data.candidates && data.candidates[0].content) success = true; else { attempts++; await new Promise(r => setTimeout(r, 1000)); }
-                } catch(err) { attempts++; }
+                    if (CURRENT_AI_PROVIDER === 'groq') {
+                        const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, { 
+                            method: 'POST', headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ 
+                                model: CURRENT_AI_MODEL, 
+                                messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }] }],
+                                max_tokens: 50, temperature: 0.7
+                            }) 
+                        });
+                        const data = await resp.json(); 
+                        if (resp.ok && data.choices && data.choices[0].message) { success = true; textResult = data.choices[0].message.content; } 
+                        else { 
+                            if(data.error && data.error.code === 'model_decommissioned') { textResult = "MODELO GROQ OBSOLETO"; success = true; break; }
+                            attempts++; await new Promise(r => setTimeout(r, 1000)); 
+                        }
+                    } else {
+                        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, { 
+                            method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }] }) 
+                        });
+                        const data = await resp.json(); 
+                        if (data.candidates && data.candidates[0].content) { success = true; textResult = data.candidates[0].content.parts[0].text; } 
+                        else { attempts++; await new Promise(r => setTimeout(r, 1000)); }
+                    }
+                } catch(err) { attempts++; await new Promise(r => setTimeout(r, 1000)); }
             }
-            let text = success ? (data.candidates?.[0]?.content?.parts?.[0]?.text || "ANOMALIA DETECTADA").replace(/[*_]/g, '').trim() : "SEÑAL DEBIL...";
+            let text = textResult.replace(/[*_]/g, '').trim();
             stopScanningEffect(); currentAiText = text; currentAiImage = snapshot; 
             clearTimeout(aiTextTimer); aiTextTimer = setTimeout(() => { currentAiText = ""; currentAiImage = null; if (state.isPareidolia) startScanningEffect(); }, 9000);
             
@@ -1193,7 +1294,7 @@
     }
 
     function togglePareidolia(btnElement) {
-        if(!GEMINI_API_KEY) { alert("NO API KEY: CONFIGURA EN AJUSTES"); return; }
+        if(!AI_API_KEY) { alert("NO API KEY: CONFIGURA EN AJUSTES"); return; }
         const btn = btnElement || document.getElementById('btn-ia'); isPareidoliaActive = !isPareidoliaActive; state.isPareidolia = isPareidoliaActive;
         
         if(isPareidoliaActive) {
@@ -1211,14 +1312,51 @@
     async function validateAndSaveKey() {
         const input = document.getElementById('api-key-internal'), btn = document.getElementById('btn-validate-api'), status = document.getElementById('api-status-msg'), k = input.value.trim();
         if(!k) { status.innerText = "❌ CAMPO VACIO"; return; }
-        input.disabled = true; btn.disabled = true; const modelsToTry = ["gemini-2.5-flash-preview-09-2025", "gemini-1.5-flash", "gemini-1.5-pro"]; let workingModel = null;
-        for(const step of ["CONECTANDO...", "ENVIANDO PING...", "VERIFICANDO..."]) { status.innerText = step; await new Promise(r => setTimeout(r, 400)); }
-        for (const model of modelsToTry) { try { const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }) }); if(response.ok) { workingModel = model; break; } } catch(e) {} }
+        input.disabled = true; btn.disabled = true; 
+        
+        for(const step of ["CONECTANDO...", "IDENTIFICANDO...", "VERIFICANDO..."]) { status.innerText = step; await new Promise(r => setTimeout(r, 400)); }
+        
+        let provider = k.startsWith('gsk_') ? 'groq' : 'gemini';
+        let workingModel = null;
+        
+        if (provider === 'groq') {
+            try {
+                const response = await fetch(`https://api.groq.com/openai/v1/models`, { method: 'GET', headers: { 'Authorization': `Bearer ${k}` } });
+                if (response.ok) {
+                    const data = await response.json();
+                    const models = data.data.map(m => m.id);
+                    console.log("Modelos Groq detectados en tiempo real:", models);
+                    
+                    // BÚSQUEDA DINÁMICA: No usamos nombres quemados.
+                    // Prioridad 1: Cualquier modelo con 'scout'
+                    // Prioridad 2: Cualquier modelo con 'vision'
+                    // Prioridad 3: Cualquier modelo Llama como último recurso salvavidas
+                    workingModel = models.find(m => m.includes('scout')) 
+                                || models.find(m => m.includes('vision')) 
+                                || models.find(m => m.includes('llama')) 
+                                || models[0];
+                }
+            } catch(e) { console.error("Groq auth error", e); }
+        } else {
+            // Modelos Gemini actualizados a 2026 (Flash 2.5 y 2.0 como prioridad)
+            const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]; 
+            for (const model of modelsToTry) { 
+                try { 
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }) }); 
+                    if(response.ok) { workingModel = model; break; } 
+                } catch(e) {} 
+            }
+        }
+
         if(workingModel) {
-            status.innerText = "✅ ACTIVA (" + workingModel.replace("gemini-","").split("-")[0] + ")"; status.style.color = "#00ff41";
-            GEMINI_API_KEY = k; CURRENT_AI_MODEL = workingModel; state.apiKey = k; state.aiModel = workingModel;
-            localStorage.setItem('obr_gemini_key', k); localStorage.setItem('obr_ai_model', workingModel);
-        } else { status.innerText = "❌ ERROR: LLAVE INVALIDA"; status.style.color = "red"; }
+            status.innerText = `✅ ACTIVA (${provider.toUpperCase()} - ${workingModel.split('-')[0]})`; 
+            status.style.color = "#00ff41";
+            AI_API_KEY = k; CURRENT_AI_MODEL = workingModel; CURRENT_AI_PROVIDER = provider;
+            state.apiKey = k; state.aiModel = workingModel; state.aiProvider = provider;
+            localStorage.setItem('obr_ai_key', k); localStorage.setItem('obr_ai_model', workingModel); localStorage.setItem('obr_ai_provider', provider);
+        } else { 
+            status.innerText = "❌ ERROR: LLAVE INVÁLIDA O RED"; status.style.color = "red"; 
+        }
         input.disabled = false; btn.disabled = false;
     }
 
