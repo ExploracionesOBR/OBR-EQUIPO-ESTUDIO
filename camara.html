@@ -9,11 +9,7 @@
     <link rel="apple-touch-icon" href="obr-logo.png">
     <meta name="theme-color" content="#000000">
     
-   <!-- Reemplazamos el manifest viejo por el nuevo archivo -->
-    <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#000000">
-    
-    <!-- CONSERVA ESTAS LÍNEAS PARA IPHONE/IPAD -->
+    <link rel="manifest" href='data:application/manifest+json,{"name":"OBR CAM PRO","short_name":"OBR CAM","start_url":".","display":"fullscreen","orientation":"landscape","categories":["games","entertainment"],"background_color":"#000000","theme_color":"#000000","icons":[{"src":"obr-logo.png","sizes":"192x192","type":"image/png"},{"src":"obr-logo.png","sizes":"512x512","type":"image/png"}]}'>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
@@ -133,19 +129,11 @@
         
         #zoom-target-indicator { position: absolute; width: 60px; height: 60px; border: 2px solid #00ff00; border-radius: 50%; transform: translate(-50%, -50%) scale(0.5); opacity: 0; pointer-events: none; z-index: 80; transition: transform 0.3s, opacity 0.3s; }
         #zoom-target-indicator.active { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+
     </style>
 </head>
-<!-- Iniciar el Guardián de Red (Service Worker PWA) -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(reg => console.log('🛡️ OBR Network Shield Activo:', reg.scope))
-                    .catch(err => console.error('Fallo en escudo OBR:', err));
-            });
-        }
-    </script>
-</body>
+<body>
+
     <div id="orientation-lock">
         <i class="fas fa-mobile-alt text-4xl mb-4 rotate-90 text-red-500"></i>
         <h2 class="text-xl font-bold font-orbitron tracking-widest text-red-500">GIRAR DISPOSITIVO</h2>
@@ -258,6 +246,18 @@
                 <i class="fas fa-times text-xl"></i>
             </button>
             <h2 class="text-red-500 font-orbitron mb-4 font-bold text-center uppercase tracking-widest text-lg">CONFIGURACIÓN SISTEMA</h2>
+            
+            <!-- BOTON PARA OCULTAR MENÚS -->
+            <div class="bg-black/50 p-3 rounded border border-gray-800 mb-4 flex justify-between items-center">
+                <div>
+                    <h3 class="text-xs font-bold text-gray-400">OCULTAR MENÚS LATERALES</h3>
+                    <p class="text-[8px] text-gray-500 font-mono mt-1">NO APARECERÁN AL TOCAR LA PANTALLA</p>
+                </div>
+                <button id="btn-toggle-ui" onclick="toggleCleanUI()" class="w-10 h-10 rounded-full border border-gray-600 flex items-center justify-center text-gray-400 hover:text-white hover:border-white transition-all">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div class="bg-black/50 p-3 rounded border border-gray-800">
                     <h3 className="text-xs font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1">RED ESTUDIO</h3>
@@ -464,7 +464,8 @@
             // GUARDIAN: Validación inmediata al regresar de background
             if (videoStream) {
                 const track = videoStream.getVideoTracks()[0];
-                if (!track || track.readyState === 'ended' || track.muted || el.video.paused) {
+                // 🛠️ FIX TIKTOK: Quitamos 'track.muted' de la validación destructiva
+                if (!track || track.readyState === 'ended' || el.video.paused) {
                     console.log("GUARDIAN: Recuperando cámara tras cambio de foco...");
                     restartCamera();
                 } else {
@@ -474,16 +475,30 @@
         }
     });
 
+    // 🛠️ FIX TIKTOK: Candado antirrebote
+    let isRestartingCamera = false;
+
     // GUARDIAN DE CÁMARA: SISTEMA DE RECUPERACIÓN ANTI-CONGELAMIENTO Y GRABACIÓN (TIKTOK)
     async function restartCamera() {
+        if (isRestartingCamera) return; // Bloqueo si ya está reiniciando
+        if (document.hidden) return; // No pedir cámara si está en segundo plano (TikTok activo sobre el navegador)
+        
+        isRestartingCamera = true;
         console.log("GUARDIAN: Fallo detectado. Reiniciando hardware de cámara...");
         try {
             if (videoStream) {
                 videoStream.getTracks().forEach(t => t.stop());
             }
+            // 🛠️ 4K & AUTOFOCUS FIX: Se exige máxima resolución y enfoque continuo
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { channelCount: 1, echoCancellation: false, autoGainControl: false, noiseSuppression: false }, 
-                video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 120 } } 
+                video: { 
+                    facingMode: 'environment', 
+                    width: { ideal: 3840 }, 
+                    height: { ideal: 2160 }, 
+                    frameRate: { ideal: 120 },
+                    advanced: [{ focusMode: "continuous" }] 
+                } 
             });
             videoStream = stream; 
             el.video.srcObject = stream; 
@@ -515,6 +530,9 @@
             }
         } catch(e) {
             console.error("Fallo crítico en Guardian:", e);
+        } finally {
+            // Liberar el candado después de un tiempo prudencial
+            setTimeout(() => { isRestartingCamera = false; }, 3000);
         }
     }
 
@@ -584,9 +602,8 @@
         requestWakeLock(); // ACTIVAR WAKE LOCK AL INICIAR
         
         try {
-            updateProgress(10, "INICIANDO SENSOR...");
-            // MEJORA 4: AUDIO NO INVASIVO (Evita secuestro de micrófono en iOS/TikTok)
-            // MEJORA 5: RESOLUCION 1080P @ 60-120FPS (Límites corregidos para evitar bloqueo a 30fps en iOS)
+            updateProgress(10, "INICIANDO SENSOR 4K...");
+            // 🛠️ 4K & AUTOFOCUS FIX: Configuración 4K, 120fps (donde permita) y Autoenfoque Continuo
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { 
                     echoCancellation: false, 
@@ -596,9 +613,10 @@
                 }, 
                 video: { 
                     facingMode: 'environment', 
-                    width: { ideal: 1920 }, 
-                    height: { ideal: 1080 }, 
-                    frameRate: { ideal: 120 } // Forzar ideal alto; iOS bajará a 60fps de forma segura en 1080p
+                    width: { ideal: 3840 }, 
+                    height: { ideal: 2160 }, 
+                    frameRate: { ideal: 120 }, // Forzar ideal alto; iOS bajará a 60fps de forma segura si no soporta 120
+                    advanced: [{ focusMode: "continuous" }] // Forzar autoenfoque
                 } 
             });
             videoStream = stream; el.video.srcObject = stream; el.video.play();
@@ -657,9 +675,9 @@
             source.connect(audioAnalyser);
             audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
             
-            // FIX: Suspender contexto inmediatamente para evitar secuestro de audio (iOS/Android)
-            if(audioCtx.state === 'running') {
-                audioCtx.suspend();
+            // 🛠️ FIX AUDIO SCAN MUDO: Eliminamos la suspensión agresiva del contexto que bloqueaba las ondas
+            if (audioCtx.state !== 'running') {
+                audioCtx.resume().catch(() => {});
             }
 
             // Speech Recognition BLINDADO
@@ -699,12 +717,12 @@
         const btn = document.getElementById('mic-btn');
         if (state.isAudioScan) {
             btn.classList.add('active');
-            if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            // 🛠️ FIX AUDIO SCAN MUDO: Aseguramos el despertar del contexto al presionar el botón
+            if(audioCtx && audioCtx.state !== 'running') audioCtx.resume();
             if(speechRec) try { speechRec.start(); } catch(e){}
         } else {
             btn.classList.remove('active');
-            // FIX: Suspender contexto para liberar recursos del sistema
-            if(audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+            // Dejamos que el motor descanse lógicamente sin obligarlo a un suspend() del que los navegadores no lo dejan salir
             if(speechRec) try { speechRec.stop(); } catch(e){}
         }
     }
@@ -716,23 +734,25 @@
         audioAnalyser.getByteTimeDomainData(audioDataArray);
         
         const bufferLength = audioAnalyser.frequencyBinCount;
-        // AJUSTE GEOMÉTRICO: Bajado un 7% adicional (0.85 -> 0.92)
-        const bottomY = h * 0.92; 
-        const waveHeight = 50; 
+        // 🛠️ FIX AUDIO SCAN: Modificado de 0.92 a 0.82 (Sube exactamente un 10% de la pantalla)
+        const bottomY = h * 0.82; 
+        // 🛠️ FIX TAMAÑO AUDIO: Ondas de sonido incrementadas 25% (de 50 a 62)
+        const waveHeight = 62; 
         const sensitivity = 3.0; 
 
         c.save();
         
         // 1. Subtítulos (ROJO ESPECTRAL CON TRANSPARENCIA)
         if (lastSpokenText) {
-            c.font = "bold 16px 'Share Tech Mono'";
+            // 🛠️ FIX TAMAÑO TEXTO AUDIO: Fuente incrementada 25% (de 16 a 20)
+            c.font = "bold 20px 'Share Tech Mono'";
             c.fillStyle = "rgba(255, 0, 0, 0.7)"; 
             c.textAlign = "center";
             c.shadowColor = "rgba(255, 0, 0, 0.5)"; c.shadowBlur = 10; 
-            c.fillText(`"${lastSpokenText.toUpperCase()}"`, w/2, bottomY - 60);
+            c.fillText(`"${lastSpokenText.toUpperCase()}"`, w/2, bottomY - 75); // Subido más para no traslapar
         }
 
-        // 2. ONDAS (Con Clamp de +/- 50px)
+        // 2. ONDAS (Con Clamp)
         c.lineWidth = 2;
         c.lineJoin = 'round';
 
@@ -740,8 +760,8 @@
         const startX = (w - displayWidth) / 2;
         const displaySliceWidth = displayWidth / bufferLength;
 
-        // Función de limitación (Clamp)
-        const clampY = (val) => Math.max(-50, Math.min(50, val));
+        // Función de limitación (Clamp) ajustada al 25% extra (62)
+        const clampY = (val) => Math.max(-62, Math.min(62, val));
 
         // CAPA CIAN
         c.beginPath();
@@ -830,13 +850,12 @@
         c.globalCompositeOperation = 'screen'; c.drawImage(el.lidarCanvas, 0, 0, width, height); c.globalCompositeOperation = 'source-over';
     }
 
-    // FIX: REEMPLAZO QUIRÚRGICO DE LA FUNCIÓN RESIZE PARA FORZAR FULL HD
+    // 🛠️ FIX 4K: REEMPLAZO QUIRÚRGICO DE LA FUNCIÓN RESIZE PARA FORZAR 4K
     function resize() { 
-        // Forzamos la resolución interna del canvas a 1920x1080 (16:9)
-        // Esto asegura que el "Stream" enviado a Estudio sea siempre HD y no cuadrado,
-        // independientemente del tamaño de la pantalla del celular.
-        const w = 1920;
-        const h = 1080;
+        // Forzamos la resolución interna del canvas a 3840x2160 (4K UHD)
+        // Esto asegura que el "Stream" y grabaciones sean altísima calidad
+        const w = 3840;
+        const h = 2160;
         
         el.canvas.width = w; el.canvas.height = h; 
         el.lidarCanvas.width = w; el.lidarCanvas.height = h;
@@ -850,18 +869,21 @@
         if(scale <= 0.01) return;
         ctx.save();
         
-        // AUMENTO QUIRÚRGICO DEL 35% AL HUD
-        const adjustedScale = scale * 1.35; 
+        // 🛠️ FIX TAMAÑO HUD: Aumento del 25% sobre la base previa (1.35 * 1.25 = ~1.70)
+        const adjustedScale = scale * 1.70; 
         
-        const centerX = 20 + 80; const centerY = 20 + 20; 
+        // 🛠️ FIX HUD: Desplazado 100px a la derecha para evitar superposición con menús ocultos
+        const centerX = 120 + 80; const centerY = 20 + 20; 
         ctx.translate(centerX, centerY); ctx.scale(adjustedScale, adjustedScale); ctx.translate(-centerX, -centerY);
         ctx.shadowColor = "black"; ctx.shadowBlur = 4;
-        if(logoImg.complete) ctx.drawImage(logoImg, 20, 20, 40, 40);
+        
+        if(logoImg.complete) ctx.drawImage(logoImg, 120, 20, 40, 40); 
         ctx.fillStyle = "white"; ctx.font = "bold 16px 'Orbitron', sans-serif";
-        ctx.fillText("EXPLORACIONES OBR", 70, 40);
+        ctx.fillText("EXPLORACIONES OBR", 170, 40); 
         const now = new Date();
         ctx.fillStyle = "#ff3333"; ctx.font = "12px 'Share Tech Mono', monospace";
-        ctx.fillText(now.toLocaleDateString() + " - " + now.toLocaleTimeString(), 70, 58);
+        ctx.fillText(now.toLocaleDateString() + " - " + now.toLocaleTimeString(), 170, 58); 
+        
         if(state.isSLS) {
             const bx = width/2 - 40; ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, 20, 80, 20);
             ctx.strokeStyle = "#d946ef"; ctx.lineWidth = 1; ctx.strokeRect(bx, 20, 80, 20);
@@ -1093,6 +1115,7 @@
     let watchdogZeroFps = 0;
     setInterval(() => {
         if (document.visibilityState !== 'visible') return;
+        if (isRestartingCamera) return; // 🛠️ FIX TIKTOK: No interrumpir si ya está reparando
 
         // 1. Detección de caída de FPS (Congelamiento por uso prolongado)
         if (currentFps === 0 && el.video.readyState >= 2) {
@@ -1109,9 +1132,10 @@
         // 2. Detección de Track Muerto (Pantalla Negra al grabar con TikTok/iOS)
         if (videoStream) {
             const track = videoStream.getVideoTracks()[0];
-            // La grabación de pantalla suele poner el track 'muted' o 'ended'
-            if (track && (track.readyState === 'ended' || track.muted) && !el.video.paused) {
-                console.warn("GUARDIAN: Track de cámara muerto o silenciado. Reiniciando...");
+            // 🛠️ FIX TIKTOK: Eliminamos `|| track.muted`. Cuando TikTok graba, la cámara entra
+            // en modo "muted" (pausa del SO), si la reiniciamos pedirá permisos infinitamente.
+            if (track && track.readyState === 'ended' && !el.video.paused) {
+                console.warn("GUARDIAN: Track de cámara muerto. Reiniciando...");
                 restartCamera();
             }
         }
@@ -1208,7 +1232,7 @@
         if(state.filter === f && f !== 'normal') f = 'normal'; state.filter = f; state.isSLS = (f === 'sls'); state.isLidar = (f === 'lidar');
         document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state')); if(btn && f !== 'normal') btn.classList.add('active-state');
         
-        // RESTAURADO: Aplicación de clases CSS
+        // FIX: Eliminada la manipulación agresiva de clean-ui-mode. Esto restablece el fondo y soluciona la cámara negra
         document.body.className = ''; 
         if(f !== 'normal') { 
             if(f === 'night') document.body.classList.add('filter-night-vision'); 
@@ -1322,6 +1346,25 @@
         showMenus();
     }
 
+    // 🛠️ MODO OCULTAR MENÚS (NUEVO MÉTODO LÓGICO - CERO INVASIÓN DE CSS)
+    let isCleanUI = false;
+    function toggleCleanUI() {
+        isCleanUI = !isCleanUI;
+        const btn = document.getElementById('btn-toggle-ui');
+        
+        if (isCleanUI) {
+            // Ocultamos los menús inmediatamente al activarlo
+            menus.forEach(m => m.classList.remove('visible'));
+            btn.innerHTML = '<i class="fas fa-eye-slash text-red-500"></i>';
+            btn.classList.add('border-red-500', 'text-red-500');
+            showToast("MENÚS LATERALES OCULTOS", false);
+        } else {
+            btn.innerHTML = '<i class="fas fa-eye"></i>';
+            btn.classList.remove('border-red-500', 'text-red-500');
+            showToast("MENÚS LATERALES ACTIVOS", false);
+        }
+    }
+
     async function validateAndSaveKey() {
         const input = document.getElementById('api-key-internal'), btn = document.getElementById('btn-validate-api'), status = document.getElementById('api-status-msg'), k = input.value.trim();
         if(!k) { status.innerText = "❌ CAMPO VACIO"; return; }
@@ -1341,9 +1384,6 @@
                     console.log("Modelos Groq detectados en tiempo real:", models);
                     
                     // BÚSQUEDA DINÁMICA: No usamos nombres quemados.
-                    // Prioridad 1: Cualquier modelo con 'scout'
-                    // Prioridad 2: Cualquier modelo con 'vision'
-                    // Prioridad 3: Cualquier modelo Llama como último recurso salvavidas
                     workingModel = models.find(m => m.includes('scout')) 
                                 || models.find(m => m.includes('vision')) 
                                 || models.find(m => m.includes('llama')) 
@@ -1384,7 +1424,15 @@
     
     let menuTimeout; const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
     document.getElementById('touch-surface').addEventListener('click', showMenus);
-    function showMenus() { menus.forEach(m => m.classList.add('visible')); clearTimeout(menuTimeout); menuTimeout = setTimeout(() => menus.forEach(m => m.classList.remove('visible')), 4000); }
+    
+    // 🛠️ FIX EVENTO DE MENÚS: Añadido candado lógico para ocultar menús sin dañar CSS
+    function showMenus() { 
+        if(isCleanUI) return; // Si la opción está activa, la pantalla ignora el toque
+        menus.forEach(m => m.classList.add('visible')); 
+        clearTimeout(menuTimeout); 
+        menuTimeout = setTimeout(() => menus.forEach(m => m.classList.remove('visible')), 4000); 
+    }
+    
     function showToast(msg, isError = false) { const t = document.createElement('div'); t.className = `toast ${isError ? 'error' : ''}`; t.innerText = msg; document.getElementById('toast-container').appendChild(t); setTimeout(() => t.remove(), 3000); }
     let pressTimer; const touchSurface = document.getElementById('touch-surface');
     
@@ -1400,7 +1448,8 @@
                 const caps = track.getCapabilities ? track.getCapabilities() : {};
                 if (caps.zoom) {
                     try {
-                        const targetZoom = state.zoom === 1 ? caps.zoom.min : Math.min(caps.zoom.max, 2.0);
+                        // 🛠️ FIX ZOOM: Aseguramos matemáticamente que el zoom mínimo jamás sea inferior a 1.0x
+                        const targetZoom = state.zoom === 1 ? Math.max(1.0, caps.zoom.min) : Math.min(caps.zoom.max, 2.0);
                         await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
                         hardwareZoomSuccess = true;
                     } catch (err) {
@@ -1433,7 +1482,8 @@
         const track = videoStream?.getVideoTracks()[0];
         if (track) {
              const caps = track.getCapabilities ? track.getCapabilities() : {};
-             if(caps.zoom) track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }).catch(()=>{});
+             // 🛠️ FIX ZOOM: Forzamos tope mínimo de 1.0x en la restauración manual
+             if(caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.max(1.0, caps.zoom.min) }] }).catch(()=>{});
         }
         // Reset Digital Zoom
         el.zoom.style.transform = `scale(1)`; 
