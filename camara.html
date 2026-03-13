@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v6.1.40 (120FPS & NON-INVASIVE MIC)</title> 
+    <title>CAMARA OBR PRO v6.1.42 (SPOOKY EVP AUDIO)</title> 
     
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
@@ -225,7 +225,7 @@
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.40 (120FPS & NON-INVASIVE MIC)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.42 (SPOOKY EVP AUDIO)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -316,7 +316,8 @@
     let aiScannerState = 0; 
     let aiScannerTimer = 0;
 
-    // AUDIO SCANNER VARS
+    // AUDIO SCANNER VARS (NON-INVASIVE MIC)
+    let audioStream = null;
     let audioCtx = null;
     let audioAnalyser = null;
     let audioDataArray = null;
@@ -341,7 +342,6 @@
     };
 
     // MEJORA 3: CONTEXTO DE BAJA LATENCIA (GAMING MODE HINT)
-    // FIX CRITICO: Eliminar desynchronized: true para el canvas principal, ya que puede evitar que se apliquen filtros en el pipeline de composición
     const ctx = el.canvas.getContext('2d', { alpha: true });
     
     // Mantener desynchronized para capas UI que requieren baja latencia de dibujo pero no filtros complejos
@@ -349,14 +349,13 @@
     const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: true });
     
     const aiCanvas = document.createElement('canvas'); 
-    // 🛠️ FIX RENDIMIENTO: Reducción drástica de la resolución de análisis para evitar pantalla negra en celulares (192x108 pixels en lugar de 4K)
     aiCanvas.width = 192; 
     aiCanvas.height = 108;
     const aiCtx = aiCanvas.getContext('2d', { willReadFrequently: true });
 
     let aiDetector = null, faceMesh = null, segmenter = null, poses = [], faces = [], lidarMask = null;
     
-    // 🛠️ FIX RENDIMIENTO: VARIABLES PARA PREVENIR CALCULOS DUPLICADOS
+    // VARIABLES PARA PREVENIR CALCULOS DUPLICADOS
     let lidarBusy = false; 
     let lastLidarMask = null; 
     let scanlineCanvas = null; 
@@ -420,33 +419,20 @@
         
         video.src = src;
         
-        // Asignación de clases y estilos según el tipo (fullscreen blur vs soft-mask banner)
         if (type === 'banner') {
             video.className = 'banner-mode soft-mask';
-            
-            // FIX CRITICO: Limpiar estilos en línea para que .banner-mode funcione
-            video.style.width = '';
-            video.style.height = '';
-            video.style.objectFit = '';
-            
+            video.style.width = ''; video.style.height = ''; video.style.objectFit = '';
             overlay.style.background = 'transparent';
-            overlay.style.backdropFilter = 'none';
-            overlay.style.webkitBackdropFilter = 'none';
+            overlay.style.backdropFilter = 'none'; overlay.style.webkitBackdropFilter = 'none';
         } else {
             video.className = '';
-            
-            video.style.width = '100%'; 
-            video.style.height = '100%'; 
-            video.style.objectFit = 'cover';
-            
+            video.style.width = '100%'; video.style.height = '100%'; video.style.objectFit = 'cover';
             overlay.style.background = 'rgba(0,0,0,0.85)';
-            overlay.style.backdropFilter = 'blur(10px)';
-            overlay.style.webkitBackdropFilter = 'blur(10px)';
+            overlay.style.backdropFilter = 'blur(10px)'; overlay.style.webkitBackdropFilter = 'blur(10px)';
         }
         
         overlay.classList.add('active');
         video.play().catch(e => console.error("Autoplay bloqueado:", e));
-        
         video.onended = () => stopLocalMedia();
     }
 
@@ -454,61 +440,43 @@
         const overlay = document.getElementById('local-media-overlay');
         const video = document.getElementById('local-video-player');
         overlay.classList.remove('active');
-        // Limpiamos el origen después del fade out (transition 0.5s CSS)
-        setTimeout(() => { 
-            video.pause(); 
-            video.src = ""; 
-        }, 500); 
+        setTimeout(() => { video.pause(); video.src = ""; }, 500); 
     }
 
-    // MEJORA 2: WAKE LOCK API (MANTIENE LA PANTALLA ACTIVA COMO UN JUEGO)
     async function requestWakeLock() {
         if ('wakeLock' in navigator) {
-            try {
-                await navigator.wakeLock.request('screen');
-                console.log('GAMING MODE: Wake Lock Active');
-            } catch (err) {
-                console.log(`Wake Lock Error: ${err.name}, ${err.message}`);
-            }
+            try { await navigator.wakeLock.request('screen'); console.log('GAMING MODE: Wake Lock Active'); } 
+            catch (err) { console.log(`Wake Lock Error: ${err.name}, ${err.message}`); }
         }
     }
 
-    // --- BACKGROUND HANDLER (Auto-attempt & Guardian check) ---
     document.addEventListener("visibilitychange", async () => {
-        // RE-ACTIVAR WAKE LOCK SI SE PIERDE FOCO Y SE REGRESA
         if (document.visibilityState === 'visible') {
             requestWakeLock();
-            // GUARDIAN: Validación inmediata al regresar de background
             if (videoStream) {
                 const track = videoStream.getVideoTracks()[0];
-                // 🛠️ FIX TIKTOK: Quitamos 'track.muted' de la validación destructiva
                 if (!track || track.readyState === 'ended' || el.video.paused) {
                     console.log("GUARDIAN: Recuperando cámara tras cambio de foco...");
                     restartCamera();
-                } else {
-                    el.video.play().catch(e => restartCamera());
-                }
+                } else { el.video.play().catch(e => restartCamera()); }
             }
         }
     });
 
-    // 🛠️ FIX TIKTOK: Candado antirrebote
     let isRestartingCamera = false;
 
-    // GUARDIAN DE CÁMARA: SISTEMA DE RECUPERACIÓN ANTI-CONGELAMIENTO Y GRABACIÓN (TIKTOK)
+    // GUARDIAN DE CÁMARA: SISTEMA DE RECUPERACIÓN (NON-INVASIVE MIC)
     async function restartCamera() {
-        if (isRestartingCamera) return; // Bloqueo si ya está reiniciando
-        if (document.hidden) return; // No pedir cámara si está en segundo plano (TikTok activo sobre el navegador)
+        if (isRestartingCamera) return; 
+        if (document.hidden) return; 
         
         isRestartingCamera = true;
         console.log("GUARDIAN: Fallo detectado. Reiniciando hardware de cámara...");
         try {
-            if (videoStream) {
-                videoStream.getTracks().forEach(t => t.stop());
-            }
-            // 🛠️ 4K & AUTOFOCUS FIX: Se exige máxima resolución y enfoque continuo
+            if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
+            // CÁMARA PURO VIDEO - CERO INTERRUPCIÓN AL MICRÓFONO DEL TELÉFONO
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { channelCount: 1, echoCancellation: false, autoGainControl: false, noiseSuppression: false }, 
+                audio: false, 
                 video: { 
                     facingMode: 'environment', 
                     width: { ideal: 3840 }, 
@@ -521,34 +489,26 @@
             el.video.srcObject = stream; 
             await el.video.play();
             
-            // Re-aplicar Zoom si existía
             if (state.zoom > 1) {
                  const track = stream.getVideoTracks()[0];
                  const caps = track.getCapabilities ? track.getCapabilities() : {};
                  if(caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, state.zoom) }] }).catch(()=>{});
             }
 
-            // Reconectar Analizador de Audio si estaba activo
-            if (audioCtx && audioCtx.state !== 'closed' && audioAnalyser) {
-                try {
-                    const source = audioCtx.createMediaStreamSource(stream);
-                    source.connect(audioAnalyser);
-                } catch(e) {}
-            }
+            if (state.isAudioScan) { await initAudioEngine(); }
             
             const recInd = document.getElementById('recovery-indicator');
             if (recInd) {
                 recInd.style.display = 'block';
-                setTimeout(() => { recInd.style.opacity = '0.67'; }, 20); // Aparece al 67%
+                setTimeout(() => { recInd.style.opacity = '0.67'; }, 20); 
                 setTimeout(() => {
-                    recInd.style.opacity = '0'; // Comienza a desvanecerse
+                    recInd.style.opacity = '0'; 
                     setTimeout(() => { if(recInd.style.opacity === '0') recInd.style.display = 'none'; }, 500);
-                }, 2500); // Se oculta tras 2.5 segundos
+                }, 2500); 
             }
         } catch(e) {
             console.error("Fallo crítico en Guardian:", e);
         } finally {
-            // Liberar el candado después de un tiempo prudencial
             setTimeout(() => { isRestartingCamera = false; }, 3000);
         }
     }
@@ -565,7 +525,6 @@
         const batTxt = document.getElementById('battery-level');
         const batIcon = document.getElementById('battery-icon');
 
-        // 🛠️ INTENTO FORZADO DE BATERIA REAL (Soporte nativo en Android, en iOS dependerá estrictamente del navegador)
         if ('getBattery' in navigator) {
             navigator.getBattery().then(function(battery) {
                 function updateBattery() {
@@ -581,14 +540,10 @@
                 battery.addEventListener('levelchange', updateBattery);
                 battery.addEventListener('chargingchange', updateBattery);
             }).catch(() => {
-                batTxt.innerText = "BAT ERR";
-                batEl.classList.add('text-red-500', 'border-red-800');
+                batTxt.innerText = "BAT ERR"; batEl.classList.add('text-red-500', 'border-red-800');
             });
         } else {
-             // Fallback estricto y honesto si el motor del navegador bloquea la API (Ej. Safari iOS por privacidad de Apple)
-             batTxt.innerText = "";
-             batEl.classList.add('text-gray-400', 'border-gray-800');
-             batIcon.className = 'fas fa-battery-half';
+             batTxt.innerText = "BAT N/A"; batEl.classList.add('text-gray-400', 'border-gray-800'); batIcon.className = 'fas fa-battery-half';
         }
 
         const netEl = document.getElementById('network-indicator');
@@ -600,16 +555,13 @@
             netEl.className = baseClasses;
             
             if (!navigator.onLine) {
-                type = "OFFLINE";
-                netEl.classList.add('text-red-500', 'border-red-800', 'animate-pulse');
+                type = "OFFLINE"; netEl.classList.add('text-red-500', 'border-red-800', 'animate-pulse');
             } else if (connection && connection.effectiveType) {
                 type = connection.effectiveType.toUpperCase();
                 if (type === '4G' || type === '5G') netEl.classList.add('text-green-400', 'border-green-800');
                 else netEl.classList.add('text-yellow-400', 'border-yellow-700');
             } else {
-                // Dispositivo online pero sin API de tipo de red (Típico en iOS Safari)
-                type = "WIFI/NET";
-                netEl.classList.add('text-cyan-400', 'border-cyan-800');
+                type = "WIFI/NET"; netEl.classList.add('text-cyan-400', 'border-cyan-800');
             }
             netTxt.innerText = type;
         }
@@ -623,30 +575,23 @@
     async function initApp() {
         document.querySelector('.load-btn').style.display = 'none';
         initSystemMonitors(); 
-        requestWakeLock(); // ACTIVAR WAKE LOCK AL INICIAR
+        requestWakeLock(); 
         
         try {
             updateProgress(10, "INICIANDO SENSOR 4K...");
-            // 🛠️ 4K & AUTOFOCUS FIX: Configuración 4K, 120fps (donde permita) y Autoenfoque Continuo
+            // CÁMARA PURO VIDEO - CERO INTERRUPCIÓN AL MICRÓFONO
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { 
-                    echoCancellation: false, 
-                    autoGainControl: false, 
-                    noiseSuppression: false,
-                    channelCount: 1 // Minimizar invasividad del hardware
-                }, 
+                audio: false, 
                 video: { 
                     facingMode: 'environment', 
                     width: { ideal: 3840 }, 
                     height: { ideal: 2160 }, 
-                    frameRate: { ideal: 120 }, // Forzar ideal alto; iOS bajará a 60fps de forma segura si no soporta 120
-                    advanced: [{ focusMode: "continuous" }] // Forzar autoenfoque
+                    frameRate: { ideal: 120 }, 
+                    advanced: [{ focusMode: "continuous" }]
                 } 
             });
             videoStream = stream; el.video.srcObject = stream; el.video.play();
-        } catch(e) {
-            alert("Error Crítico Cámara: " + e.message); return; 
-        }
+        } catch(e) { alert("Error Crítico Cámara: " + e.message); return; }
         
         updateProgress(30, "PRECARGANDO MEDIOS LOCALES...");
         await preloadLocalAssets();
@@ -665,7 +610,6 @@
                 }
                 if(window.SelfieSegmentation) { segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); segmenter.setOptions({ modelSelection: 1 }); segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); }
 
-                // Warmup con el canvas de baja resolución para no colapsar la memoria al arrancar
                 aiCtx.drawImage(el.video, 0, 0, aiCanvas.width, aiCanvas.height);
                 if(segmenter) await segmenter.send({image: aiCanvas}); 
                 if(aiDetector) await aiDetector.estimatePoses(aiCanvas);
@@ -676,7 +620,6 @@
             document.getElementById('loading').style.display = 'none';
             resize(); window.addEventListener('resize', resize);
             
-            // MEJORA 5: OPTIMIZACIÓN DE LAG (VideoFrameCallback si disponible)
             if ('requestVideoFrameCallback' in el.video) {
                 el.video.requestVideoFrameCallback(renderLoop);
             } else {
@@ -686,30 +629,31 @@
             setInterval(telemetryLoop, 1000);
             setInterval(aiLoop, 80);
             
-            initAudioEngine();
-            
         }, 800);
     }
 
-    function initAudioEngine() {
+    // --- MOTOR DE AUDIO DINÁMICO (Súper Sensible & No Invasivo) ---
+    async function initAudioEngine() {
+        if (!audioStream) {
+            try {
+                // Solicita el micrófono de forma aislada solo cuando se requiere
+                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false } 
+                });
+            } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
+        }
+
         if (!audioCtx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AudioContext({ latencyHint: 'interactive' }); // Optimización: no invasivo
-            const source = audioCtx.createMediaStreamSource(videoStream);
+            audioCtx = new AudioContext({ latencyHint: 'interactive' }); 
             audioAnalyser = audioCtx.createAnalyser();
             audioAnalyser.fftSize = 2048; 
-            source.connect(audioAnalyser);
             audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
             
-            // 🛠️ FIX AUDIO SCAN MUDO: Eliminamos la suspensión agresiva del contexto que bloqueaba las ondas
-            if (audioCtx.state !== 'running') {
-                audioCtx.resume().catch(() => {});
-            }
-
             // Speech Recognition BLINDADO
             if ('webkitSpeechRecognition' in window) {
                 speechRec = new webkitSpeechRecognition();
-                speechRec.continuous = true; // Mantener sesión abierta
+                speechRec.continuous = true; 
                 speechRec.interimResults = true; 
                 speechRec.lang = 'es-MX';
                 
@@ -728,54 +672,66 @@
                     }
                 };
                 
-                // REINICIO AUTOMÁTICO (Blindaje)
                 speechRec.onend = () => {
                     if(state.isAudioScan) {
-                         try { speechRec.start(); } catch(e) {}
+                         setTimeout(() => { try { speechRec.start(); } catch(e) {} }, 1000);
                     }
                 };
             }
         }
+
+        // Siempre reconecta la fuente en caso de haber perdido el stream previo
+        try {
+            const source = audioCtx.createMediaStreamSource(audioStream);
+            source.connect(audioAnalyser);
+        } catch(e) {}
+        
+        if (audioCtx.state !== 'running') {
+            audioCtx.resume().catch(() => {});
+        }
     }
 
-    function toggleAudioScanner() {
+    async function toggleAudioScanner() {
         state.isAudioScan = !state.isAudioScan;
         const btn = document.getElementById('mic-btn');
         if (state.isAudioScan) {
             btn.classList.add('active');
-            // 🛠️ FIX AUDIO SCAN MUDO: Aseguramos el despertar del contexto al presionar el botón
-            if(audioCtx && audioCtx.state !== 'running') audioCtx.resume();
+            await initAudioEngine(); // Activa y toma el microfono
             if(speechRec) try { speechRec.start(); } catch(e){}
         } else {
             btn.classList.remove('active');
-            // Dejamos que el motor descanse lógicamente sin obligarlo a un suspend() del que los navegadores no lo dejan salir
             if(speechRec) try { speechRec.stop(); } catch(e){}
+            
+            // LIBERACIÓN TOTAL DEL MICRÓFONO AL APAGAR LA FUNCIÓN
+            if (audioStream) {
+                audioStream.getTracks().forEach(t => t.stop());
+                audioStream = null;
+            }
         }
     }
 
-    // --- VISUALIZADOR DE AUDIO (Renderizado Dual) ---
+    // --- VISUALIZADOR DE AUDIO Y EVP PAREIDOLIA (Súper Sensible) ---
     function drawAudioVisualizer(c, w, h) {
         if (!state.isAudioScan || !audioAnalyser) return;
         
         audioAnalyser.getByteTimeDomainData(audioDataArray);
         
         const bufferLength = audioAnalyser.frequencyBinCount;
-        // 🛠️ FIX AUDIO SCAN: Modificado de 0.92 a 0.82 (Sube exactamente un 10% de la pantalla)
         const bottomY = h * 0.82; 
-        // 🛠️ FIX TAMAÑO AUDIO: Ondas de sonido incrementadas 25% (de 50 a 62)
         const waveHeight = 62; 
         const sensitivity = 3.0; 
+
+        let currentMaxVolume = 0;
 
         c.save();
         
         // 1. Subtítulos (ROJO ESPECTRAL CON TRANSPARENCIA)
         if (lastSpokenText) {
-            // 🛠️ FIX TAMAÑO TEXTO AUDIO: Fuente incrementada 25% (de 16 a 20)
             c.font = "bold 20px 'Share Tech Mono'";
             c.fillStyle = "rgba(255, 0, 0, 0.7)"; 
             c.textAlign = "center";
             c.shadowColor = "rgba(255, 0, 0, 0.5)"; c.shadowBlur = 10; 
-            c.fillText(`"${lastSpokenText.toUpperCase()}"`, w/2, bottomY - 75); // Subido más para no traslapar
+            c.fillText(`"${lastSpokenText.toUpperCase()}"`, w/2, bottomY - 75); 
         }
 
         // 2. ONDAS (Con Clamp)
@@ -786,7 +742,6 @@
         const startX = (w - displayWidth) / 2;
         const displaySliceWidth = displayWidth / bufferLength;
 
-        // Función de limitación (Clamp) ajustada al 25% extra (62)
         const clampY = (val) => Math.max(-62, Math.min(62, val));
 
         // CAPA CIAN
@@ -798,8 +753,12 @@
         let x = startX;
         for (let i = 0; i < bufferLength; i++) {
             const v = (audioDataArray[i] / 128.0) - 1; 
+            
+            // Detectar Pico de Volumen Máximo para Pareidolia EVP
+            if (Math.abs(v) > currentMaxVolume) currentMaxVolume = Math.abs(v);
+
             const rawH = v * waveHeight * sensitivity;
-            const y = bottomY + clampY(rawH); // Aplicar Clamp
+            const y = bottomY + clampY(rawH); 
             
             const offset = Math.sin(i * 0.1 + performance.now() * 0.01) * 2; 
 
@@ -813,7 +772,6 @@
         x = startX; 
         for (let i = 0; i < bufferLength; i++) {
             const v = (audioDataArray[i] / 128.0) - 1; 
-            // Umbral de pico > 0.15 y optimización de dibujado
             if (Math.abs(v) > 0.15 && i % 4 === 0) { 
                 const rawH = v * waveHeight * sensitivity;
                 const y = bottomY + clampY(rawH);
@@ -841,7 +799,7 @@
         for (let i = 0; i < bufferLength; i++) {
             const v = (audioDataArray[i] / 128.0) - 1;
             const rawH = v * waveHeight * sensitivity * 0.8;
-            const y = bottomY - clampY(rawH); // Aplicar Clamp invertido
+            const y = bottomY - clampY(rawH); 
              
             if (i === 0) c.moveTo(x, y);
             else c.lineTo(x, y);
@@ -851,17 +809,32 @@
                  c.fillStyle = Math.random() > 0.5 ? '#00ffff' : '#ff00ff';
                  c.fillRect(x, y + (Math.random() * 30 - 15), pSize, pSize);
             }
-
             x += displaySliceWidth;
         }
         c.stroke();
         
         c.restore();
+
+        // MOTOR DE PAREIDOLIA DE AUDIO (EVP)
+        // Extremadamente sensible a picos de ruido/estática (> 10% de volumen)
+        if (currentMaxVolume > 0.10 && !lastSpokenText && Math.random() > 0.90) {
+            const evpWords = ["aqui...", "ayuda", "frio...", "quien?", "vete", "oscuro", "silencio", "mira", "detras", "ven", "muerte", "luz", "duele", "sombras...", "nosotros", "cerca", "sangre", "fuego"];
+            lastSpokenText = evpWords[Math.floor(Math.random() * evpWords.length)]; // PREFIJO ROBÓTICO ELIMINADO
+            clearTimeout(speechTimer);
+            speechTimer = setTimeout(() => { lastSpokenText = ""; }, 2500);
+            
+            // Transmisión inmediata de la anomalía al estudio
+            if (conn && conn.open) {
+                conn.send({type: 'ai-speech', text: `${lastSpokenText}`});
+            }
+            
+            // DISPARO DE VOZ ESPELUZNANTE
+            speakSpooky(lastSpokenText);
+        }
     }
 
     function onLidarResults(results) { if(results && results.segmentationMask) lidarMask = results.segmentationMask; }
     
-    // 🛠️ FIX RENDIMIENTO LIDAR: Genera la capa 1 vez por frame en lugar de 2. Ahorro de +40% de cálculo en este modo.
     function drawLidarEffect(c, width, height, currentFrame) {
         const maskToUse = lidarMask || lastLidarMask; 
         if (!maskToUse) return; 
@@ -881,7 +854,6 @@
         c.globalCompositeOperation = 'screen'; c.drawImage(el.lidarCanvas, 0, 0, width, height); c.globalCompositeOperation = 'source-over';
     }
 
-    // 🛠️ FIX RENDIMIENTO NOCTURNO: Pre-renderiza las molestas scanlines 1 sola vez (antes se calculaban 720 veces por frame).
     function initScanlines(w, h) {
          if(scanlineCanvas && scanlineCanvas.width === w) return;
          scanlineCanvas = document.createElement('canvas');
@@ -894,9 +866,6 @@
     }
 
     function resize() { 
-        // 🛠️ MEGA FIX RENDIMIENTO: Se reduce el lienzo de superposición de gráficos de 4K a 1080p (FHD).
-        // El lente de hardware sigue mandando 4K crudo (por lo que TikTok sigue grabando en máxima calidad),
-        // pero nuestra IA y filtros ahora procesan un 75% menos de píxeles pesados por frame. Multiplica los FPS.
         const w = 1920; 
         const h = 1080;
         
@@ -910,19 +879,12 @@
     function drawBurnInHUD(ctx, width, height, scale) {
         if(scale <= 0.01) return;
 
-        // ==========================================================
-        // CONFIGURACION PARA EL HUD (LOGO Y TEXTO EXPLORACIONES OBR)
-        // Valores ajustables para el usuario (Separado quirúrgicamente del SLS)
-        // ==========================================================
-        const HUD_TAMANO    = 0.90;  // (TAMAÑO) Modificar para hacer el logo y texto más grande o chico
-        const HUD_IZQUIERDA = 60;    // (IZQUIERDA/DERECHA) Aumentar mueve todo hacia la derecha
-        const HUD_ARRIBA    = 60;    // (ARRIBA/ABAJO) Aumentar mueve todo hacia abajo
-        // ==========================================================
+        const HUD_TAMANO    = 0.65;  
+        const HUD_IZQUIERDA = 60;    
+        const HUD_ARRIBA    = 60;    
 
         ctx.save();
         const adjustedScale = scale * HUD_TAMANO;
-        
-        // Trasladar al origen configurado y aplicar escala
         ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA);
         ctx.scale(adjustedScale, adjustedScale);
 
@@ -935,29 +897,24 @@
         ctx.fillStyle = "#ff3333"; ctx.font = "12px 'Share Tech Mono', monospace";
         ctx.fillText(now.toLocaleDateString() + " - " + now.toLocaleTimeString(), 50, 34); 
         
-        ctx.restore(); // Se restaura el contexto para no afectar al SLS
+        ctx.restore(); 
 
-        // ==========================================================
-        // CONFIGURACION PARA EL TEXTO "● SLS ACTIVO"
-        // Valores ajustables para el usuario (Centrado absoluto)
-        // ==========================================================
-        const SLS_TAMANO    = 1.3;         // (TAMAÑO) Modificar para hacerlo más visible
-        const SLS_IZQUIERDA = width / 2;   // (IZQUIERDA/DERECHA) width/2 lo clava exactamente en el centro
-        const SLS_ARRIBA    = 80;          // (ARRIBA/ABAJO) Aumentar mueve el letrero hacia abajo
-        // ==========================================================
+        const SLS_TAMANO    = 1.3;         
+        const SLS_IZQUIERDA = width / 2;   
+        const SLS_ARRIBA    = 80;          
 
         if(state.isSLS) {
             ctx.save();
             ctx.translate(SLS_IZQUIERDA, SLS_ARRIBA);
             ctx.scale(scale * SLS_TAMANO, scale * SLS_TAMANO);
 
-            const bx = -40; // Se dibuja desde -40 para que un cuadro de 80px quede perfectamente centrado
+            const bx = -40; 
             const by = 0;
             
             ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, 80, 20);
             ctx.strokeStyle = "#d946ef"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, 80, 20);
             ctx.fillStyle = "#d946ef"; ctx.font = "10px monospace"; 
-            ctx.textAlign = "center"; // Aseguramos que el texto fluya desde el centro matemático
+            ctx.textAlign = "center"; 
             ctx.fillText("● SLS ACTIVO", 0, by + 13);
             
             ctx.restore();
@@ -1034,20 +991,21 @@
     }
 
     function renderLoop(now, metadata) {
-        // GUARDIAN DE IMAGEN (Frame Pacing)
         if (!now) now = performance.now();
         const elapsed = now - lastFrameTime;
         
-        // Limitar a ~60FPS para estabilidad
         if (elapsed > fpsInterval) {
             lastFrameTime = now - (elapsed % fpsInterval);
-            
             frameCount++;
+            
             const vW = el.video.videoWidth, vH = el.video.videoHeight;
             const cW = el.canvas.width, cH = el.canvas.height;
             
-            // 1. Limpieza inicial
-            ctx.clearRect(0, 0, cW, cH);
+            // 🔥 MEJORA DE RENDIMIENTO QUIRÚRGICA 🔥
+            // Bypass completo de procesamiento GPU para el canvas stream si no hay conexión
+            const isTransmitting = (peerVideoSender && !peerVideoSender.disconnected) || (conn && conn.open);
+            
+            if (isTransmitting) ctx.clearRect(0, 0, cW, cH);
             audioLayerCtx.clearRect(0, 0, cW, cH);
             
             if (vW && vH) {
@@ -1056,77 +1014,63 @@
                 if (cRatio > vRatio) { dW = cW; dH = cW / vRatio; dX = 0; dY = (cH - dH) / 2; } else { dW = cH * vRatio; dH = cH; dX = (cW - dW) / 2; dY = 0; }
                 window.drawCoords = { dW, dH, dX, dY, vW, vH };
                 
-                // 2. DIBUJAR VIDEO CON FILTROS (QUEMADO)
-                // Usamos save/restore para aislar completamente el estado del filtro
-                ctx.save();
-                
-                // Aplicar filtros EXACTAMENTE igual que CSS
-                if(state.filter === 'night') { 
-                    ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)'; 
-                } 
-                else if(state.filter === 'thermal') { 
-                    ctx.filter = 'grayscale(75%) invert(75%) contrast(1.7) brightness(0.8)'; 
-                } 
-                else if(state.filter === 'urbex') { 
-                    ctx.filter = 'sepia(100%) hue-rotate(-20deg) saturate(2.5) contrast(1.3) brightness(0.7)'; 
-                } else {
-                    ctx.filter = 'none';
-                }
-                
-                ctx.drawImage(el.video, 0, 0, vW, vH, dX, dY, dW, dH);
-                ctx.restore(); // Al restaurar, el filtro se elimina para las siguientes operaciones
-                
-                // 3. EFECTOS ADICIONALES (OVERLAYS)
-                if(state.filter === 'night') { 
-                    // 🛠️ FIX RENDIMIENTO: Carga la imagen buffer en lugar de procesar cálculos en loop
-                    if(!scanlineCanvas) initScanlines(cW, cH);
-                    ctx.drawImage(scanlineCanvas, 0, 0);
-                }
-                
-                if (state.isLidar) { 
-                    // EFECTO LIDAR EN STREAM
-                    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0,0, cW, cH); 
-                    drawLidarEffect(ctx, cW, cH, frameCount);
+                // Procesar pesados filtros CSS y render en el canvas de red SOLAMENTE si hay transmisión
+                if (isTransmitting) {
+                    ctx.save();
+                    if(state.filter === 'night') { ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)'; } 
+                    else if(state.filter === 'thermal') { ctx.filter = 'grayscale(75%) invert(75%) contrast(1.7) brightness(0.8)'; } 
+                    else if(state.filter === 'urbex') { ctx.filter = 'sepia(100%) hue-rotate(-20deg) saturate(2.5) contrast(1.3) brightness(0.7)'; } 
+                    else { ctx.filter = 'none'; }
                     
-                    // EFECTO LIDAR EN VISTA LOCAL
+                    ctx.drawImage(el.video, 0, 0, vW, vH, dX, dY, dW, dH);
+                    ctx.restore(); 
+                    
+                    if(state.filter === 'night') { 
+                        if(!scanlineCanvas) initScanlines(cW, cH);
+                        ctx.drawImage(scanlineCanvas, 0, 0);
+                    }
+                    if (state.isLidar) { 
+                        ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0,0, cW, cH); 
+                        drawLidarEffect(ctx, cW, cH, frameCount);
+                    }
+                }
+                
+                // Efectos ligeros exclusivos para el usuario local
+                if (state.isLidar) { 
                     audioLayerCtx.fillStyle = 'rgba(0,0,0,0.25)'; 
                     audioLayerCtx.fillRect(0,0, cW, cH); 
                     drawLidarEffect(audioLayerCtx, cW, cH, frameCount);
                 }
             }
 
-            // SLS & LIDAR: DIBUJADO DOBLE (EN STREAM CTX Y EN LOCAL AUDIO LAYER)
             if (state.isSLS && !state.isLidar) {
-                 drawSLS(ctx); // Para Stream
-                 drawSLS(audioLayerCtx); // Para Usuario Local
+                 if (isTransmitting) drawSLS(ctx); 
+                 drawSLS(audioLayerCtx); 
             }
             
             const speed = 0.4;
             animState.hudScale += (animState.hudTarget - animState.hudScale) * speed;
             animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
 
-            // HUD BURN-IN: DOBLE CAPA (Y CON NUEVAS OPCIONES DE POSICIONAMIENTO)
-            drawBurnInHUD(ctx, cW, cH, animState.hudScale);
+            if (isTransmitting) drawBurnInHUD(ctx, cW, cH, animState.hudScale);
             drawBurnInHUD(audioLayerCtx, cW, cH, animState.hudScale);
             
             if (state.isPareidolia) {
-                 drawCanvasScanBoxes(ctx, cW, cH);
+                 if (isTransmitting) drawCanvasScanBoxes(ctx, cW, cH);
                  drawCanvasScanBoxes(audioLayerCtx, cW, cH);
             }
             
             if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) {
-                 drawAIBurnIn(ctx, cW, cH, animState.aiScale);
+                 if (isTransmitting) drawAIBurnIn(ctx, cW, cH, animState.aiScale);
                  drawAIBurnIn(audioLayerCtx, cW, cH, animState.aiScale);
             }
             
-            // --- DIBUJAR VISUALIZADOR DE AUDIO (Renderizado Dual) ---
             if (state.isAudioScan) {
-                drawAudioVisualizer(ctx, cW, cH);
+                if (isTransmitting) drawAudioVisualizer(ctx, cW, cH);
                 drawAudioVisualizer(audioLayerCtx, cW, cH);
             }
         }
 
-        // BUCLE OPTIMIZADO: USAR VideoFrameCallback O RequestAnimationFrame
         if ('requestVideoFrameCallback' in el.video) {
              el.video.requestVideoFrameCallback(renderLoop);
         } else {
@@ -1138,16 +1082,12 @@
         if (isAIProcessing) return; 
         if (!state.isSLS && !state.isLidar && !state.isPareidolia) { poses = []; faces = []; lidarMask = null; return; }
 
-        // 🛠️ FIX RENDIMIENTO: Dibujamos siempre el frame del video al canvas en baja resolución (192p)
-        // Esto evita que las IAs intenten procesar resoluciones 4K, eliminando el cuelgue en celulares
         aiCtx.drawImage(el.video, 0, 0, aiCanvas.width, aiCanvas.height);
 
         if (state.isLidar && segmenter) { 
-            // Mandamos el canvas reducido en lugar del video completo
             if(!lidarBusy) { lidarBusy = true; try { await segmenter.send({image: aiCanvas}); } catch(e){ lidarBusy = false; } } 
         } else {
             if (aiDetector && state.isSLS) { try { poses = await aiDetector.estimatePoses(aiCanvas, { maxPoses: 5, flipHorizontal: false, scoreThreshold: 0.25 }); } catch(e){} }
-            // Mandamos el canvas reducido en lugar del video completo
             if (faceMesh && state.isSLS) { try { await faceMesh.send({image: aiCanvas}); } catch(e){} }
         }
     }
@@ -1188,16 +1128,14 @@
         const clockEl = document.getElementById('hud-time'); if (clockEl) clockEl.innerText = `${dateStr} - ${timeStr}`;
     }
 
-    // --- EL PERRO GUARDIÁN (WATCHDOG) DE CÁMARA ---
     let watchdogZeroFps = 0;
     setInterval(() => {
         if (document.visibilityState !== 'visible') return;
-        if (isRestartingCamera) return; // 🛠️ FIX TIKTOK: No interrumpir si ya está reparando
+        if (isRestartingCamera) return; 
 
-        // 1. Detección de caída de FPS (Congelamiento por uso prolongado)
         if (currentFps === 0 && el.video.readyState >= 2) {
             watchdogZeroFps++;
-            if (watchdogZeroFps >= 4) { // Si pasa 4 segundos en 0 FPS
+            if (watchdogZeroFps >= 4) { 
                 console.warn("GUARDIAN: 0 FPS detectado. Reiniciando hardware...");
                 restartCamera();
                 watchdogZeroFps = 0;
@@ -1206,11 +1144,8 @@
             watchdogZeroFps = 0;
         }
 
-        // 2. Detección de Track Muerto (Pantalla Negra al grabar con TikTok/iOS)
         if (videoStream) {
             const track = videoStream.getVideoTracks()[0];
-            // 🛠️ FIX TIKTOK: Eliminamos `|| track.muted`. Cuando TikTok graba, la cámara entra
-            // en modo "muted" (pausa del SO), si la reiniciamos pedirá permisos infinitamente.
             if (track && track.readyState === 'ended' && !el.video.paused) {
                 console.warn("GUARDIAN: Track de cámara muerto. Reiniciando...");
                 restartCamera();
@@ -1234,10 +1169,8 @@
         }
     }
 
-    // 🛡️ AHORRO DE RED: Ahora el botón LINK funciona para desconectar y matar los consumos ocultos
     function openConnect() { 
         if (conn && conn.open) {
-            // Desconexión Quirúrgica Absoluta
             if(peerCommand) { peerCommand.destroy(); peerCommand = null; }
             if(peerVideoSender) { peerVideoSender.destroy(); peerVideoSender = null; }
             conn = null;
@@ -1261,7 +1194,6 @@
         const commandTarget = baseId;
         const videoTarget = baseId + "-8889";
         
-        // Se limpian instancias previas
         if(peerCommand) peerCommand.destroy();
         peerCommand = new Peer(null, PEER_CONFIG);
         
@@ -1269,7 +1201,6 @@
             const connection = peerCommand.connect(commandTarget);
             connection.on('open', () => { conn = connection; conn.send({ type: 'register', name: name, hasAI: true }); showToast("Enlace Comandos OK", false); });
             connection.on('data', handleCommand);
-            // 🛡️ AHORRO DE RED: Cierre y destrucción inmediata
             connection.on('close', () => { showToast("Estudio desconectado", true); conn = null; if(peerCommand) peerCommand.destroy(); });
             connection.on('error', (e) => { console.error("Data error", e); });
         });
@@ -1279,14 +1210,22 @@
         if(peerVideoSender) peerVideoSender.destroy();
         peerVideoSender = new Peer(null, PEER_CONFIG);
         
-        peerVideoSender.on('open', () => {
+        peerVideoSender.on('open', async () => {
             const stream = el.canvas.captureStream(30); 
-            const audioTracks = videoStream.getAudioTracks();
-            if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
+            
+            // Garantizar la captura del micrófono explícitamente para enviar audio al Estudio
+            if (!audioStream) {
+                try {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+                } catch(e) { console.warn("Mic not available for transmission"); }
+            }
+            if (audioStream) {
+                const audioTracks = audioStream.getAudioTracks();
+                if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
+            }
             
             setTimeout(() => {
                 const call = peerVideoSender.call(videoTarget, stream, { metadata: { name: name } });
-                // 🛡️ AHORRO DE RED: Cierre y destrucción inmediata
                 call.on('close', () => { console.log("Video call ended"); if(peerVideoSender) peerVideoSender.destroy(); });
                 call.on('error', (e) => { console.error("Video call error", e); });
                 showToast("Transmitiendo Video...", false);
@@ -1297,9 +1236,8 @@
     }
 
     function handleCommand(cmd) {
-        // FIX: Supresión completa de mensajes PING en cualquier formato
         if(cmd.type === 'ping' || cmd.action === 'ping') return;
-        if(cmd.type === 'cmd' && cmd.action === 'ping') return; // Cobertura extra
+        if(cmd.type === 'cmd' && cmd.action === 'ping') return; 
 
         showToast(`CMD: ${cmd.action?.toUpperCase() || cmd.type?.toUpperCase()}`);
         if(cmd.type === 'cmd' || cmd.category === 'cam') {
@@ -1323,7 +1261,6 @@
         if(state.filter === f && f !== 'normal') f = 'normal'; state.filter = f; state.isSLS = (f === 'sls'); state.isLidar = (f === 'lidar');
         document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state')); if(btn && f !== 'normal') btn.classList.add('active-state');
         
-        // FIX: Eliminada la manipulación agresiva de clean-ui-mode. Esto restablece el fondo y soluciona la cámara negra
         document.body.className = ''; 
         if(f !== 'normal') { 
             if(f === 'night') document.body.classList.add('filter-night-vision'); 
@@ -1346,6 +1283,49 @@
             const voices = window.speechSynthesis.getVoices();
             const femaleVoice = voices.find(v => v.lang.includes('es') && (v.name.includes('Paulina') || v.name.includes('Sabina') || v.name.includes('Mexico') || v.name.toLowerCase().includes('female')));
             if (femaleVoice) u.voice = femaleVoice; window.speechSynthesis.speak(u);
+        }
+    }
+
+    // VOZ ANÓMALA DEDICADA PARA EL EVP (AUDIO SCAN)
+    function speakSpooky(text) {
+        if('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            
+            // Modificador de inestabilidad orgánica
+            let ttsText = text;
+            const style = Math.random();
+            if (style < 0.33) {
+                // Tartamudeo ansioso (ej: "a... a... ayuda!")
+                ttsText = `${text.charAt(0)}... ${text.charAt(0)}... ${text}!`; 
+            } else if (style < 0.66) {
+                // Susurro entrecortado (ej: "a, y, u, d, a")
+                ttsText = text.split('').join(', '); 
+            } else {
+                // Eco desesperado (ej: "ven. ven... ven")
+                ttsText = `${text}. ${text}... ${text}`; 
+            }
+
+            const u = new SpeechSynthesisUtterance(ttsText);
+            u.lang = 'es-MX';
+            
+            // Alteración de frecuencia: Demoníaca o Estridente
+            if (Math.random() > 0.5) {
+                u.pitch = 0.1; // Frecuencia extremadamente baja (Gutural)
+                u.rate = 0.3 + (Math.random() * 0.3); // Ritmo lento y arrastrado
+                u.volume = 1.0;
+            } else {
+                u.pitch = 1.8 + (Math.random() * 0.2); // Frecuencia aguda (Estridente)
+                u.rate = 1.3 + (Math.random() * 0.5); // Ritmo urgente y rápido
+                u.volume = 0.8;
+            }
+
+            const voices = window.speechSynthesis.getVoices();
+            const esVoices = voices.filter(v => v.lang.includes('es'));
+            if (esVoices.length > 0) {
+                // Selecciona voces al azar para emular distintas entidades comunicándose
+                u.voice = esVoices[Math.floor(Math.random() * esVoices.length)];
+            }
+            window.speechSynthesis.speak(u);
         }
     }
 
@@ -1406,13 +1386,12 @@
             stopScanningEffect(); currentAiText = text; currentAiImage = snapshot; 
             clearTimeout(aiTextTimer); aiTextTimer = setTimeout(() => { currentAiText = ""; currentAiImage = null; if (state.isPareidolia) startScanningEffect(); }, 9000);
             
-            // --- ENVÍO PRIORITARIO AL ESTUDIO ---
             if (conn && conn.open) { 
                 conn.send({ 
                     type: 'ai-speech', 
                     text: text,
-                    forcePlay: true, // Forzar reproducción en estudio
-                    source: 'vision' // Identificar origen
+                    forcePlay: true, 
+                    source: 'vision' 
                 }); 
             }
             
@@ -1437,14 +1416,12 @@
         showMenus();
     }
 
-    // 🛠️ MODO OCULTAR MENÚS (NUEVO MÉTODO LÓGICO - CERO INVASIÓN DE CSS)
     let isCleanUI = false;
     function toggleCleanUI() {
         isCleanUI = !isCleanUI;
         const btn = document.getElementById('btn-toggle-ui');
         
         if (isCleanUI) {
-            // Ocultamos los menús inmediatamente al activarlo
             menus.forEach(m => m.classList.remove('visible'));
             btn.innerHTML = '<i class="fas fa-eye-slash text-red-500"></i>';
             btn.classList.add('border-red-500', 'text-red-500');
@@ -1472,9 +1449,6 @@
                 if (response.ok) {
                     const data = await response.json();
                     const models = data.data.map(m => m.id);
-                    console.log("Modelos Groq detectados en tiempo real:", models);
-                    
-                    // BÚSQUEDA DINÁMICA: No usamos nombres quemados.
                     workingModel = models.find(m => m.includes('scout')) 
                                 || models.find(m => m.includes('vision')) 
                                 || models.find(m => m.includes('llama')) 
@@ -1482,7 +1456,6 @@
                 }
             } catch(e) { console.error("Groq auth error", e); }
         } else {
-            // Modelos Gemini actualizados a 2026 (Flash 2.5 y 2.0 como prioridad)
             const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]; 
             for (const model of modelsToTry) { 
                 try { 
@@ -1516,9 +1489,8 @@
     let menuTimeout; const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
     document.getElementById('touch-surface').addEventListener('click', showMenus);
     
-    // 🛠️ FIX EVENTO DE MENÚS: Añadido candado lógico para ocultar menús sin dañar CSS
     function showMenus() { 
-        if(isCleanUI) return; // Si la opción está activa, la pantalla ignora el toque
+        if(isCleanUI) return; 
         menus.forEach(m => m.classList.add('visible')); 
         clearTimeout(menuTimeout); 
         menuTimeout = setTimeout(() => menus.forEach(m => m.classList.remove('visible')), 4000); 
@@ -1527,19 +1499,16 @@
     function showToast(msg, isError = false) { const t = document.createElement('div'); t.className = `toast ${isError ? 'error' : ''}`; t.innerText = msg; document.getElementById('toast-container').appendChild(t); setTimeout(() => t.remove(), 3000); }
     let pressTimer; const touchSurface = document.getElementById('touch-surface');
     
-    // MEJORA 3: ZOOM HÍBRIDO (HARDWARE + CSS FALLBACK)
     touchSurface.addEventListener('pointerdown', (e) => { 
         pressTimer = setTimeout(async () => { 
             state.zoom = state.zoom === 1 ? 2.5 : 1; 
             
-            // INTENTO DE ZOOM ÓPTICO (HARDWARE)
             let hardwareZoomSuccess = false;
             const track = videoStream?.getVideoTracks()[0];
             if (track) {
                 const caps = track.getCapabilities ? track.getCapabilities() : {};
                 if (caps.zoom) {
                     try {
-                        // 🛠️ FIX ZOOM: Aseguramos matemáticamente que el zoom mínimo jamás sea inferior a 1.0x
                         const targetZoom = state.zoom === 1 ? Math.max(1.0, caps.zoom.min) : Math.min(caps.zoom.max, 2.0);
                         await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
                         hardwareZoomSuccess = true;
@@ -1549,7 +1518,6 @@
                 }
             }
 
-            // FALLBACK A ZOOM DIGITAL (CSS)
             if (!hardwareZoomSuccess) {
                 const w = window.innerWidth, h = window.innerHeight, xPct = (e.clientX / w) * 100, yPct = (e.clientY / h) * 100; 
                 el.zoom.style.transformOrigin = `${xPct}% ${yPct}%`; 
@@ -1569,14 +1537,11 @@
     
     function resetZoom(btn) { 
         state.zoom = 1; 
-        // Reset Hardware Zoom
         const track = videoStream?.getVideoTracks()[0];
         if (track) {
              const caps = track.getCapabilities ? track.getCapabilities() : {};
-             // 🛠️ FIX ZOOM: Forzamos tope mínimo de 1.0x en la restauración manual
              if(caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.max(1.0, caps.zoom.min) }] }).catch(()=>{});
         }
-        // Reset Digital Zoom
         el.zoom.style.transform = `scale(1)`; 
         if(btn) btn.classList.add('active-state'); 
         setTimeout(()=>btn?.classList.remove('active-state'), 200); 
