@@ -2,8 +2,12 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OBR SLS BLOOPERS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="manifest.json">
+    <title>Detector SLS Pro V36</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
@@ -15,38 +19,43 @@
             font-family: 'JetBrains Mono', monospace;
             color: #22c55e;
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
+            height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #app-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 100vw;
+            max-height: 100dvh;
+            background: #050505;
         }
 
         canvas {
-            image-rendering: pixelated;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
         }
 
         .crt-overlay {
             pointer-events: none;
             position: absolute;
             inset: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
-            background-size: 100% 4px;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.05) 50%);
+            background-size: 100% 3px;
             opacity: 0.15;
             z-index: 10;
         }
 
-        input[type="range"] {
-            -webkit-appearance: none;
-            background: #18181b;
-            height: 4px;
-            border-radius: 2px;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 15px;
-            height: 15px;
-            background: #22c55e;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 0 10px #22c55e;
+        .glass {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .recording-pulse {
@@ -57,355 +66,418 @@
             from { opacity: 0.4; }
             to { opacity: 1; }
         }
+
+        @media (orientation: landscape) {
+            #tech-panel { max-width: 300px; left: 1.5rem; bottom: 1.5rem; transform: none; }
+            #action-group { right: 2rem; bottom: 1.5rem; flex-direction: column; left: auto; width: auto; transform: none; }
+        }
     </style>
 </head>
 <body>
 
-    <!-- Capas de Video y Renderizado -->
-    <video id="webcam" autoplay playsinline muted class="hidden"></video>
-    <canvas id="mainCanvas" class="w-full h-full object-contain"></canvas>
-    <div class="crt-overlay"></div>
+    <div id="app-container">
+        <!-- El video debe estar oculto pero presente para la captura -->
+        <video id="webcam" autoplay playsinline muted style="display:none"></video>
+        <canvas id="mainCanvas"></canvas>
+        <div class="crt-overlay"></div>
 
-    <!-- UI - Cabecera -->
-    <div id="hud-top" class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none z-20">
-        <div class="flex flex-col gap-2">
-            <div class="bg-black/80 px-3 py-1.5 border border-green-500/40 rounded flex items-center gap-2 backdrop-blur-md">
-                <div id="ai-status-led" class="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                <span class="text-[10px] font-bold tracking-widest text-white uppercase" id="status-text">Cargando Motor IA...</span>
-            </div>
-            <div id="rec-indicator" class="hidden flex flex-col items-center">
-                 <div class="bg-red-600/30 px-4 py-1.5 border border-red-500 rounded-full flex items-center gap-2 backdrop-blur-xl">
-                    <div class="w-2 h-2 bg-red-600 rounded-full recording-pulse"></div>
-                    <span class="text-[12px] font-black text-white" id="rec-timer">00:00</span>
-                 </div>
-                 <span class="text-[7px] text-red-500 mt-1 uppercase font-bold italic tracking-widest">Grabando anomalias...</span>
-            </div>
-        </div>
-        <div class="pointer-events-auto">
-            <div class="bg-black/80 px-3 py-1.5 border border-white/10 rounded flex items-center gap-2">
-                <svg id="mic-icon" class="w-3 h-3 text-white/20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-                <span class="text-[8px] font-bold text-white/40 uppercase">Audio Ambiental</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- UI - Dock de Control Inferior -->
-    <div id="hud-bottom" class="absolute bottom-0 left-0 w-full p-4 flex flex-col md:flex-row justify-between items-end gap-4 z-20">
-        <!-- Panel Técnico -->
-        <div class="w-full md:w-[380px] bg-zinc-950/95 p-3 rounded-2xl border border-white/10 backdrop-blur-3xl space-y-3 pointer-events-auto">
-            <div class="flex items-center justify-between px-1">
-                <div class="flex items-center gap-2 text-[9px] font-black text-green-400 uppercase tracking-tighter">
-                   <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M11 15h2v2h-2v-2m0-8h2v6h-2V7m1-5C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
-                   ISO_auto: <span id="iso-val">3200</span>
+        <!-- HUD Superior -->
+        <div class="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none z-30">
+            <div class="flex flex-col gap-3">
+                <div class="glass px-4 py-2 rounded-2xl flex items-center gap-3 shadow-lg">
+                    <div id="ai-status-led" class="w-3 h-3 bg-red-600 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]"></div>
+                    <span class="text-[11px] font-black tracking-widest text-white uppercase" id="status-text">Sincronizando Core...</span>
                 </div>
-                <div class="text-[7px] font-bold text-white/20 uppercase tracking-[0.2em]">Kinect_SLS_Emu</div>
+                <div id="rec-indicator" class="hidden flex flex-col items-center">
+                     <div class="bg-red-600/30 px-5 py-2 border border-red-500/50 rounded-full flex items-center gap-3 backdrop-blur-md">
+                        <div class="w-3 h-3 bg-red-600 rounded-full recording-pulse"></div>
+                        <span class="text-[16px] font-black text-white" id="rec-timer">00:00</span>
+                     </div>
+                </div>
+                <div id="pwa-status" class="text-[8px] bg-white/5 px-3 py-1 rounded-full text-white/40 uppercase font-bold tracking-widest opacity-0">
+                    Conexión Local Establecida
+                </div>
             </div>
-            <div class="flex gap-1">
-                <button onclick="setFilter('NVG')" class="filter-btn flex-1 py-1.5 text-[7px] border border-white/40 bg-white/10 text-white rounded-sm uppercase font-black" data-mode="NVG">NVG</button>
-                <button onclick="setFilter('THERMAL')" class="filter-btn flex-1 py-1.5 text-[7px] border border-white/5 text-white/20 rounded-sm uppercase font-black" data-mode="THERMAL">Thermal</button>
-                <button onclick="setFilter('GHOST')" class="filter-btn flex-1 py-1.5 text-[7px] border border-white/5 text-white/20 rounded-sm uppercase font-black" data-mode="GHOST">Ghost</button>
-                <button onclick="setFilter('DAYLIGHT')" class="filter-btn flex-1 py-1.5 text-[7px] border border-white/5 text-white/20 rounded-sm uppercase font-black" data-mode="DAYLIGHT">Day</button>
+            
+            <div class="glass px-4 py-2 rounded-2xl flex items-center gap-2 pointer-events-auto shadow-lg">
+                <svg id="mic-icon" class="w-4 h-4 text-white/20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                <span class="text-[9px] font-bold text-white/40 uppercase tracking-widest">Audio_HQ</span>
+            </div>
+        </div>
+
+        <!-- Controles Inferiores -->
+        <div id="tech-panel" class="absolute bottom-32 left-1/2 -translate-x-1/2 w-[90%] max-w-[440px] glass p-5 rounded-[2.5rem] z-30 pointer-events-auto">
+            <div class="flex items-center justify-between mb-4 px-2">
+                <div class="flex items-center gap-2 text-[10px] font-black text-green-400 uppercase">
+                    <svg class="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    ISO: <span id="iso-val">----</span>
+                </div>
+                <div class="text-[8px] font-black text-white/30 uppercase tracking-[0.3em]" id="backend-label">SLS_PROC_CORE</div>
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+                <button onclick="setFilter('NVG')" class="filter-btn py-3 rounded-2xl border border-white/40 bg-white/10 text-white text-[10px] font-black uppercase transition-all" data-mode="NVG">NVG</button>
+                <button onclick="setFilter('THERMAL')" class="filter-btn py-3 rounded-2xl border border-white/5 text-white/20 text-[10px] font-black uppercase transition-all" data-mode="THERMAL">Term</button>
+                <button onclick="setFilter('GHOST')" class="filter-btn py-3 rounded-2xl border border-white/5 text-white/20 text-[10px] font-black uppercase transition-all" data-mode="GHOST">Fant</button>
+                <button onclick="setFilter('DAYLIGHT')" class="filter-btn py-3 rounded-2xl border border-white/5 text-white/20 text-[10px] font-black uppercase transition-all" data-mode="DAYLIGHT">Día</button>
             </div>
         </div>
 
         <!-- Botones de Acción -->
-        <div class="flex flex-row md:flex-col items-center gap-4 w-full md:w-auto justify-center mb-2 pointer-events-auto">
-            <button id="photoBtn" class="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center bg-zinc-900/60 text-white active:scale-75 shadow-lg transition-transform">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <div id="action-group" class="absolute bottom-6 left-0 w-full flex justify-center items-center gap-10 pointer-events-none z-30">
+            <button id="photoBtn" class="pointer-events-auto w-16 h-16 rounded-full glass border border-white/20 flex items-center justify-center text-white active:scale-75 shadow-2xl transition-all">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
             </button>
-            <button id="recBtn" class="w-16 h-16 rounded-full border-4 border-zinc-800 bg-zinc-900/80 text-red-500 flex flex-col items-center justify-center active:scale-90 transition-all shadow-xl">
-                <div id="rec-icon" class="w-7 h-7 bg-red-600 rounded-sm"></div>
-                <span id="rec-text" class="text-[7px] mt-1 font-black uppercase tracking-tighter">REC</span>
+            <button id="recBtn" class="pointer-events-auto w-24 h-24 rounded-full border-8 border-white/5 bg-zinc-950/95 text-red-600 flex flex-col items-center justify-center active:scale-90 shadow-2xl transition-all">
+                <div id="rec-icon" class="w-10 h-10 bg-red-600 rounded-lg shadow-lg"></div>
+                <span id="rec-text" class="text-[9px] mt-2 font-black tracking-widest uppercase">REC</span>
             </button>
+        </div>
+
+        <!-- Pantalla de Error Crítico -->
+        <div id="error-screen" class="hidden absolute inset-0 bg-black/98 z-50 flex flex-col items-center justify-center p-12 text-center backdrop-blur-3xl">
+            <svg class="w-20 h-20 text-red-600 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <h2 class="text-3xl font-black uppercase text-red-600 italic tracking-tighter">FALLO_SISTEMA</h2>
+            <p class="text-[11px] text-zinc-500 mb-10 uppercase font-bold tracking-widest leading-relaxed max-w-xs" id="error-msg"></p>
+            <button onclick="location.reload()" class="bg-red-700 text-white px-14 py-6 rounded-3xl font-black text-[12px] uppercase tracking-[0.4em]">REINTENTAR</button>
         </div>
     </div>
 
-    <!-- Pantalla de Error -->
-    <div id="error-screen" class="hidden absolute inset-0 bg-black/98 z-50 flex flex-col items-center justify-center p-12 text-center backdrop-blur-md">
-        <svg class="w-16 h-16 text-red-600 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-        <h2 class="text-xl font-black uppercase text-red-600 italic">HARDWARE FAILURE</h2>
-        <p class="text-[10px] text-zinc-500 mb-8 uppercase font-bold tracking-widest" id="error-msg"></p>
-        <button onclick="location.reload()" class="bg-red-700 text-white px-10 py-4 rounded-xl font-black text-[9px] uppercase tracking-[0.3em]">RESTART CORE</button>
-    </div>
-
-    <!-- Scripts de TF.js -->
+    <!-- Scripts de TensorFlow.js con carga forzada -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.10.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.10.0"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.10.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-js/tfjs-backend-webgl@4.10.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-js/tfjs-backend-wasm@4.10.0/dist/tf-backend-wasm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-js/tfjs-backend-cpu@4.10.0"></script>
 
     <script>
-        // --- CONSTANTES TÉCNICAS (PARANORMAL CONFIG) ---
+        // --- FILTRO KALMAN PARA SUAVIZADO ---
+        class JointKalman {
+            constructor() {
+                this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
+                this.gain = 0.75;
+                this.initialized = false;
+            }
+            update(nx, ny) {
+                if (!this.initialized) {
+                    this.x = nx; this.y = ny;
+                    this.initialized = true; return;
+                }
+                const px = this.x + this.vx;
+                const py = this.y + this.vy;
+                const dx = nx - px; const dy = ny - py;
+                this.x = px + dx * this.gain;
+                this.y = py + dy * this.gain;
+                this.vx = dx * 0.35; this.vy = dy * 0.35;
+            }
+            get() { return { x: this.x, y: this.y }; }
+        }
+
         const MAX_LIFE = 8000;
-        const MISSED_FRAME_LIMIT = 45;
-        const SMOOTHING = 0.7;
-        const MIN_SCORE = 0.04;
-        const AI_BUFFER_W = 256;
-        const AI_BUFFER_H = 144;
+        const MISSED_FRAME_LIMIT = 45; 
+        const AI_W = 256; const AI_H = 144;
 
-        // --- REFERENCIAS DOM ---
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('mainCanvas');
-        const aiCanvas = document.createElement('canvas');
-        const statusText = document.getElementById('status-text');
-        const led = document.getElementById('ai-status-led');
-        const recTimerText = document.getElementById('rec-timer');
-        const isoDisplay = document.getElementById('iso-val');
-
-        // --- ESTADO GLOBAL (REFS) ---
-        let detector = null;
+        let detector, mediaRecorder, audioStream, ctx;
         let skeletons = [];
         let filterMode = 'NVG';
         let isoLevel = 3200;
         let isRecording = false;
-        let recStartTime = 0;
         let lastAiTime = 0;
-        let mediaRecorder = null;
+        let aiBusy = false;
+        let isCameraReady = false;
         let chunks = [];
-        let audioStream = null;
-        let telemetry = { emf: 0.15, temp: 22.4, signal: 98 };
+        let recStartTime = 0;
 
-        // --- INICIALIZACIÓN ---
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('mainCanvas');
+        const aiCanvas = document.createElement('canvas');
+        const aiCtx = aiCanvas.getContext('2d', { alpha: false });
+
+        // --- PWA SILENCIOSO ---
+        async function initPWA() {
+            if ('serviceWorker' in navigator) {
+                const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+                if (isSecure) {
+                    try {
+                        await navigator.serviceWorker.register('sw.js');
+                        const status = document.getElementById('pwa-status');
+                        status.style.opacity = "1";
+                        setTimeout(() => status.style.opacity = "0", 3000);
+                    } catch (e) {
+                        console.log("PWA Skip: Entorno protegido o restringido.");
+                    }
+                }
+            }
+        }
+
+        // --- PIPELINE DE INICIALIZACIÓN FORZADO ---
+        async function setupEngine() {
+            await tf.ready();
+            const engines = ['webgl', 'wasm', 'cpu'];
+            for (const engine of engines) {
+                try {
+                    await tf.setBackend(engine);
+                    console.log("Motor IA activo:", engine);
+                    if (engine === 'webgl') {
+                        tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
+                        tf.env().set('WEBGL_PACK', true);
+                    }
+                    return engine;
+                } catch (e) {
+                    console.warn(`Motor ${engine} falló, reintentando...`);
+                }
+            }
+            throw new Error("No se pudo inicializar ningún motor de IA compatible.");
+        }
+
         async function init() {
             try {
-                // 1. Inicializar TF Backend
-                await tf.setBackend('webgl');
+                const status = document.getElementById('status-text');
                 
-                // 2. Cargar Detector MoveNet
+                initPWA();
+                
+                // 1. Iniciar TF
+                const activeBackend = await setupEngine();
+                document.getElementById('backend-label').innerText = activeBackend.toUpperCase() + "_CORE_V36";
+
+                // 2. Cargar MoveNet
+                status.innerText = "Cargando Sensores...";
                 detector = await poseDetection.createDetector(
                     poseDetection.SupportedModels.MoveNet,
                     { 
                         modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
                         enableSmoothing: true,
-                        multiPoseMaxDetections: 8 
+                        multiPoseMaxDetections: 6 
                     }
                 );
 
-                // 3. Pre-warm
-                aiCanvas.width = AI_BUFFER_W; aiCanvas.height = AI_BUFFER_H;
-                await detector.estimatePoses(aiCanvas);
+                // 3. Calentamiento (Warm-up)
+                await tf.tidy(() => {
+                    const warmup = tf.zeros([1, 192, 192, 3]);
+                    return detector.estimatePoses(warmup);
+                });
 
-                led.className = "w-2 h-2 bg-green-500 rounded-full animate-pulse";
-                statusText.innerText = "OBR SLS BLOOPERS";
+                document.getElementById('ai-status-led').className = "w-3 h-3 bg-green-500 rounded-full shadow-[0_0_10px_#22c55e]";
+                status.innerText = "SENSOR_SLS_ACTIVO";
 
-                // 4. Iniciar Cámara
-                await startCamera();
+                ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
                 
-                // 5. Iniciar Render
+                await startCamera();
                 requestAnimationFrame(renderLoop);
 
-            } catch (err) {
-                showError(err);
-            }
+            } catch (err) { showError(err.message); }
         }
 
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60 } },
+                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
                     audio: { echoCancellation: false, autoGainControl: true }
                 });
                 video.srcObject = stream;
                 audioStream = stream;
                 document.getElementById('mic-icon').classList.replace('text-white/20', 'text-green-500');
-                return new Promise(resolve => video.onloadedmetadata = () => {
-                    video.play();
-                    resolve();
+                
+                return new Promise(r => video.onloadedmetadata = () => { 
+                    video.play(); 
+                    isCameraReady = true;
+                    r(); 
                 });
-            } catch (e) {
-                showError("Cámara 4K no detectada.");
-            }
+            } catch (e) { showError("Acceso a Cámara Denegado."); }
         }
 
-        // --- MOTOR DE IA & SEGUIMIENTO ---
+        // --- LÓGICA DE DETECCIÓN Y RASTREO ---
+        function getTorsoCenter(kp) {
+            let sx=0, sy=0, c=0;
+            [5, 6, 11, 12].forEach(i => {
+                if (kp[i].score > 0.1) { sx += kp[i].x; sy += kp[i].y; c++; }
+            });
+            return c >= 2 ? { x: sx/c, y: sy/c, count: c } : null;
+        }
+
         async function processAI() {
-            if (!detector || video.readyState < 2) return;
+            if (!detector || !isCameraReady || aiBusy || video.readyState < 2) return;
+            aiBusy = true;
 
-            const aiCtx = aiCanvas.getContext('2d');
-            aiCtx.drawImage(video, 0, 0, AI_BUFFER_W, AI_BUFFER_H);
-            
-            // Auto-ISO Logic
-            const pixels = aiCtx.getImageData(0,0,AI_BUFFER_W,AI_BUFFER_H).data;
-            let lumaTotal = 0;
-            for(let i=0; i<pixels.length; i+=400) lumaTotal += (pixels[i]*0.3 + pixels[i+1]*0.59 + pixels[i+2]*0.11);
-            const avg = lumaTotal / (pixels.length/400);
-            const targetISO = Math.max(800, Math.min(12800, 3200 * (128/(avg+1))));
-            isoLevel += (targetISO - isoLevel) * 0.05;
-            isoDisplay.innerText = Math.round(isoLevel);
+            await tf.tidy(async () => {
+                aiCtx.drawImage(video, 0, 0, AI_W, AI_H);
+                
+                // Muestreo ISO
+                const px = aiCtx.getImageData(0,0,AI_W,AI_H).data;
+                let lum=0; for(let i=0;i<px.length;i+=800) lum+=(px[i]*0.3+px[i+1]*0.6+px[i+2]*0.1);
+                const avg = lum / (px.length/800);
+                isoLevel += (Math.max(800, Math.min(12800, 3200 * (128/(avg+1)))) - isoLevel) * 0.05;
+                document.getElementById('iso-val').innerText = Math.round(isoLevel);
 
-            // Detección
-            const poses = await detector.estimatePoses(aiCanvas);
-            updateSkeletons(poses);
+                const poses = await detector.estimatePoses(aiCanvas);
+                updateSkeletons(poses);
+            });
+            aiBusy = false;
         }
 
         function updateSkeletons(newPoses) {
             const now = performance.now();
-
-            // Envejecer
             skeletons.forEach(s => {
-                s.life -= Math.min(30, now - s.lastUpdate);
                 s.missedFrames++;
+                s.life -= Math.min(40, now - s.lastUpdate);
                 s.lastUpdate = now;
             });
 
-            // Mapear Pareidolia
             newPoses.forEach(pose => {
                 const kp = pose.keypoints;
-                const torsoCount = [5,6,11,12].filter(i => kp[i].score > 0.15).length;
-                const headCount = kp[0].score > 0.15 && (kp[5].score > 0.1 || kp[6].score > 0.1);
-
-                if (pose.score < MIN_SCORE && torsoCount < 3 && !headCount) return;
+                let sx=0, sy=0, c=0;
+                [5, 6, 11, 12].forEach(i => { if (kp[i].score > 0.1) { sx += kp[i].x; sy += kp[i].y; c++; }});
+                if (c < 2 && pose.score < 0.1) return;
+                const tc = { x: sx/c, y: sy/c };
 
                 let match = skeletons.find(s => {
-                    const d = Math.sqrt(Math.pow(s.keypoints[0].x - kp[0].x, 2) + Math.pow(s.keypoints[0].y - kp[0].y, 2));
-                    return d < 180;
+                    const sc = s.tc;
+                    const d = Math.sqrt(Math.pow(sc.x - tc.x, 2) + Math.pow(sc.y - tc.y, 2));
+                    return d < 70; 
                 });
 
                 if (match) {
                     match.life = MAX_LIFE;
                     match.missedFrames = 0;
-                    kp.forEach((p, i) => {
-                        match.keypoints[i].x += (p.x - match.keypoints[i].x) * SMOOTHING;
-                        match.keypoints[i].y += (p.y - match.keypoints[i].y) * SMOOTHING;
+                    match.tc = tc;
+                    match.score = pose.score;
+                    pose.keypoints.forEach((p, i) => {
+                        match.filters[i].update(p.x, p.y);
+                        const f = match.filters[i].get();
+                        match.keypoints[i].x = f.x;
+                        match.keypoints[i].y = f.y;
                         match.keypoints[i].score = p.score;
                     });
                 } else {
-                    skeletons.push({
-                        keypoints: JSON.parse(JSON.stringify(kp)),
+                    const newS = {
+                        id: Math.random(),
+                        keypoints: JSON.parse(JSON.stringify(pose.keypoints)),
+                        filters: Array.from({length: 17}, () => new JointKalman()),
+                        tc: tc,
                         life: MAX_LIFE,
                         missedFrames: 0,
-                        score: pose.score,
-                        lastUpdate: now
-                    });
+                        lastUpdate: now,
+                        score: pose.score
+                    };
+                    pose.keypoints.forEach((p, i) => newS.filters[i].update(p.x, p.y));
+                    skeletons.push(newS);
                 }
             });
-
             skeletons = skeletons.filter(s => s.life > 0 && s.missedFrames < MISSED_FRAME_LIMIT);
         }
 
-        // --- RENDERIZADO ---
+        // --- BUCLE DE RENDERIZADO (PRIORIDAD VIDEO) ---
         function renderLoop() {
-            if (video.readyState >= 2) {
-                if (canvas.width !== video.videoWidth) {
+            if (video.readyState >= 2 && isCameraReady) {
+                const now = performance.now();
+                
+                // Forzar ajuste de canvas al tamaño del video
+                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                 }
 
-                const ctx = canvas.getContext('2d', { alpha: false });
-                const now = performance.now();
+                const scaleX = canvas.width / AI_W;
+                const scaleY = canvas.height / AI_H;
 
-                // 1. Fondo con Filtros
+                // 1. DIBUJAR VIDEO (CAPA 0 - FONDO)
                 const b = (isoLevel / 2500) + 0.1;
                 ctx.save();
                 let fStr = "";
                 switch(filterMode) {
                     case 'NVG': fStr = `brightness(${b}) contrast(1.8) grayscale(1) sepia(1) hue-rotate(85deg)`; break;
-                    case 'THERMAL': fStr = `brightness(${b}) contrast(2.2) saturate(2.5) hue-rotate(-110deg)`; break;
+                    case 'THERMAL': fStr = `brightness(${b}) contrast(1.2) grayscale(0.2)`; break;
                     case 'GHOST': fStr = `brightness(${b}) contrast(1.6) invert(1) hue-rotate(180deg)`; break;
                     default: fStr = `brightness(${b}) contrast(1.5)`;
                 }
                 ctx.filter = fStr;
+                // Dibujo forzado del video
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 ctx.restore();
 
-                // 2. IA Asíncrona (~30 FPS)
-                if (now - lastAiTime > 33) {
-                    lastAiTime = now;
-                    processAI();
+                // 2. EFECTO TÉRMICO OVERLAY
+                if (filterMode === 'THERMAL') {
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'overlay';
+                    ctx.globalAlpha = 0.4;
+                    ctx.filter = 'contrast(2) saturate(4) hue-rotate(-130deg)';
+                    ctx.drawImage(canvas, 0, 0);
+                    ctx.restore();
                 }
 
-                // 3. Dibujar SLS
-                skeletons.forEach(s => drawSkeleton(ctx, s));
+                // 3. PROCESAR IA (~30 FPS)
+                if (now - lastAiTime > 30) { lastAiTime = now; processAI(); }
 
-                // 4. Dibujar HUD
-                drawTelemetryHUD(ctx);
+                // 4. DIBUJAR ESQUELETOS (CAPA 1)
+                skeletons.forEach(s => {
+                    const color = filterMode === 'GHOST' ? '#00ffff' : '#d946ef';
+                    const kp = s.keypoints;
+                    ctx.save();
+                    ctx.globalAlpha = Math.min(1, s.life / 2000);
+                    ctx.strokeStyle = color; ctx.fillStyle = color;
+                    ctx.lineWidth = Math.max(6, canvas.width / 300);
+                    ctx.lineCap = 'round'; ctx.shadowBlur = 20; ctx.shadowColor = color;
+
+                    // Dibujo de Huesos
+                    [[5,7],[7,9],[6,8],[8,10],[11,13],[13,15],[12,14],[14,16]].forEach(([i, j]) => {
+                        if (kp[i].score > 0.05 && kp[j].score > 0.05) {
+                            ctx.beginPath(); 
+                            ctx.moveTo(kp[i].x*scaleX, kp[i].y*scaleY); 
+                            ctx.lineTo(kp[j].x*scaleX, kp[j].y*scaleY);
+                            ctx.stroke();
+                        }
+                    });
+
+                    // Estructura Kinect
+                    const n=kp[0], sL=kp[5], sR=kp[6], hL=kp[11], hR=kp[12];
+                    const neckX = (sL.x + sR.x)/2; const neckY = (sL.y + sR.y)/2;
+                    const hipX = (hL.x + hR.x)/2; const hipY = (hL.y + hR.y)/2;
+                    ctx.beginPath(); ctx.moveTo(n.x*scaleX, n.y*scaleY); ctx.lineTo(neckX*scaleX, neckY*scaleY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(sL.x*scaleX, sL.y*scaleY); ctx.lineTo(neckX*scaleX, neckY*scaleY); ctx.lineTo(sR.x*scaleX, sR.y*scaleY); ctx.stroke();
+                    ctx.setLineDash([15, 12]);
+                    ctx.beginPath(); ctx.moveTo(neckX*scaleX, neckY*scaleY); ctx.lineTo(hipX*scaleX, hipY*scaleY); ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.beginPath(); ctx.moveTo(hL.x*scaleX, hL.y*scaleY); ctx.lineTo(hipX*scaleX, hipY*scaleY); ctx.lineTo(hR.x*scaleX, hR.y*scaleY); ctx.stroke();
+
+                    ctx.font = 'bold 22px monospace';
+                    ctx.fillText(`ANOMALÍA_${Math.round(s.score*100)}%`, n.x*scaleX - 50, n.y*scaleY - 80);
+                    ctx.restore();
+                });
+
+                // 5. HUD TELEMETRÍA (CAPA 2)
+                drawHUD(ctx);
             }
             requestAnimationFrame(renderLoop);
         }
 
-        function drawSkeleton(ctx, s) {
-            const color = filterMode === 'GHOST' ? '#00ffff' : '#d946ef';
-            const kp = s.keypoints;
-            const w = canvas.width;
-            const h = canvas.height;
-            const sX = w / AI_BUFFER_W;
-            const sY = h / AI_BUFFER_H;
-
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, s.life / 2000);
-            ctx.strokeStyle = color; ctx.fillStyle = color;
-            ctx.lineWidth = Math.max(4, w / 400);
-            ctx.lineCap = 'round'; ctx.shadowBlur = 15; ctx.shadowColor = color;
-
-            const bones = [[5,7],[7,9],[6,8],[8,10],[11,13],[13,15],[12,14],[14,16]];
-            bones.forEach(([i, j]) => {
-                if (kp[i].score > 0.05 && kp[j].score > 0.05) {
-                    ctx.beginPath(); ctx.moveTo(kp[i].x*sX, kp[i].y*sY); ctx.lineTo(kp[j].x*sX, kp[j].y*sY); ctx.stroke();
-                }
-            });
-
-            // Torso / Cabeza
-            const n=kp[0], sL=kp[5], sR=kp[6], hL=kp[11], hR=kp[12];
-            const neckX = (sL.x + sR.x)/2; const neckY = (sL.y + sR.y)/2;
-            const hipX = (hL.x + hR.x)/2; const hipY = (hL.y + hR.y)/2;
-
-            ctx.beginPath(); ctx.moveTo(n.x*sX, n.y*sY); ctx.lineTo(neckX*sX, neckY*sY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(sL.x*sX, sL.y*sY); ctx.lineTo(neckX*sX, neckY*sY); ctx.lineTo(sR.x*sX, sR.y*sY); ctx.stroke();
-            
-            ctx.setLineDash([10,10]);
-            ctx.beginPath(); ctx.moveTo(neckX*sX, neckY*sY); ctx.lineTo(hipX*sX, hipY*sY); ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.beginPath(); ctx.moveTo(hL.x*sX, hL.y*sY); ctx.lineTo(hipX*sX, hipY*sY); ctx.lineTo(hR.x*sX, hR.y*sY); ctx.stroke();
-
-            ctx.font = 'bold 12px monospace';
-            ctx.fillText(`ANOMALÍA_${Math.round(s.score*100)}%`, n.x*sX - 45, n.y*sY - 45);
-            ctx.restore();
-        }
-
-        function drawTelemetryHUD(ctx) {
-            const bW = 280; const bH = 160;
-            const m = canvas.width - bW - 40;
-            const HUD_TOP = 80;
-
-            ctx.fillStyle = 'rgba(10, 15, 10, 0.96)'; ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.roundRect(m, HUD_TOP, bW, bH, 2); ctx.fill(); ctx.stroke();
-
-            ctx.fillStyle = '#22c55e'; ctx.font = 'bold 12px monospace';
-            ctx.fillText(`TELEMETRÍA_FIELD_OBR`, m + 15, HUD_TOP + 22);
-            ctx.fillRect(m + 15, HUD_TOP + 28, bW - 30, 1);
-
-            // Realistic Flicker Telemetry
-            const emf = 0.15 + (skeletons.length * (Math.random() * 2.5));
-            const temp = 22.4 - (skeletons.length * 0.8);
-
-            ctx.font = '10px monospace';
-            ctx.fillText(`EMF_FIELD:  ${emf.toFixed(2)} mG`, m + 15, HUD_TOP + 50);
-            ctx.fillText(`COLD_SPOT:  ${temp.toFixed(1)}°C`, m + 15, HUD_TOP + 72);
-            ctx.fillText(`SIGNAL_KV:  ${Math.round(96+Math.random()*3)}%`, m + 15, HUD_TOP + 94);
-            ctx.fillText(`NEURAL_ISO: ${Math.round(isoLevel)}`, m + 15, HUD_TOP + 116);
+        function drawHUD(ctx) {
+            const bW = 340, bH = 210, m = canvas.width - bW - 40, HUD_TOP = 100;
+            ctx.fillStyle = 'rgba(10, 20, 10, 0.98)'; ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.roundRect(m, HUD_TOP, bW, bH, 25); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#22c55e'; ctx.font = 'bold 16px monospace';
+            ctx.fillText(`TELEMETRÍA_OBR_V36`, m + 25, HUD_TOP + 40);
+            ctx.fillRect(m + 25, HUD_TOP + 50, bW - 50, 2);
+            const emf = 0.15 + (skeletons.length * (Math.random() * 4.5));
+            const temp = 22.4 - (skeletons.length * 2.2);
+            ctx.font = '14px monospace';
+            ctx.fillText(`CAMPO_EMF:  ${emf.toFixed(2)} mG`, m + 25, HUD_TOP + 85);
+            ctx.fillText(`PUNTO_FRÍO: ${temp.toFixed(1)}°C`, m + 25, HUD_TOP + 120);
+            ctx.fillText(`SEÑAL_KV:   ${Math.round(96+Math.random()*3)}%`, m + 25, HUD_TOP + 155);
             ctx.fillStyle = skeletons.length > 0 ? '#ff00ff' : '#22c55e';
-            ctx.fillText(`SLS_DATA:   ${skeletons.length} DETECTADAS`, m + 15, HUD_TOP + 138);
+            ctx.fillText(`RASTREO_SLS: ${skeletons.length} DETECTADAS`, m + 25, HUD_TOP + 190);
         }
 
-        // --- UI ACTIONS ---
         function setFilter(mode) {
             filterMode = mode;
             document.querySelectorAll('.filter-btn').forEach(btn => {
-                if(btn.dataset.mode === mode) {
-                    btn.classList.replace('text-white/20', 'text-white');
-                    btn.classList.replace('border-white/5', 'border-white/40');
-                    btn.classList.add('bg-white/10');
-                } else {
-                    btn.classList.replace('text-white', 'text-white/20');
-                    btn.classList.replace('border-white/40', 'border-white/5');
-                    btn.classList.remove('bg-white/10');
-                }
+                const isActive = btn.dataset.mode === mode;
+                btn.className = `filter-btn flex-1 py-3 text-[10px] border rounded-2xl uppercase font-black transition-all ${isActive ? 'bg-white/10 border-white text-white' : 'border-white/5 text-white/20'}`;
             });
         }
 
         document.getElementById('photoBtn').onclick = () => {
             const link = document.createElement('a');
-            link.download = `OBR_SLS_${Date.now()}.png`;
+            link.download = `SLS_PHOTO_${Date.now()}.png`;
             link.href = canvas.toDataURL('image/png', 1.0);
             link.click();
         };
@@ -415,34 +487,34 @@
                 mediaRecorder.stop();
                 isRecording = false;
                 document.getElementById('rec-indicator').classList.add('hidden');
-                document.getElementById('rec-icon').className = "w-7 h-7 bg-red-600 rounded-sm";
+                document.getElementById('rec-icon').className = "w-10 h-10 bg-red-600 rounded-lg";
                 document.getElementById('rec-text').innerText = "REC";
             } else {
                 chunks = [];
-                const stream = canvas.captureStream(60);
+                let mime = 'video/mp4;codecs=h264';
+                if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8,opus';
+                const stream = canvas.captureStream(30);
                 const combined = new MediaStream([...stream.getTracks(), ...audioStream.getAudioTracks()]);
-                mediaRecorder = new MediaRecorder(combined, { mimeType: 'video/webm;codecs=vp8,opus', videoBitsPerSecond: 20000000 });
+                mediaRecorder = new MediaRecorder(combined, { mimeType: mime, videoBitsPerSecond: 18000000 });
                 mediaRecorder.ondataavailable = e => chunks.push(e.data);
                 mediaRecorder.onstop = () => {
-                    const blob = new Blob(chunks, { type: 'video/webm' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a'); a.href = url; a.download = `OBR_BLOOPER_REC_${Date.now()}.webm`; a.click();
+                    const ext = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+                    const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                    a.download = `SLS_EVIDENCIA_${Date.now()}.${ext}`; a.click();
                 };
                 mediaRecorder.start();
-                isRecording = true;
-                recStartTime = Date.now();
+                isRecording = true; recStartTime = Date.now();
                 document.getElementById('rec-indicator').classList.remove('hidden');
-                document.getElementById('rec-icon').className = "w-5 h-5 bg-white rounded-sm";
+                document.getElementById('rec-icon').className = "w-8 h-8 bg-white rounded-lg";
                 document.getElementById('rec-text').innerText = "STOP";
             }
         };
 
         setInterval(() => {
             if(isRecording) {
-                const diff = Math.floor((Date.now() - recStartTime) / 1000);
-                const m = Math.floor(diff / 60).toString().padStart(2, '0');
-                const s = (diff % 60).toString().padStart(2, '0');
-                recTimerText.innerText = `${m}:${s}`;
+                const d = Math.floor((Date.now() - recStartTime) / 1000);
+                document.getElementById('rec-timer').innerText = `${Math.floor(d/60).toString().padStart(2,'0')}:${(d%60).toString().padStart(2,'0')}`;
             }
         }, 1000);
 
@@ -451,7 +523,6 @@
             document.getElementById('error-msg').innerText = msg;
         }
 
-        // Iniciar Sistema
         window.onload = init;
     </script>
 </body>
