@@ -280,6 +280,16 @@
     </div>
 
 <script>
+    // --- SISTEMA DE VOCES iOS FIX ---
+    let cachedVoices = [];
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = () => {
+            cachedVoices = window.speechSynthesis.getVoices();
+        };
+        // Intento de carga inicial
+        cachedVoices = window.speechSynthesis.getVoices();
+    }
+
     const AI_SENSITIVITY = 0.2; 
     const state = { 
         apiKey: localStorage.getItem("obr_ai_key") || localStorage.getItem("obr_gemini_key") || "", 
@@ -1337,26 +1347,41 @@
             safeStopSpeechRec();
             
             setTimeout(() => {
+                // FIX iOS: Garantizar que la cola avance evitando bloqueos de cancel()
+                window.speechSynthesis.resume(); 
                 window.speechSynthesis.cancel(); 
+                
                 const cleanText = text.replace(/[\.,;:-]{2,}/g, '. ').replace(/[\n\r]/g, ' ');
                 const u = new SpeechSynthesisUtterance(cleanText); 
                 u.lang = 'es-MX'; u.rate = 1.0; u.pitch = 1.1; u.volume = 1.0;
                 
-                const voices = window.speechSynthesis.getVoices();
-                const femaleVoice = voices.find(v => v.lang.includes('es') && (v.name.includes('Paulina') || v.name.includes('Sabina') || v.name.includes('Mexico') || v.name.toLowerCase().includes('female')));
-                if (femaleVoice) u.voice = femaleVoice; 
+                // FIX iOS: Obtener voces con fallback al caché si está vacío
+                let voices = window.speechSynthesis.getVoices();
+                if (voices.length === 0) voices = cachedVoices;
                 
+                const femaleVoice = voices.find(v => v.lang.includes('es') && (v.name.includes('Paulina') || v.name.includes('Sabina') || v.name.includes('Mexico') || v.name.toLowerCase().includes('female')));
+                
+                if (femaleVoice) {
+                    u.voice = femaleVoice; 
+                } else if (voices.length > 0) {
+                    // FIX iOS: Fallback a cualquier voz en español o a la default
+                    u.voice = voices.find(v => v.lang.includes('es')) || voices[0];
+                }
+                
+                // FIX iOS: Protección estricta de limpieza de banderas
                 u.onend = () => {
-                    isTtsPlaying = false; // Quitar cerrojo
+                    isTtsPlaying = false; 
                     setTimeout(() => { safeStartSpeechRec(); }, 500); 
                 };
-                u.onerror = () => {
-                    isTtsPlaying = false; // Quitar cerrojo
+                u.onerror = (e) => {
+                    console.warn("TTS Error (speakText):", e);
+                    isTtsPlaying = false; 
                     setTimeout(() => { safeStartSpeechRec(); }, 500);
                 };
                 
                 window.speechSynthesis.speak(u);
-            }, 300); // 300ms de retraso clave para engañar a iOS/Android y devolver el audio a los medios.
+                window.speechSynthesis.resume(); // Forzar reproducción final iOS
+            }, 300); 
         }
     }
 
@@ -1370,6 +1395,8 @@
             safeStopSpeechRec();
             
             setTimeout(() => {
+                // FIX iOS: Evitar el bug de cola congelada
+                window.speechSynthesis.resume();
                 window.speechSynthesis.cancel();
                 
                 const u = new SpeechSynthesisUtterance(text);
@@ -1386,24 +1413,32 @@
                     u.volume = 0.8 + (Math.random() * 0.2); 
                 }
 
-                const voices = window.speechSynthesis.getVoices();
+                // FIX iOS: Recuperación segura de voces para iOS
+                let voices = window.speechSynthesis.getVoices();
+                if (voices.length === 0) voices = cachedVoices;
+
                 const esVoices = voices.filter(v => v.lang.includes('es'));
                 if (esVoices.length > 0) {
                     u.voice = esVoices[Math.floor(Math.random() * esVoices.length)];
+                } else if (voices.length > 0) {
+                    u.voice = voices[0]; // Fallback voz por defecto
                 }
                 
+                // FIX iOS: Protección estricta de banderas
                 u.onend = () => { 
                     isSpookySpeaking = false; 
-                    isTtsPlaying = false; // Quitar cerrojo
+                    isTtsPlaying = false; 
                     setTimeout(() => { safeStartSpeechRec(); }, 500); 
                 };
-                u.onerror = () => { 
+                u.onerror = (e) => { 
+                    console.warn("TTS Error (speakSpooky):", e);
                     isSpookySpeaking = false; 
-                    isTtsPlaying = false; // Quitar cerrojo
+                    isTtsPlaying = false; 
                     setTimeout(() => { safeStartSpeechRec(); }, 500); 
                 };
 
                 window.speechSynthesis.speak(u);
+                window.speechSynthesis.resume(); // Forzar reproducción final iOS
             }, 300); // Retraso estratégico
         }
     }
