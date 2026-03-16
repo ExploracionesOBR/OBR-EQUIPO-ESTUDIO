@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v6.1.49 (SMART EVP ENGINE)</title> 
+    <title>CAMARA OBR PRO v6.1.49 (spirit box)</title> 
     
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
@@ -103,7 +103,7 @@
         .mic-toggle { pointer-events: auto; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
         .mic-toggle.active { opacity: 1; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
 
-        /* LOCAL MEDIA PLAYER STYLES (DISCRETOS Y OPACIDAD REDUCIDA) */
+        /* LOCAL MEDIA PLAYER STYLES */
         #local-media-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; z-index: 80; pointer-events: auto; opacity: 0.6; transition: opacity 0.3s; }
         #local-media-controls:hover { opacity: 1.0; }
         .media-btn { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.05); color: rgba(255,255,255,0.3); border-radius: 50%; width: 40px; height: 40px; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; backdrop-filter: blur(2px); }
@@ -175,7 +175,6 @@
             <span id="status-text">PREVIEW</span>
         </div>
 
-        <!-- CONTROLES DE MEDIOS LOCALES DISCRETOS -->
         <div id="local-media-controls">
             <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO"><i class="fas fa-play"></i></button>
             <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER"><i class="fas fa-film"></i></button>
@@ -240,7 +239,6 @@
             </button>
             <h2 class="text-red-500 font-orbitron mb-4 font-bold text-center uppercase tracking-widest text-lg">CONFIGURACIÓN SISTEMA</h2>
             
-            <!-- BOTON PARA OCULTAR MENÚS -->
             <div class="bg-black/50 p-3 rounded border border-gray-800 mb-4 flex justify-between items-center">
                 <div>
                     <h3 class="text-xs font-bold text-gray-400">OCULTAR MENÚS LATERALES</h3>
@@ -280,13 +278,20 @@
     </div>
 
 <script>
+    // --- SANITIZADOR UNIVERSAL DE TEXTO (Solo para procesar la entrada del micrófono) ---
+    function normalizarTexto(texto) {
+        if (!texto) return "";
+        return texto.toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // Quita todos los acentos y convierte ñ a n
+            .replace(/[¿?¡!.,;:]/g, "")      // Destruye toda la puntuación
+            .trim();
+    }
+
     // --- SISTEMA DE VOCES iOS FIX ---
     let cachedVoices = [];
     if ('speechSynthesis' in window) {
-        window.speechSynthesis.onvoiceschanged = () => {
-            cachedVoices = window.speechSynthesis.getVoices();
-        };
-        // Intento de carga inicial
+        window.speechSynthesis.onvoiceschanged = () => { cachedVoices = window.speechSynthesis.getVoices(); };
         cachedVoices = window.speechSynthesis.getVoices();
     }
 
@@ -319,39 +324,128 @@
     let aiScannerState = 0; 
     let aiScannerTimer = 0;
 
-    // --- ARRAYS Y LÓGICA SMART EVP (AUDIO SCAN) ---
-    const evpPalabrasSueltas = ["aqui", "ayuda", "frio", "oscuro", "silencio", "mira", "detras", "ven", "muerte", "luz", "duele", "sombras", "nosotros", "cerca", "sangre", "fuego", "miedo", "dolor", "solo", "niño", "madre", "padre", "agua"];
-    const evpFrasesCortas = ["te veo","te escucho","te siento","te sigo","te miro","te observo","te encontramos","te esperamos","te hablamos","te llamo","estoy aqui","aqui estoy","aqui seguimos","a tu lado","detras tuyo","muy cerca","muy lejos","sigue aqui","ven aqui","entra aqui","mira atras","mira arriba","mira abajo","mira aqui","mira cerca","mira oscuro","escucha bien","escucha ahora","escucha esto","oye bien","no estas solo","no estamos solos","somos muchos","somos sombras","somos energia","somos voz","somos antiguos","somos aqui","somos silencio","seguimos aqui","algo viene","algo mira","algo camina","algo respira","algo escucha","algo se mueve","algo te sigue","algo te mira","algo esta aqui","algo despierta","pasos cerca","pasos atras","ruido cerca","ruido atras","susurros aqui","susurros cerca","voz aqui","voz atras","voz cerca","eco aqui","puerta abierta","puerta cerrada","ventana rota","ventana abierta","pared fria","piso frio","techo oscuro","pasillo largo","sotano oscuro","lugar antiguo","sombras aqui","sombras cerca","sombras atras","figura aqui","figura oscura","rostro oscuro","ojos miran","ojos aqui","ojos cerca","ojos atras","energia aqui","energia fria","energia oscura","presencia aqui","presencia cerca","presencia atras","alma aqui","alma perdida","espiritu aqui","espiritu cerca","niebla aqui","niebla fria","niebla oscura","oscuridad aqui","oscuridad cerca","luz pequeña","luz debil","luz aqui","luz atras","luz cerca","frio aqui","frio cerca","frio atras","frio fuerte","mucho frio","siente frio","siente miedo","siente energia","siente presencia","siente sombra","te encontramos","te seguimos","te miramos","te rodeamos","te sentimos","te observamos","te buscamos","te escuchamos","te llamamos","te recordamos","ven despacio","ven ahora","entra despacio","entra ahora","mira despacio","escucha despacio","espera aqui","espera ahora","sigue caminando","sigue mirando"];
-    const evpAdvertencias = ["cuidado", "vete", "peligro", "huye", "corre", "no entres", "sal de aqui", "detente", "no mires atras", "es peligroso", "cuidado atras", "callate", "escondete", "alejate", "te hara daño", "vete ahora", "corre de aqui"];
-    const evpPreguntas = ["¿quien eres?", "¿por que estas aqui?", "¿quien es?", "¿que quieres?", "¿me escuchas?", "¿puedes verme?", "¿que haces?", "¿estas vivo?", "¿nos buscas?", "¿nos ayudas?", "¿cuando te vas?", "¿eres tu?"];
-    
-    const paranormalQuestions = [
-        "hay alguien aqui", "hay alguien con nosotros", "hay algun espiritu aqui", "hay alguna entidad aqui", 
-        "puede alguien escucharnos", "puede alguien comunicarse", "puedes hablarnos", "puedes decir algo", 
-        "puedes responder", "puedes manifestarte", "puedes hacer un ruido", "puedes mover algo", "puedes tocar algo", 
-        "puedes tocar este dispositivo", "puedes acercarte", "quien esta aqui", "quien esta con nosotros", "quien eres", 
-        "como te llamas", "cual es tu nombre", "puedes decir tu nombre", "hay algun espiritu que quiera hablar", 
-        "hay alguien que quiera comunicarse", "hay alguien que quiera responder", "estas aqui", "estas con nosotros", 
-        "estas cerca", "estas detras de nosotros", "estas frente a nosotros", "puedes vernos", "puedes oirnos", 
-        "nos puedes escuchar", "puedes ver esta luz", "estas atrapado aqui", "estas perdido", "estas enojado", 
-        "estas triste", "estas bien", "necesitas ayuda", "quieres ayuda", "quieres hablar", "quieres decir algo", 
-        "que te paso", "que paso aqui", "que ocurrio aqui", "como moriste", "cuando moriste", "murio alguien aqui", 
-        "este lugar es tuyo", "vivias aqui", "estas solo", "hay mas espiritus contigo", "cuantos espiritus hay aqui", 
-        "hay alguien mas aqui", "pueden comunicarse varios", "puedes dar una señal", "puedes hacer otro sonido", 
-        "puedes repetir eso", "puedes hablar mas fuerte", "puedes decir algo otra vez", "puedes decir si", 
-        "puedes decir no", "puedes confirmar", "puedes responder si o no", "si estas aqui di algo", 
-        "si estas aqui haz un ruido", "si estas aqui toca algo", "si estas aqui manifiestate", "puedes mover la puerta", 
-        "puedes mover algo en la habitacion", "puedes mover ese objeto", "puedes tocar la pared", "estas en esta habitacion", 
-        "estas en este lugar", "este lugar es tu hogar", "nos estabas esperando", "te molestamos", "quieres que nos vayamos", 
-        "quieres que nos quedemos", "nos puedes seguir", "nos puedes ver ahora", "estas cerca de este dispositivo", 
-        "puedes usar este dispositivo", "puedes usar esta caja", "puedes hablar a traves de esto", "puedes usar nuestra energia", 
-        "hay algun espiritu protector aqui", "hay algun espiritu negativo aqui", "eres un espiritu bueno", "eres un espiritu malo", 
-        "puedes decir tu edad", "cuantos años tienes", "puedes decir donde estas", "donde estas ahora", "estas en la oscuridad", 
-        "puedes hacer un golpe", "puedes mostrarte", "quieres que te ayudemos", "hay algo que quieras decir", "que mensaje tienes", 
-        "puedes repetir tu nombre", "estas atrapado en este lugar", "hay algo que debamos saber", "puedes decirnos algo", 
-        "puedes darnos una señal clara", "estas tratando de comunicarte", "nos estabas esperando", "puedes decir hola", 
-        "puedes decir adios", "estas observandonos", "puedes acercarte mas", "puedes hacer algo ahora"
-    ];
+    // --- NUEVO DIRECTORIO ESTRUCTURADO EVP ---
+    // triggers: van SIN tildes ni símbolos (lo que la app "escucha")
+    // respuestas: van CON tildes y correcta ortografía (lo que la app "dice")
+ const DIRECTORIO_EVP = [
+{
+triggers: ["que quieres", "que estas buscando", "por que estas aqui", "que buscas", "cual es tu proposito", "por que"],
+respuestas: ["luz", "tu alma", "a ustedes", "cuidarlos", "descansar", "tu miedo", "tu energía", "nada", "solo observo", "la verdad"]
+},
+{
+triggers: ["quien eres", "como te llamas", "cual es tu nombre", "quien es", "eres tu", "nombre"],
+respuestas: ["no tengo nombre", "olvidado", "soy la sombra", "nadie", "el dueño", "el antiguo", "vigilante", "un alma", "espíritu", "alguien perdido", "soy yo", "no me recuerdas"]
+},
+{
+triggers: ["aqui", "cerca", "detras", "alguien", "con nosotros", "estan", "acompanas", "estas vivo"],
+respuestas: ["sí", "aquí estoy", "siempre", "detrás de ti", "a tu lado", "muy cerca", "mirando", "en la oscuridad", "somos muchos", "cerca", "no estamos solos", "frente a ti", "te sigo", "escucha"]
+},
+{
+triggers: ["puedes", "haz", "toca", "mueve", "senal", "hacer", "manifiestate", "habla", "di algo", "ruido"],
+respuestas: ["no", "cuesta mucho", "no puedo", "intento", "mira", "escucha", "falta energía", "no me dejan", "dame fuerza", "es difícil", "presta atención", "otra vez", "no quiero", "tal vez"]
+},
+{
+triggers: ["bien", "enojado", "triste", "ayuda", "paso", "moriste", "como moriste", "cuando moriste", "duele", "sufres"],
+respuestas: ["frío", "dolor", "atrapado", "oscuro", "ayúdame", "vete", "triste", "enojado", "fuego", "no recuerdo", "sufriendo", "paz", "descanso", "hace frío", "miedo", "no sé"]
+},
+
+{
+triggers: ["cuantos son", "cuantos estan aqui", "cuantos hay", "hay muchos", "hay mas contigo", "cuantos espiritus"],
+respuestas: ["somos muchos", "somos tres", "somos varios", "somos dos", "muchos", "no estas solo", "aqui estamos"]
+},
+
+{
+triggers: ["te molestamos", "te incomodamos", "te enoja que estemos aqui", "te molesta nuestra presencia"],
+respuestas: ["no", "un poco", "si", "no importa", "sigan", "quedense", "vete"]
+},
+
+{
+triggers: ["que te paso", "que paso aqui", "que ocurrio", "que sucedio", "por que moriste"],
+respuestas: ["accidente", "fuego", "dolor", "caida", "oscuro", "no recuerdo", "triste"]
+},
+
+{
+triggers: ["estas atrapado", "no puedes salir", "estas perdido", "estas aqui para siempre"],
+respuestas: ["si", "atrapado", "no puedo salir", "ayuda", "intento", "no se"]
+},
+
+{
+triggers: ["quieres ayuda", "necesitas ayuda", "podemos ayudarte", "quieres que te ayudemos"],
+respuestas: ["ayudame", "si", "no", "tal vez", "dame energia"]
+},
+
+{
+triggers: ["quieres que nos vayamos", "debemos irnos", "quieres que salgamos", "quieres que nos marchemos"],
+respuestas: ["vete", "quedate", "no", "si", "aun no", "sal ahora"]
+},
+
+{
+triggers: ["puedes tocarnos", "puedes tocar algo", "puedes mover algo", "puedes hacer una señal"],
+respuestas: ["intento", "mira", "escucha", "tal vez", "no puedo", "dificil"]
+},
+
+{
+triggers: ["hay niños aqui", "eres un niño", "hay un niño aqui"],
+respuestas: ["niño", "madre", "padre", "solo", "frio"]
+},
+
+{
+triggers: ["donde estas", "en donde estas", "puedes decir donde estas"],
+respuestas: ["aqui", "detras", "arriba", "abajo", "cerca", "muy cerca"]
+},
+
+{
+triggers: ["vivias aqui", "esta era tu casa", "este lugar era tuyo"],
+respuestas: ["mi casa", "si", "antes", "hace tiempo", "siempre"]
+}
+
+];
+    // Arrays para las EVP aleatorias (cuando nadie pregunta nada)
+   const evpPalabrasSueltas = [
+"aquí","ayuda","frío","oscuro","silencio","mira","detrás","ven","muerte","luz","duele","sombras","nosotros","cerca","sangre","fuego","miedo","dolor","solo","niño","madre","padre","agua",
+"alma","eco","voz","presencia","pasos","respira","mira","arriba","abajo","sombra","rostro","ojos","figura","sigue","escucha","habla","espera","entra","sal","ruido","golpe","susurro","antiguo","viejo",
+"olvido","recuerdo","tumba","puerta","ventana","piso","techo","pared","pasillo","sotano","casa","camino","oscuridad","niebla","aire","viento","energia","temor","grito","eco","señal","cuerpo","espiritu",
+"fantasma","presente","pasado","aqui","siempre","nunca","perdido","atrapado","camina","mira","escucha","observa","respira","siente","viene","vuelve","regresa","sigue","espera","quieto"
+];
+
+const evpFrasesCortas = [
+"te veo","te escucho","te siento","te sigo","te miro","te observo","te encontramos","te esperamos","te hablamos","te llamo","estoy aquí","aquí estoy","aquí seguimos","a tu lado","detrás tuyo","muy cerca","muy lejos",
+"sigue aquí","ven aquí","entra aquí","mira atrás","mira arriba","mira abajo","mira aquí","mira cerca","mira oscuro","escucha bien","escucha ahora","escucha esto","oye bien",
+"no estás solo","no estamos solos","somos muchos","somos sombras","somos energía","somos voz","somos antiguos","somos aquí","somos silencio","seguimos aquí",
+"algo viene","algo mira","algo camina","algo respira","algo escucha","algo se mueve","algo te sigue","algo te mira","algo está aquí","algo despierta",
+"pasos cerca","pasos atrás","ruido cerca","ruido atrás","susurros aquí","susurros cerca","voz aquí","voz atrás","voz cerca","eco aquí",
+"puerta abierta","puerta cerrada","ventana rota","ventana abierta","pared fría","piso frío","techo oscuro","pasillo largo","sótano oscuro","lugar antiguo",
+"sombras aquí","sombras cerca","sombras atrás","figura aquí","figura oscura","rostro oscuro","ojos miran","ojos aquí","ojos cerca","ojos atrás",
+"energía aquí","energía fría","energía oscura","presencia aquí","presencia cerca","presencia atrás",
+"alma aquí","alma perdida","espíritu aquí","espíritu cerca",
+"niebla aquí","niebla fría","niebla oscura",
+"oscuridad aquí","oscuridad cerca",
+"luz pequeña","luz débil","luz aquí","luz atrás","luz cerca",
+"frío aquí","frío cerca","frío atrás","frío fuerte","mucho frío",
+"siente frío","siente miedo","siente energía","siente presencia","siente sombra",
+"te encontramos","te seguimos","te miramos","te rodeamos","te sentimos","te observamos","te buscamos","te escuchamos","te llamamos","te recordamos",
+"ven despacio","ven ahora","entra despacio","entra ahora","mira despacio","escucha despacio","espera aquí","espera ahora","sigue caminando","sigue mirando",
+"estoy contigo","estoy aquí","te estoy viendo","te estoy mirando","te estoy siguiendo","te estoy escuchando",
+"mira la puerta","mira el pasillo","mira la sombra","escucha el ruido","escucha los pasos","escucha la voz",
+"no te vayas","no mires atrás","no entres aquí","no sigas","no avances","no te acerques",
+"algo respira","algo observa","algo se acerca","algo despierta","algo se mueve"
+];
+
+const evpAdvertencias = [
+"cuidado","vete","peligro","huye","corre","no entres","sal de aquí","detente","no mires atrás","es peligroso","cuidado atrás","cállate","escóndete","aléjate","te hará daño","vete ahora","corre de aquí",
+"no avances","no sigas","no entres ahí","no abras","no mires","no regreses","huye ahora","corre ahora","aléjate ahora","vete lejos","no te acerques","no toques","no hables","no escuches"
+];
+
+const paranormalQuestions = [
+"hay alguien aqui","puede alguien escucharnos","puedes hablarnos","quien esta aqui","como te llamas","estas aqui","estas cerca","necesitas ayuda","que te paso","vivias aqui","estas solo",
+"puedes dar una senal","puedes decir si","puedes decir no","si estas aqui di algo","quieres que nos vayamos",
+"cuantos estan aqui","cuantos son","hay mas contigo","hay alguien con nosotros",
+"puedes tocarnos","puedes mover algo","puedes hacer ruido","puedes golpe ar algo",
+"nos puedes ver","nos puedes escuchar","puedes repetir eso","puedes decir mi nombre",
+"hay un niño aqui","hay un espiritu aqui","hay algo aqui",
+"estas detras de nosotros","estas en este cuarto","estas en este lugar",
+"quieres hablar","quieres comunicarse","quieres que te ayudemos"
+];
 
     let evpHistorial = [];
 
@@ -360,8 +454,7 @@
         let arr;
         if (r < 0.60) arr = evpPalabrasSueltas;
         else if (r < 0.85) arr = evpFrasesCortas;
-        else if (r < 0.95) arr = evpAdvertencias;
-        else arr = evpPreguntas;
+        else arr = evpAdvertencias; 
 
         let seleccion;
         let intento = 0;
@@ -376,20 +469,62 @@
         return seleccion;
     }
 
-    // AUDIO SCANNER VARS (NON-INVASIVE MIC)
+    // --- NUEVA LÓGICA DE BÚSQUEDA BASADA EN EL DIRECTORIO ---
+    function obtenerRespuestaContextual(preguntaNorm) {
+        let posiblesRespuestas = [];
+        
+        // 1. Busca coincidencias directas en el directorio
+        for(let categoria of DIRECTORIO_EVP) {
+            // Si alguno de los triggers está contenido en lo que dijiste
+            if (categoria.triggers.some(trigger => preguntaNorm.includes(trigger))) {
+                posiblesRespuestas = categoria.respuestas;
+                break; // Detiene la búsqueda al encontrar la primera categoría compatible
+            }
+        }
+
+        // 2. Fallback: Si no encontró una categoría específica en el directorio
+        if (posiblesRespuestas.length === 0) {
+            if (Math.random() > 0.4) {
+                return obtenerEVP(); // Retorna una palabra/frase aleatoria (no específica)
+            } else {
+                posiblesRespuestas = (Math.random() > 0.5) ? ["sí", "claro", "siempre", "así es", "verdad", "sí lo estoy"] : ["no", "nunca", "falso", "vete", "mentira", "no es cierto"];
+            }
+        }
+
+        // 3. Selección final asegurando no repetir tanto
+        let seleccion;
+        let intento = 0;
+        do {
+            seleccion = posiblesRespuestas[Math.floor(Math.random() * posiblesRespuestas.length)];
+            intento++;
+        } while (evpHistorial.includes(seleccion) && intento < 10);
+
+        evpHistorial.push(seleccion);
+        if (evpHistorial.length > 15) evpHistorial.shift();
+
+        return seleccion;
+    }
+
+    // AUDIO SCANNER VARS
     let audioStream = null;
     let audioCtx = null;
+    let micGainNode = null; 
     let audioAnalyser = null;
     let audioDataArray = null;
     let speechRec = null;
-    let isRecognizing = false; // <-- PROTECCIÓN QUIRÚRGICA: Evita colisiones de encendido de micrófono
+    let isRecognizing = false; 
     let lastSpokenText = "";
     let speechTimer = null;
-    let isSpookySpeaking = false; // FLAG PARA BARRIDO DE ENERGIA
-    let isTtsPlaying = false; // LOCK PARA EVITAR REINICIO DEL MIC
-    let lastQuestionTime = 0; // DETECCION DE SILENCIO / VENTANA DE EVP
+    let isSpookySpeaking = false; 
+    let isTtsPlaying = false; 
+    let lastQuestionTime = 0; 
+    let lastEvpTime = 0; 
+    
+    // MEJORAS DE VISUALIZACIÓN INTERNAS
+    let simulatedPikes = new Array(128).fill(0); 
+    let ambientNoiseLevel = 0.01; 
+    let cumulativeEVPEnergy = 0; 
 
-    // FUNCIONES DE CONTROL SEGURO DE MICRÓFONO
     function safeStartSpeechRec() {
         if (speechRec && state.isAudioScan && !isTtsPlaying && !isSpookySpeaking && !isRecognizing) {
             try { 
@@ -408,9 +543,8 @@
         }
     }
 
-    // GUARDIAN DE IMAGEN (FRAME PACING)
     let lastFrameTime = 0;
-    const fpsInterval = 1000 / 120; // FIX: Objetivo 60-120 FPS (desbloqueado)
+    const fpsInterval = 1000 / 120; 
 
     const animState = { hudScale: 1.0, hudTarget: 1.0, aiScale: 0.0, aiTarget: 0.0 };
     const el = { 
@@ -424,10 +558,7 @@
         statusDot: document.getElementById('status-dot') 
     };
 
-    // CONTEXTO DE BAJA LATENCIA (GAMING MODE HINT)
     const ctx = el.canvas.getContext('2d', { alpha: true });
-    
-    // Mantener desynchronized para capas UI que requieren baja latencia de dibujo pero no filtros complejos
     const audioLayerCtx = el.audioCanvas.getContext('2d', { alpha: true, desynchronized: true });
     const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: true });
     
@@ -438,7 +569,6 @@
 
     let aiDetector = null, faceMesh = null, segmenter = null, poses = [], faces = [], lidarMask = null;
     
-    // VARIABLES PARA PREVENIR CALCULOS DUPLICADOS
     let lidarBusy = false; 
     let lastLidarMask = null; 
     let scanlineCanvas = null; 
@@ -449,7 +579,6 @@
 
     let logoImg = new Image(); logoImg.src = 'obr-logo.png';
 
-    // LIMPIADOR DE CACHÉ SILENCIOSO Y PROTECTOR DE RED
     setInterval(systemGC, 15000);
     function systemGC() {
         if (canvasScanBoxes.length > 20) canvasScanBoxes = canvasScanBoxes.slice(-20); 
@@ -457,10 +586,9 @@
         if(ctx && ctx.beginPath) ctx.beginPath(); 
         if(audioLayerCtx && audioLayerCtx.beginPath) audioLayerCtx.beginPath();
         if (!state.isPareidolia && !state.isSLS) {
-            currentAiImage = null; // Liberar buffer zombie
+            currentAiImage = null; 
         }
         
-        // 🛡️ AHORRO DE RED: Si las instancias Peer se cerraron pero quedaron en zombie, las destruimos por completo
         if (peerCommand && (peerCommand.disconnected || peerCommand.destroyed)) {
             try { peerCommand.destroy(); } catch(e){}
             peerCommand = null;
@@ -472,7 +600,6 @@
         }
     }
 
-    // MEDIOS LOCALES (PRECARGA Y LOGICA)
     const LOCAL_ASSETS = {
         intro: './INTRO_1.mp4',
         outro: './FIN_DIRECTO.mp4',
@@ -539,7 +666,6 @@
             if (videoStream) {
                 const track = videoStream.getVideoTracks()[0];
                 if (!track || track.readyState === 'ended' || el.video.paused) {
-                    console.log("GUARDIAN: Recuperando cámara tras cambio de foco...");
                     restartCamera();
                 } else { el.video.play().catch(e => restartCamera()); }
             }
@@ -548,16 +674,13 @@
 
     let isRestartingCamera = false;
 
-    // GUARDIAN DE CÁMARA: SISTEMA DE RECUPERACIÓN 
     async function restartCamera() {
         if (isRestartingCamera) return; 
         if (document.hidden) return; 
         
         isRestartingCamera = true;
-        console.log("GUARDIAN: Fallo detectado. Reiniciando hardware de cámara...");
         try {
             if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
-            // MEJORA QUIRÚRGICA: channelCount: 2 para engañar al perfil de llamada y usar modo Media
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
                 video: { 
@@ -600,7 +723,6 @@
     window.onload = () => { 
         document.getElementById('api-key-internal').value = state.apiKey; 
         document.getElementById('mtx-host').value = state.studioId; 
-        // Batería y red eliminados por petición para optimización iOS
     };
 
     async function initApp() {
@@ -609,7 +731,6 @@
         
         try {
             updateProgress(10, "INICIANDO SENSOR 4K...");
-            // MEJORA QUIRÚRGICA: channelCount: 2 para forzar perfil estéreo multimedia en lugar de llamada
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
                 video: { 
@@ -621,7 +742,7 @@
                 } 
             });
             videoStream = stream; 
-            audioStream = stream; // Se comparte el stream en todo el sistema
+            audioStream = stream; 
             el.video.srcObject = stream; el.video.play();
         } catch(e) { alert("Error Crítico Cámara: " + e.message); return; }
         
@@ -664,7 +785,6 @@
         }, 800);
     }
 
-    // --- MOTOR DE AUDIO DINÁMICO (Súper Sensible & No Invasivo) ---
     async function initAudioEngine() {
         if (!audioStream) {
             try {
@@ -677,11 +797,18 @@
         if (!audioCtx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             audioCtx = new AudioContext({ latencyHint: 'interactive' }); 
+            
+            const forceAudioEl = new Audio();
+            forceAudioEl.setAttribute("playsinline", true);
+            forceAudioEl.setAttribute("webkit-playsinline", true);
+
             audioAnalyser = audioCtx.createAnalyser();
             audioAnalyser.fftSize = 2048; 
             audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
             
-            // Speech Recognition BLINDADO
+            micGainNode = audioCtx.createGain();
+            micGainNode.gain.value = 3.0;
+            
             if ('webkitSpeechRecognition' in window) {
                 speechRec = new webkitSpeechRecognition();
                 speechRec.continuous = true; 
@@ -696,37 +823,51 @@
                     const latestText = event.results[lastIndex][0].transcript;
                     
                     if (latestText.trim().length > 0) {
-                        lastSpokenText = latestText;
+                        
+                        const txtNormalizado = normalizarTexto(latestText);
+                        lastSpokenText = txtNormalizado; 
+                        
                         clearTimeout(speechTimer);
                         speechTimer = setTimeout(() => { lastSpokenText = ""; }, 4000); 
                         
                         if(event.results[lastIndex].isFinal && conn && conn.open) {
-                             conn.send({type: 'ai-speech', text: `[VOZ]: ${latestText}`});
+                             conn.send({type: 'ai-speech', text: `[VOZ]: ${txtNormalizado}`});
                         }
 
-                        // DETECCION AVANZADA DE PREGUNTAS
-                        const txtLower = latestText.toLowerCase();
-                        const isQuestion = txtLower.includes("?") || paranormalQuestions.some(q => txtLower.includes(q));
+                        // VALIDAMOS SI ES PREGUNTA CONTRA EL DIRECTORIO COMPLETO Y ALGUNAS EXTRAS
+                        let isQuestion = paranormalQuestions.some(q => txtNormalizado.includes(q));
+                        
+                        if (!isQuestion) {
+                            for(let cat of DIRECTORIO_EVP) {
+                                if (cat.triggers.some(t => txtNormalizado.includes(t))) {
+                                    isQuestion = true;
+                                    break;
+                                }
+                            }
+                        }
 
                         if (isQuestion) {
-                            lastQuestionTime = Date.now(); // Activa la ventana de silencio para mayor probabilidad EVP
+                            lastQuestionTime = Date.now(); 
                         }
 
-                        if (isQuestion && state.isAudioScan && !isSpookySpeaking && !isTtsPlaying) {
+                        if (isQuestion && state.isAudioScan && !isSpookySpeaking && !isTtsPlaying && (Date.now() - lastEvpTime > 6000)) {
+                            lastEvpTime = Date.now() + 99999; 
                             setTimeout(() => {
-                                lastSpokenText = obtenerEVP();
+                                lastEvpTime = Date.now();
+                                
+                                lastSpokenText = obtenerRespuestaContextual(txtNormalizado);
+                                
                                 clearTimeout(speechTimer);
                                 speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3000);
                                 if (conn && conn.open) conn.send({type: 'ai-speech', text: `${lastSpokenText}`});
                                 speakSpooky(lastSpokenText);
-                            }, 1000 + Math.random() * 1500); // Demora dramática antes de responder
+                            }, 2500 + Math.random() * 2000); 
                         }
                     }
                 };
                 
                 speechRec.onend = () => {
                     isRecognizing = false;
-                    // MEJORA QUIRÚRGICA: Reinicio súper seguro
                     if(state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
                          setTimeout(() => { safeStartSpeechRec(); }, 1000);
                     }
@@ -736,7 +877,8 @@
 
         try {
             const source = audioCtx.createMediaStreamSource(audioStream);
-            source.connect(audioAnalyser);
+            source.connect(micGainNode);
+            micGainNode.connect(audioAnalyser);
         } catch(e) {}
         
         if (audioCtx.state !== 'running') {
@@ -757,64 +899,95 @@
         }
     }
 
-    // --- VISUALIZADOR DE AUDIO Y EVP PAREIDOLIA (Súper Sensible) ---
+    // --- VISUALIZADOR DE AUDIO ---
     function drawAudioVisualizer(c, w, h) {
         if (!state.isAudioScan || !audioAnalyser) return;
         
         audioAnalyser.getByteTimeDomainData(audioDataArray);
         
-        const bufferLength = audioAnalyser.frequencyBinCount;
+        const bufferLength = audioAnalyser.frequencyBinCount; 
         const bottomY = h * 0.85; 
-        const waveHeight = 71; // MEJORA: Altura incrementada un 15%
-        const sensitivity = 8.4; // MEJORA: Sensibilidad acorde
+        const waveHeight = 71; 
+        const sensitivity = 8.4; 
 
+        let frameSum = 0;
         let currentMaxVolume = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+            let v = Math.abs((audioDataArray[i] / 128.0) - 1);
+            frameSum += v;
+            if (v > currentMaxVolume) currentMaxVolume = v;
+        }
+
+        let frameAvg = frameSum / bufferLength;
+        ambientNoiseLevel = (ambientNoiseLevel * 0.98) + (frameAvg * 0.02);
+        let dynamicThreshold = ambientNoiseLevel * 2.5 + 0.02;
+
+        if (!isSpookySpeaking && !isTtsPlaying && currentMaxVolume > dynamicThreshold) {
+            cumulativeEVPEnergy += (currentMaxVolume - dynamicThreshold) * 5.0;
+        }
+        cumulativeEVPEnergy *= 0.95;
+        if (cumulativeEVPEnergy < 0) cumulativeEVPEnergy = 0;
+        if (cumulativeEVPEnergy > 100) cumulativeEVPEnergy = 100;
 
         c.save();
         
-        // 1. Subtítulos (ROJO ESPECTRAL CON TRANSPARENCIA)
         if (lastSpokenText) {
-            c.font = "bold 23px 'Share Tech Mono'"; // MEJORA: Texto +15%
+            c.font = "bold 23px 'Share Tech Mono'"; 
             c.fillStyle = "rgba(255, 0, 0, 0.7)"; 
             c.textAlign = "center";
             c.shadowColor = "rgba(255, 0, 0, 0.5)"; c.shadowBlur = 10; 
             c.fillText(`"${lastSpokenText.toUpperCase()}"`, w/2, bottomY - 86); 
         }
 
-        // 2. ONDAS (Con Clamp)
-        c.lineWidth = 2;
+        c.lineWidth = window.innerWidth < 600 ? 3.5 : 1.5;
         c.lineJoin = 'round';
 
         const displayWidth = Math.min(700, w * 0.9);
         const startX = (w - displayWidth) / 2;
-        const displaySliceWidth = displayWidth / bufferLength;
+
+        const visualBins = 128;
+        const step = Math.floor(bufferLength / visualBins);
+        const displaySliceWidth = displayWidth / visualBins;
 
         const clampY = (val) => Math.max(-71, Math.min(71, val));
 
-        // CAPA CIAN
+        for (let i = 0; i < visualBins; i++) {
+            simulatedPikes[i] *= 0.60; 
+
+            if ((isSpookySpeaking || isTtsPlaying) && Math.random() < 0.015) {
+                simulatedPikes[i] = (Math.random() * 0.5) + 0.2; 
+            }
+        }
+
+        let smoothedPikes = new Array(visualBins).fill(0);
+        for (let i = 0; i < visualBins; i++) {
+            let prev = i > 0 ? simulatedPikes[i-1] : 0;
+            let next = i < visualBins - 1 ? simulatedPikes[i+1] : 0;
+            smoothedPikes[i] = (prev * 0.1) + simulatedPikes[i] + (next * 0.1); 
+        }
+        simulatedPikes = smoothedPikes;
+
         c.beginPath();
         c.strokeStyle = 'rgba(0, 255, 255, 0.8)'; 
         c.shadowColor = 'rgba(0, 255, 255, 0.8)';
         c.shadowBlur = 15;
         
         let x = startX;
-        for (let i = 0; i < bufferLength; i++) {
-            let v = (audioDataArray[i] / 128.0) - 1; 
+        for (let i = 0; i < visualBins; i++) {
+            let dataIndex = i * step; 
+            let v = (audioDataArray[dataIndex] / 128.0) - 1; 
             
-            // EFECTO DE BARRIDO DE ENERGÍA MIENTRAS HABLA LA IA
-            if (isSpookySpeaking) {
-                const timePulse = performance.now() * 0.003;
-                const sweepEffect = Math.sin(timePulse + i * 0.05) * Math.cos(timePulse * 0.2);
-                v += sweepEffect * (Math.random() * 0.6 + 0.4); 
+            if (isSpookySpeaking || isTtsPlaying) {
+                v *= 0.05; 
+                let simPeak = simulatedPikes[i];
+                v += (Math.random() > 0.5 ? simPeak : -simPeak); 
             }
-
-            // Detectar Pico de Volumen Máximo para Pareidolia EVP
-            if (Math.abs(v) > currentMaxVolume) currentMaxVolume = Math.abs(v);
 
             const rawH = v * waveHeight * sensitivity;
             const y = bottomY + clampY(rawH); 
             
-            const offset = Math.sin(i * 0.1 + performance.now() * 0.01) * 2; 
+            const offset = Math.sin(i * 0.2 + performance.now() * 0.01) * 2; 
 
             if (i === 0) c.moveTo(x, y + offset);
             else c.lineTo(x, y + offset);
@@ -822,18 +995,21 @@
         }
         c.stroke();
         
-        // SEGUNDA PASADA: DETECCIÓN DE ANOMALÍAS (PUNTOS DE LUZ EN PICOS)
         x = startX; 
-        for (let i = 0; i < bufferLength; i++) {
-            let v = (audioDataArray[i] / 128.0) - 1; 
-            if (isSpookySpeaking) {
-                const timePulse = performance.now() * 0.003;
-                v += Math.sin(timePulse + i * 0.05) * Math.cos(timePulse * 0.2) * (Math.random() * 0.6 + 0.4); 
+        for (let i = 0; i < visualBins; i++) {
+            let dataIndex = i * step;
+            let v = (audioDataArray[dataIndex] / 128.0) - 1; 
+
+            if (isSpookySpeaking || isTtsPlaying) {
+                v *= 0.05;
+                let simPeak = simulatedPikes[i];
+                v += (Math.random() > 0.5 ? simPeak : -simPeak); 
             }
-            if (Math.abs(v) > 0.15 && i % 4 === 0) { 
+
+            if (Math.abs(v) > 0.15 && i % 2 === 0) { 
                 const rawH = v * waveHeight * sensitivity;
                 const y = bottomY + clampY(rawH);
-                const offset = Math.sin(i * 0.1 + performance.now() * 0.01) * 2;
+                const offset = Math.sin(i * 0.2 + performance.now() * 0.01) * 2;
                 
                 c.save();
                 c.fillStyle = "rgba(255, 255, 255, 0.95)";
@@ -847,21 +1023,20 @@
             x += displaySliceWidth;
         }
 
-        // CAPA MAGENTA (Invertida)
         c.beginPath();
         c.strokeStyle = 'rgba(255, 0, 255, 0.8)'; 
         c.shadowColor = 'rgba(255, 0, 255, 0.8)';
         c.shadowBlur = 15;
         
         x = startX;
-        for (let i = 0; i < bufferLength; i++) {
-            let v = (audioDataArray[i] / 128.0) - 1;
+        for (let i = 0; i < visualBins; i++) {
+            let dataIndex = i * step;
+            let v = (audioDataArray[dataIndex] / 128.0) - 1;
             
-            // EFECTO DE BARRIDO DE ENERGÍA MIENTRAS HABLA LA IA
-            if (isSpookySpeaking) {
-                const timePulse = performance.now() * 0.004;
-                const sweepEffect = Math.sin(timePulse - i * 0.05) * Math.cos(timePulse * 0.3);
-                v += sweepEffect * (Math.random() * 0.6 + 0.4); 
+            if (isSpookySpeaking || isTtsPlaying) {
+                v *= 0.05;
+                let simPeak = simulatedPikes[i];
+                v += (Math.random() > 0.5 ? simPeak : -simPeak); 
             }
 
             const rawH = v * waveHeight * sensitivity * 0.8;
@@ -870,7 +1045,7 @@
             if (i === 0) c.moveTo(x, y);
             else c.lineTo(x, y);
             
-            if (Math.abs(v) > 0.05 && i % 15 === 0) {
+            if (Math.abs(v) > 0.05 && i % 8 === 0) {
                  const pSize = Math.random() * 2 + 1;
                  c.fillStyle = Math.random() > 0.5 ? '#00ffff' : '#ff00ff';
                  c.fillRect(x, y + (Math.random() * 30 - 15), pSize, pSize);
@@ -881,15 +1056,20 @@
         
         c.restore();
 
-        // MOTOR DE PAREIDOLIA DE AUDIO (EVP)
-        let evpProbability = 0.90; // Umbral base muy alto (poca probabilidad aleatoria)
+        let evpProbability = 0.90; 
         
-        // Detección de silencio: Si hubo una pregunta en los últimos 5 segundos, baja el umbral
         if (Date.now() - lastQuestionTime < 5000) {
-            evpProbability = 0.50; // Mayor probabilidad de que un ruido en el silencio detone una respuesta
+            evpProbability = 0.50; 
         }
 
-        if (currentMaxVolume > 0.10 && !lastSpokenText && !isSpookySpeaking && Math.random() > evpProbability) {
+        let shouldTriggerEVP = false;
+        if (currentMaxVolume > 0.10 && currentMaxVolume > dynamicThreshold) shouldTriggerEVP = true;
+        if (cumulativeEVPEnergy > 75) shouldTriggerEVP = true;
+
+        let timeSinceLastEvp = Date.now() - lastEvpTime;
+
+        if (shouldTriggerEVP && !lastSpokenText && !isSpookySpeaking && !isTtsPlaying && timeSinceLastEvp > (6000 + Math.random() * 4000) && Math.random() > evpProbability) {
+            lastEvpTime = Date.now();
             lastSpokenText = obtenerEVP();
             clearTimeout(speechTimer);
             speechTimer = setTimeout(() => { lastSpokenText = ""; }, 2500);
@@ -899,6 +1079,7 @@
             }
             
             speakSpooky(lastSpokenText);
+            cumulativeEVPEnergy = -50; 
         }
     }
 
@@ -1070,8 +1251,6 @@
             const vW = el.video.videoWidth, vH = el.video.videoHeight;
             const cW = el.canvas.width, cH = el.canvas.height;
             
-            // 🔥 MEJORA DE RENDIMIENTO QUIRÚRGICA 🔥
-            // Bypass completo de procesamiento GPU para el canvas stream si no hay conexión
             const isTransmitting = (peerVideoSender && !peerVideoSender.disconnected) || (conn && conn.open);
             
             if (isTransmitting) ctx.clearRect(0, 0, cW, cH);
@@ -1083,7 +1262,6 @@
                 if (cRatio > vRatio) { dW = cW; dH = cW / vRatio; dX = 0; dY = (cH - dH) / 2; } else { dW = cH * vRatio; dH = cH; dX = (cW - dW) / 2; dY = 0; }
                 window.drawCoords = { dW, dH, dX, dY, vW, vH };
                 
-                // Procesar pesados filtros CSS y render en el canvas de red SOLAMENTE si hay transmisión
                 if (isTransmitting) {
                     ctx.save();
                     if(state.filter === 'night') { ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)'; } 
@@ -1104,7 +1282,6 @@
                     }
                 }
                 
-                // Efectos ligeros exclusivos para el usuario local
                 if (state.isLidar) { 
                     audioLayerCtx.fillStyle = 'rgba(0,0,0,0.25)'; 
                     audioLayerCtx.fillRect(0,0, cW, cH); 
@@ -1341,13 +1518,19 @@
 
     function speakText(text) {
         if('speechSynthesis' in window) {
-            isTtsPlaying = true; // Activar cerrojo de seguridad
+            let voices = window.speechSynthesis.getVoices();
+            if (voices.length === 0) voices = cachedVoices;
             
-            // MEJORA QUIRÚRGICA: Apagar micrófono con seguridad antes de hablar
+            if (voices.length === 0) {
+                setTimeout(() => speakText(text), 500);
+                return;
+            }
+
+            isTtsPlaying = true; 
+            
             safeStopSpeechRec();
             
             setTimeout(() => {
-                // FIX iOS: Garantizar que la cola avance evitando bloqueos de cancel()
                 window.speechSynthesis.resume(); 
                 window.speechSynthesis.cancel(); 
                 
@@ -1355,20 +1538,14 @@
                 const u = new SpeechSynthesisUtterance(cleanText); 
                 u.lang = 'es-MX'; u.rate = 1.0; u.pitch = 1.1; u.volume = 1.0;
                 
-                // FIX iOS: Obtener voces con fallback al caché si está vacío
-                let voices = window.speechSynthesis.getVoices();
-                if (voices.length === 0) voices = cachedVoices;
-                
                 const femaleVoice = voices.find(v => v.lang.includes('es') && (v.name.includes('Paulina') || v.name.includes('Sabina') || v.name.includes('Mexico') || v.name.toLowerCase().includes('female')));
                 
                 if (femaleVoice) {
                     u.voice = femaleVoice; 
                 } else if (voices.length > 0) {
-                    // FIX iOS: Fallback a cualquier voz en español o a la default
                     u.voice = voices.find(v => v.lang.includes('es')) || voices[0];
                 }
                 
-                // FIX iOS: Protección estricta de limpieza de banderas
                 u.onend = () => {
                     isTtsPlaying = false; 
                     setTimeout(() => { safeStartSpeechRec(); }, 500); 
@@ -1380,51 +1557,58 @@
                 };
                 
                 window.speechSynthesis.speak(u);
-                window.speechSynthesis.resume(); // Forzar reproducción final iOS
+                window.speechSynthesis.resume(); 
             }, 300); 
+            
+            setTimeout(() => {
+                if (isTtsPlaying) {
+                    isTtsPlaying = false;
+                    isSpookySpeaking = false;
+                    setTimeout(() => { safeStartSpeechRec(); }, 500);
+                }
+            }, 4000);
         }
     }
 
-    // VOZ ANÓMALA DEDICADA PARA EL EVP (AUDIO SCAN) LIMPÍSIMA PERO TÉTRICA
     function speakSpooky(text) {
         if('speechSynthesis' in window) {
-            isTtsPlaying = true; // Activar cerrojo de seguridad
+            let voices = window.speechSynthesis.getVoices();
+            if (voices.length === 0) voices = cachedVoices;
+            
+            if (voices.length === 0) {
+                setTimeout(() => speakSpooky(text), 500);
+                return;
+            }
+
+            isTtsPlaying = true; 
             isSpookySpeaking = true; 
             
-            // MEJORA QUIRÚRGICA: Apagar micrófono con seguridad
             safeStopSpeechRec();
             
             setTimeout(() => {
-                // FIX iOS: Evitar el bug de cola congelada
                 window.speechSynthesis.resume();
                 window.speechSynthesis.cancel();
                 
                 const u = new SpeechSynthesisUtterance(text);
                 u.lang = 'es-MX';
                 
-                // Alteración de frecuencia y volumen sin ensuciar el texto
                 if (Math.random() > 0.5) {
-                    u.pitch = 0.1 + (Math.random() * 0.3); // Gutural / Grave
-                    u.rate = 0.5 + (Math.random() * 0.3); // Lento
+                    u.pitch = 0.1 + (Math.random() * 0.3); 
+                    u.rate = 0.5 + (Math.random() * 0.3); 
                     u.volume = 0.8 + (Math.random() * 0.2); 
                 } else {
-                    u.pitch = 1.6 + (Math.random() * 0.4); // Estridente / Agudo
-                    u.rate = 1.1 + (Math.random() * 0.4); // Rápido
+                    u.pitch = 1.6 + (Math.random() * 0.4); 
+                    u.rate = 1.1 + (Math.random() * 0.4); 
                     u.volume = 0.8 + (Math.random() * 0.2); 
                 }
-
-                // FIX iOS: Recuperación segura de voces para iOS
-                let voices = window.speechSynthesis.getVoices();
-                if (voices.length === 0) voices = cachedVoices;
 
                 const esVoices = voices.filter(v => v.lang.includes('es'));
                 if (esVoices.length > 0) {
                     u.voice = esVoices[Math.floor(Math.random() * esVoices.length)];
                 } else if (voices.length > 0) {
-                    u.voice = voices[0]; // Fallback voz por defecto
+                    u.voice = voices[0]; 
                 }
                 
-                // FIX iOS: Protección estricta de banderas
                 u.onend = () => { 
                     isSpookySpeaking = false; 
                     isTtsPlaying = false; 
@@ -1438,8 +1622,16 @@
                 };
 
                 window.speechSynthesis.speak(u);
-                window.speechSynthesis.resume(); // Forzar reproducción final iOS
-            }, 300); // Retraso estratégico
+                window.speechSynthesis.resume(); 
+            }, 300); 
+            
+            setTimeout(() => {
+                if (isTtsPlaying || isSpookySpeaking) {
+                    isTtsPlaying = false;
+                    isSpookySpeaking = false;
+                    setTimeout(() => { safeStartSpeechRec(); }, 500);
+                }
+            }, 4000);
         }
     }
 
