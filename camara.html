@@ -176,7 +176,7 @@
         
         <div id="link-status" class="absolute bottom-4 left-4 text-[10px] font-mono text-gray-400 bg-black/60 px-2 py-1 rounded border border-gray-800 flex items-center gap-2">
             <div id="status-dot" class="w-2 h-2 rounded-full bg-red-900"></div>
-            <span id="status-text">Offline|estudio</span>
+            <span id="status-text">PREVIEW</span>
         </div>
 
         <div id="local-media-controls">
@@ -221,7 +221,7 @@
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.53 (Spirit vox)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.51 (Spirit vox)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -375,11 +375,11 @@
         return texto.toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "") 
-            .replace(/[¿?¡!.,;:]/g, "")     
+            .replace(/[¿?¡!.,;:]/g, "")      
             .trim();
     }
 
-    const AI_SENSITIVITY = 0.2; 
+    const AI_SENSITIVITY = 1.2; 
     const state = { 
         apiKey: localStorage.getItem("obr_ai_key") || localStorage.getItem("obr_gemini_key") || "", 
         aiProvider: localStorage.getItem("obr_ai_provider") || "gemini",
@@ -387,27 +387,7 @@
         studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 
     };
     
-    // MEJORA 1: CONFIGURACIÓN ICE (STUN + TURN EXTENDIDO) Y RESTRICCIÓN RELAY PARA REDES MÓVILES
-    const PEER_CONFIG = {
-        config: {
-            iceServers: [
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: "stun:stun.l.google.com:19302" },
-                {
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                },
-                {
-                    urls: "turn:openrelay.metered.ca:443",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                }
-            ],
-            iceTransportPolicy: "relay"
-        }
-    };
+    const PEER_CONFIG = { config: { iceServers: [{ urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }] } };
     
     let AI_API_KEY = state.apiKey;
     let CURRENT_AI_MODEL = state.aiModel;
@@ -429,102 +409,99 @@
     let aiScannerTimer = 0;
 
     // --- DIRECTORIO ESTRUCTURADO EVP ---
-// ===============================
-// DIRECTORIO EVP COMPLETO
-// ===============================
 
 const DIRECTORIO_EVP = [
 
 {
 triggers: ["que quieres","que buscas","por que estas aqui","que deseas","que necesitas","por que viniste"],
-respuestas: ["tu energia","tu miedo","tu voz","tu luz","tu alma","solo mirar","solo escuchar","solo estar","recuerdo","silencio"]
+respuestas: ["tu energía","tu miedo","tu voz","tu luz","tu alma","solo mirar","solo escuchar","solo estar","recuerdo","silencio"]
 },
 
 {
 triggers: ["quien eres","como te llamas","tu nombre","quien habla","quien esta ahi"],
-respuestas: ["nadie","olvidado","una sombra","un eco","un alma","alguien","un guardian","el antiguo","vigilante","perdido"]
+respuestas: ["nadie","olvidado","una sombra","un eco","un alma","alguien","un guardián","el antiguo","vigilante","perdido"]
 },
 
 {
 triggers: ["estas aqui","hay alguien","estas cerca","estas con nosotros"],
-respuestas: ["aqui","muy cerca","detras","a tu lado","mirando","esperando","siempre","aun aqui","escucha","silencio"]
+respuestas: ["aquí","muy cerca","detrás","a tu lado","mirando","esperando","siempre","aún aquí","escucha","silencio"]
 },
 
 {
 triggers: ["puedes hablar","puedes decir algo","puedes responder"],
-respuestas: ["escucha","mira","intento","dificil","no puedo","falta energia","espera","otra vez","mas tarde"]
+respuestas: ["escucha","mira","intento","difícil","no puedo","falta energía","espera","otra vez","más tarde"]
 },
 
 {
 triggers: ["estas bien","estas triste","estas enojado"],
-respuestas: ["frio","dolor","oscuro","triste","cansado","perdido","solo","atrapado"]
+respuestas: ["frío","dolor","oscuro","triste","cansado","perdido","solo","atrapado"]
 },
 
 {
 triggers: ["que paso aqui","que ocurrio aqui","que paso"],
-respuestas: ["fuego","caida","grito","sangre","oscuridad","silencio","dolor","accidente"]
+respuestas: ["fuego","caída","grito","sangre","oscuridad","silencio","dolor","accidente"]
 },
 
 {
 triggers: ["estas atrapado","no puedes salir"],
-respuestas: ["si","atrapado","no puedo","aun aqui","intento","ayuda"]
+respuestas: ["sí","atrapado","no puedo","aún aquí","intento","ayuda"]
 },
 
 {
 triggers: ["quieres ayuda","necesitas ayuda"],
-respuestas: ["ayuda","si","tal vez","escucha","energia","dame luz"]
+respuestas: ["ayuda","sí","tal vez","escucha","energía","dame luz"]
 },
 
 {
 triggers: ["quieres que nos vayamos","debemos irnos"],
-respuestas: ["vete","quedate","aun no","regresa","espera"]
+respuestas: ["vete","quédate","aún no","regresa","espera"]
 },
 
 {
 triggers: ["donde estas","puedes decir donde estas"],
-respuestas: ["aqui","detras","arriba","abajo","cerca","muy cerca","en sombra"]
+respuestas: ["aquí","detrás","arriba","abajo","cerca","muy cerca","en sombra"]
 },
 
 {
 triggers: ["cuantos son","cuantos hay aqui"],
-respuestas: ["uno","dos","tres","muchos","varios","somos mas"]
+respuestas: ["uno","dos","tres","muchos","varios","somos más"]
 },
 
 {
 triggers: ["vivias aqui","esta era tu casa"],
-respuestas: ["mi casa","antes","hace tiempo","si","siempre"]
+respuestas: ["mi casa","antes","hace tiempo","sí","siempre"]
 },
 
 {
 triggers: ["hay niños aqui","eres un niño"],
-respuestas: ["niño","solo","madre","padre","frio"]
+respuestas: ["niño","solo","madre","padre","frío"]
 },
 
 {
 triggers: ["nos puedes ver","puedes vernos"],
-respuestas: ["si","te veo","los veo","a todos","claramente"]
+respuestas: ["sí","te veo","los veo","a todos","claramente"]
 },
 
 {
 triggers: ["nos escuchas","puedes oirnos"],
-respuestas: ["si","escucho","los oigo","muy claro","eco"]
+respuestas: ["sí","escucho","los oigo","muy claro","eco"]
 },
 
 {
 triggers: ["puedes tocar algo","puedes mover algo"],
-respuestas: ["intento","mira","escucha","espera","dificil"]
+respuestas: ["intento","mira","escucha","espera","difícil"]
 },
 
 // DETECCION DE NOMBRES
 {
 triggers: ["como me llamo","sabes mi nombre","di mi nombre","puedes decir mi nombre"],
-respuestas: ["te conozco","lo se","tu nombre","lo recuerdo","te recuerdo"]
+respuestas: ["te conozco","lo sé","tu nombre","lo recuerdo","te recuerdo"]
 },
 
 // RESPUESTAS DE IDENTIDAD
 {
 triggers: ["tu eras","como era tu nombre","dinos tu nombre","quien era","como te llamabas"],
-respuestas: ["soy luis","soy maria","soy jose","soy ana","soy luz","era luis","era maria","era jose","era ana","me llamo luz"]
+respuestas: ["soy Luis","soy María","soy José","soy Ana","soy Luz","era Luis","era María","era José","era Ana","me llamo Luz"]
 }
 
 ];
@@ -536,13 +513,13 @@ respuestas: ["soy luis","soy maria","soy jose","soy ana","soy luz","era luis","e
 
 const evpPalabrasSueltas = [
 
-"aqui","frio","oscuro","miedo","dolor","sombra","silencio","eco","voz","presencia",
+"aquí","frío","oscuro","miedo","dolor","sombra","silencio","eco","voz","presencia",
 "mira","escucha","respira","siente","camina","espera","entra","sal","ven","vuelve",
-"arriba","abajo","detras","cerca","lejos","pasos","ruido","golpe","susurro",
-"alma","espiritu","fantasma","energia","luz","niebla","viento","aire","sombras",
+"arriba","abajo","detrás","cerca","lejos","pasos","ruido","golpe","susurro",
+"alma","espíritu","fantasma","energía","luz","niebla","viento","aire","sombras",
 "rostro","ojos","figura","forma","eco","grito","señal","rastro",
 "antiguo","viejo","olvido","recuerdo","perdido","atrapado","solo","nosotros",
-"casa","pasillo","puerta","ventana","techo","pared","sotano","piso","camino",
+"casa","pasillo","puerta","ventana","techo","pared","sótano","piso","camino",
 "sangre","fuego","agua","humo","ceniza","huesos","tumba","tierra","muerte"
 
 ];
@@ -555,33 +532,33 @@ const evpPalabrasSueltas = [
 const evpFrasesCortas = [
 
 "te veo","te sigo","te escucho","te siento","te miro","te observo",
-"aqui estoy","aun aqui","sigo aqui",
-"muy cerca","detras tuyo","a tu lado",
-"mira atras","mira arriba","mira abajo","mira aqui",
+"aquí estoy","aún aquí","sigo aquí",
+"muy cerca","detrás tuyo","a tu lado",
+"mira atrás","mira arriba","mira abajo","mira aquí",
 "escucha bien","escucha ahora",
-"no estas solo","no estamos solos",
+"no estás solo","no estamos solos",
 "somos muchos","somos sombra","somos eco",
 "algo mira","algo viene","algo respira","algo camina",
-"pasos cerca","pasos atras",
-"voz aqui","voz cerca",
-"eco aqui","eco atras",
-"sombra aqui","sombra cerca",
+"pasos cerca","pasos atrás",
+"voz aquí","voz cerca",
+"eco aquí","eco atrás",
+"sombra aquí","sombra cerca",
 "figura oscura","rostro oscuro",
-"ojos miran","ojos aqui",
-"energia fria","energia aqui",
-"presencia aqui","presencia cerca",
-"alma perdida","espiritu aqui",
-"niebla fria","niebla oscura",
-"oscuridad aqui","oscuridad cerca",
-"frio aqui","mucho frio",
-"siente miedo","siente frio",
+"ojos miran","ojos aquí",
+"energía fría","energía aquí",
+"presencia aquí","presencia cerca",
+"alma perdida","espíritu aquí",
+"niebla fría","niebla oscura",
+"oscuridad aquí","oscuridad cerca",
+"frío aquí","mucho frío",
+"siente miedo","siente frío",
 "te seguimos","te rodeamos","te encontramos",
-"ven aqui","ven ahora",
-"entra aqui","entra ahora",
-"espera aqui","espera ahora",
+"ven aquí","ven ahora",
+"entra aquí","entra ahora",
+"espera aquí","espera ahora",
 "sigue caminando","sigue mirando",
-"no te vayas","no mires atras",
-"no entres aqui","no sigas",
+"no te vayas","no mires atrás",
+"no entres aquí","no sigas",
 "algo despierta","algo observa","algo escucha"
 
 ];
@@ -597,7 +574,7 @@ const evpAdvertencias = [
 "no entres","sal ahora","detente",
 "no mires","no regreses",
 "no avances","no sigas",
-"alejate","huye ahora",
+"aléjate","huye ahora",
 "corre ahora","vete ahora",
 "no toques","no hables",
 "no escuches","es peligroso"
@@ -611,12 +588,12 @@ const evpAdvertencias = [
 
 const evpNombres = [
 
-"juan","pedro","maria","ana","luis","jose","miguel","angel","david","carlos",
-"fernando","roberto","eduardo","diego","andres","alejandro","ricardo","antonio",
-"isabel","sofia","laura","lucia","elena","carmen","patricia","rosa","teresa",
-"daniel","rafael","alberto","manuel","victor","jorge","marco","oscar","pablo",
-"raul","adrian","julio","samuel","ivan","cesar","hector","sebastian","tomas",
-"luz","gloria","dolores","victoria","martin","ramon","agustin","gabriel"
+"juan","pedro","maría","ana","luis","josé","miguel","ángel","david","carlos",
+"fernando","roberto","eduardo","diego","andrés","alejandro","ricardo","antonio",
+"isabel","sofía","laura","lucía","elena","carmen","patricia","rosa","teresa",
+"daniel","rafael","alberto","manuel","víctor","jorge","marco","óscar","pablo",
+"raul","adrián","julio","samuel","iván","césar","héctor","sebastián","tomás",
+"luz","gloria","dolores","victoria","martín","ramón","agustín","gabriel"
 
 ];
 
@@ -627,21 +604,21 @@ const evpNombres = [
 
 const paranormalQuestions = [
 
-"hay alguien aqui","puede alguien escucharnos","puedes hablarnos","quien esta aqui",
-"como te llamas","estas aqui","estas cerca","necesitas ayuda","que te paso",
-"vivias aqui","estas solo",
-"puedes dar una senal","puedes decir si","puedes decir no",
-"si estas aqui di algo","quieres que nos vayamos",
-"cuantos estan aqui","cuantos son","hay mas contigo",
+"hay alguien aquí","puede alguien escucharnos","puedes hablarnos","quién está aquí",
+"cómo te llamas","estás aquí","estás cerca","necesitas ayuda","qué te pasó",
+"vivías aquí","estás solo",
+"puedes dar una señal","puedes decir sí","puedes decir no",
+"si estás aquí di algo","quieres que nos vayamos",
+"cuántos están aquí","cuántos son","hay más contigo",
 "hay alguien con nosotros",
 "puedes tocarnos","puedes mover algo","puedes hacer ruido",
 "puedes golpear algo",
 "nos puedes ver","nos puedes escuchar",
 "puedes repetir eso",
 "puedes decir mi nombre",
-"hay un niño aqui","hay un espiritu aqui","hay algo aqui",
-"estas detras de nosotros","estas en este cuarto",
-"estas en este lugar",
+"hay un niño aquí","hay un espíritu aquí","hay algo aquí",
+"estás detrás de nosotros","estás en este cuarto",
+"estás en este lugar",
 "quieres hablar","quieres comunicarte","quieres que te ayudemos"
 
 ];
@@ -988,7 +965,7 @@ const paranormalQuestions = [
 
     // --- OPTIMIZATION GLOBAL VARS ---
     let lastFrameTime = performance.now();
-    const targetRenderFPS = 30;
+    const targetRenderFPS = 60;
     const fpsInterval = 1000 / targetRenderFPS; 
     let performanceLagging = false; // Flag to reduce detection frequency during stream
     
@@ -1049,14 +1026,14 @@ const paranormalQuestions = [
             currentAiImage = null; 
         }
         
-        // REGLA 5: ESTABILIDAD DE RED MÓVIL: Intentar reconectar peer si hay caida de red, no destruirlo a la primera
-        if (peerCommand) {
-            if (peerCommand.disconnected && !peerCommand.destroyed) peerCommand.reconnect();
-            else if (peerCommand.destroyed) { peerCommand = null; conn = null; }
+        if (peerCommand && (peerCommand.disconnected || peerCommand.destroyed)) {
+            try { peerCommand.destroy(); } catch(e){}
+            peerCommand = null;
+            conn = null;
         }
-        if (peerVideoSender) {
-            if (peerVideoSender.disconnected && !peerVideoSender.destroyed) peerVideoSender.reconnect();
-            else if (peerVideoSender.destroyed) peerVideoSender = null;
+        if (peerVideoSender && (peerVideoSender.disconnected || peerVideoSender.destroyed)) {
+            try { peerVideoSender.destroy(); } catch(e){}
+            peerVideoSender = null;
         }
     }
 
@@ -1141,14 +1118,13 @@ const paranormalQuestions = [
         isRestartingCamera = true;
         try {
             if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
-            // MEJORA 2: OPTIMIZAR getUserMedia (Resolución amigable para datos móviles 4G/5G y audio correcto)
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 2 }, 
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
                 video: { 
                     facingMode: 'environment', 
-                    width: { ideal: 640 }, 
-                    height: { ideal: 480 }, 
-                    frameRate: { ideal: 20, max: 24 },
+                    width: { ideal: 3840 }, 
+                    height: { ideal: 2160 }, 
+                    frameRate: { ideal: 120 },
                     advanced: [{ focusMode: "continuous" }] 
                 } 
             });
@@ -1194,14 +1170,13 @@ const paranormalQuestions = [
         
         try {
             updateProgress(10, "INICIANDO SENSOR 4K...");
-            // MEJORA 2: OPTIMIZAR getUserMedia (Resolución amigable para datos móviles 4G/5G y audio correcto)
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 2 }, 
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
                 video: { 
                     facingMode: 'environment', 
-                    width: { ideal: 640 }, 
-                    height: { ideal: 480 }, 
-                    frameRate: { ideal: 20, max: 24 }, 
+                    width: { ideal: 3840 }, 
+                    height: { ideal: 2160 }, 
+                    frameRate: { ideal: 120 }, 
                     advanced: [{ focusMode: "continuous" }]
                 } 
             });
@@ -1311,9 +1286,8 @@ const paranormalQuestions = [
                 audioStream = videoStream;
             } else {
                 try {
-                    // MEJORA 2 (Parte audio): Parámetros correctos
                     audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, autoGainControl: true, noiseSuppression: true, channelCount: 2 } 
+                        audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, channelCount: 2 } 
                     });
                 } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
             }
@@ -1969,12 +1943,6 @@ const paranormalQuestions = [
     }, 1000);
 
     function telemetryLoop() {
-        // REGLA 4: MANTENER AUDIO ACTIVO SIEMPRE (Protección contra silencios involuntarios)
-        if (audioStream) {
-            const aTracks = audioStream.getAudioTracks();
-            if (aTracks.length > 0) aTracks[0].enabled = true;
-        }
-
         const now = performance.now(); const elapsed = now - lastTime;
         if (elapsed >= 1000) { currentFps = Math.round((frameCount * 1000) / elapsed); frameCount = 0; lastTime = now; }
         updateClock(); 
@@ -2027,23 +1995,11 @@ const paranormalQuestions = [
             const connection = peerCommand.connect(commandTarget);
             connection.on('open', () => { conn = connection; conn.send({ type: 'register', name: name, hasAI: true }); showToast("Enlace Comandos OK", false); });
             connection.on('data', handleCommand);
-            connection.on('close', () => { showToast("Estudio desconectado", true); conn = null; });
+            connection.on('close', () => { showToast("Estudio desconectado", true); conn = null; if(peerCommand) peerCommand.destroy(); });
             connection.on('error', (e) => { console.error("Data error", e); });
         });
         
-        // REGLA 6 y REGLA 5
-        peerCommand.on('error', (err) => { 
-            console.error("Peer error:", err); 
-            console.error("PeerCMD Error:", err); 
-            showToast("Err CMD: " + err.type, true); 
-            if (err.type === 'network' || err.type === 'disconnected') {
-                if(peerCommand && peerCommand.disconnected && !peerCommand.destroyed) {
-                    peerCommand.reconnect();
-                }
-            } else {
-                try { peerCommand.destroy(); } catch(e){} 
-            }
-        });
+        peerCommand.on('error', (err) => { console.error("PeerCMD Error:", err); showToast("Err CMD: " + err.type, true); try { peerCommand.destroy(); } catch(e){} });
 
         if(peerVideoSender) peerVideoSender.destroy();
         peerVideoSender = new Peer(null, PEER_CONFIG);
@@ -2051,64 +2007,20 @@ const paranormalQuestions = [
         peerVideoSender.on('open', async () => {
             const stream = el.canvas.captureStream(30); 
             
-            // REGLA 3 y 4: Asegurar pista de audio integrada
             if (audioStream) {
                 const audioTracks = audioStream.getAudioTracks();
-                if(audioTracks.length > 0) {
-                    audioTracks[0].enabled = true;
-                    if (!stream.getAudioTracks().includes(audioTracks[0])) {
-                        stream.addTrack(audioTracks[0]);
-                    }
-                }
+                if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
             }
             
-            const attemptCall = () => {
-                // REGLA 7: Evitar múltiples llamadas simultáneas
-                if (window.activePeerCall) {
-                    try { window.activePeerCall.close(); } catch(e){}
-                }
-
-                // REGLA 4: Re-asegurar audio encendido
-                if (stream.getAudioTracks().length > 0) {
-                    stream.getAudioTracks()[0].enabled = true;
-                }
-
+            setTimeout(() => {
                 const call = peerVideoSender.call(videoTarget, stream, { metadata: { name: name } });
-                window.activePeerCall = call;
-
-                call.on('close', () => { 
-                    console.log("Video call ended"); 
-                    // REGLA 5: Reconectar automáticamente si se pierde la llamada sin destruir cámara
-                    if (conn && conn.open && peerVideoSender && !peerVideoSender.disconnected) {
-                        console.log("Reintentando conexión de video...");
-                        setTimeout(attemptCall, 2000);
-                    }
-                });
-                
-                call.on('error', (e) => { 
-                    console.error("Video call error", e); 
-                    if (conn && conn.open && peerVideoSender && !peerVideoSender.disconnected) {
-                        setTimeout(attemptCall, 3000);
-                    }
-                });
-                
+                call.on('close', () => { console.log("Video call ended"); if(peerVideoSender) peerVideoSender.destroy(); });
+                call.on('error', (e) => { console.error("Video call error", e); });
                 showToast("Transmitiendo Video...", false);
-            };
-
-            setTimeout(attemptCall, 1500);
+            }, 1500);
         });
 
-        // REGLA 6 y REGLA 5: Manejo robusto de la red móvil
-        peerVideoSender.on('error', (err) => { 
-            console.error("Peer error:", err); 
-            console.error("PeerVID Error:", err); 
-            showToast("Err VID: " + err.type, true); 
-            if (err.type === 'network' || err.type === 'disconnected') {
-                if(peerVideoSender && peerVideoSender.disconnected && !peerVideoSender.destroyed) {
-                    peerVideoSender.reconnect();
-                }
-            }
-        });
+        peerVideoSender.on('error', (err) => { console.error("PeerVID Error:", err); showToast("Err VID: " + err.type, true); try { peerVideoSender.destroy(); } catch(e){} });
     }
 
     function handleCommand(cmd) {
