@@ -221,7 +221,7 @@
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.52 (Spirit vox)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.53 (Spirit vox)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -375,7 +375,7 @@
         return texto.toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "") 
-            .replace(/[¿?¡!.,;:]/g, "")      
+            .replace(/[¿?¡!.,;:]/g, "")     
             .trim();
     }
 
@@ -387,7 +387,27 @@
         studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 
     };
     
-    const PEER_CONFIG = { config: { iceServers: [{ urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }] } };
+    // MEJORA 1: CONFIGURACIÓN ICE (STUN + TURN EXTENDIDO) Y RESTRICCIÓN RELAY PARA REDES MÓVILES
+    const PEER_CONFIG = {
+        config: {
+            iceServers: [
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: "stun:stun.l.google.com:19302" },
+                {
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                },
+                {
+                    urls: "turn:openrelay.metered.ca:443",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                }
+            ],
+            iceTransportPolicy: "relay"
+        }
+    };
     
     let AI_API_KEY = state.apiKey;
     let CURRENT_AI_MODEL = state.aiModel;
@@ -1029,14 +1049,14 @@ const paranormalQuestions = [
             currentAiImage = null; 
         }
         
-        if (peerCommand && (peerCommand.disconnected || peerCommand.destroyed)) {
-            try { peerCommand.destroy(); } catch(e){}
-            peerCommand = null;
-            conn = null;
+        // REGLA 5: ESTABILIDAD DE RED MÓVIL: Intentar reconectar peer si hay caida de red, no destruirlo a la primera
+        if (peerCommand) {
+            if (peerCommand.disconnected && !peerCommand.destroyed) peerCommand.reconnect();
+            else if (peerCommand.destroyed) { peerCommand = null; conn = null; }
         }
-        if (peerVideoSender && (peerVideoSender.disconnected || peerVideoSender.destroyed)) {
-            try { peerVideoSender.destroy(); } catch(e){}
-            peerVideoSender = null;
+        if (peerVideoSender) {
+            if (peerVideoSender.disconnected && !peerVideoSender.destroyed) peerVideoSender.reconnect();
+            else if (peerVideoSender.destroyed) peerVideoSender = null;
         }
     }
 
@@ -1121,13 +1141,14 @@ const paranormalQuestions = [
         isRestartingCamera = true;
         try {
             if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
+            // MEJORA 2: OPTIMIZAR getUserMedia (Resolución amigable para datos móviles 4G/5G y audio correcto)
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 2 }, 
                 video: { 
                     facingMode: 'environment', 
-                    width: { ideal: 3840 }, 
-                    height: { ideal: 2160 }, 
-                    frameRate: { ideal: 120 },
+                    width: { ideal: 640 }, 
+                    height: { ideal: 480 }, 
+                    frameRate: { ideal: 20, max: 24 },
                     advanced: [{ focusMode: "continuous" }] 
                 } 
             });
@@ -1173,13 +1194,14 @@ const paranormalQuestions = [
         
         try {
             updateProgress(10, "INICIANDO SENSOR 4K...");
+            // MEJORA 2: OPTIMIZAR getUserMedia (Resolución amigable para datos móviles 4G/5G y audio correcto)
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 2 }, 
                 video: { 
                     facingMode: 'environment', 
-                    width: { ideal: 3840 }, 
-                    height: { ideal: 2160 }, 
-                    frameRate: { ideal: 120 }, 
+                    width: { ideal: 640 }, 
+                    height: { ideal: 480 }, 
+                    frameRate: { ideal: 20, max: 24 }, 
                     advanced: [{ focusMode: "continuous" }]
                 } 
             });
@@ -1289,8 +1311,9 @@ const paranormalQuestions = [
                 audioStream = videoStream;
             } else {
                 try {
+                    // MEJORA 2 (Parte audio): Parámetros correctos
                     audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, channelCount: 2 } 
+                        audio: { echoCancellation: true, autoGainControl: true, noiseSuppression: true, channelCount: 2 } 
                     });
                 } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
             }
@@ -1946,6 +1969,12 @@ const paranormalQuestions = [
     }, 1000);
 
     function telemetryLoop() {
+        // REGLA 4: MANTENER AUDIO ACTIVO SIEMPRE (Protección contra silencios involuntarios)
+        if (audioStream) {
+            const aTracks = audioStream.getAudioTracks();
+            if (aTracks.length > 0) aTracks[0].enabled = true;
+        }
+
         const now = performance.now(); const elapsed = now - lastTime;
         if (elapsed >= 1000) { currentFps = Math.round((frameCount * 1000) / elapsed); frameCount = 0; lastTime = now; }
         updateClock(); 
@@ -1998,11 +2027,23 @@ const paranormalQuestions = [
             const connection = peerCommand.connect(commandTarget);
             connection.on('open', () => { conn = connection; conn.send({ type: 'register', name: name, hasAI: true }); showToast("Enlace Comandos OK", false); });
             connection.on('data', handleCommand);
-            connection.on('close', () => { showToast("Estudio desconectado", true); conn = null; if(peerCommand) peerCommand.destroy(); });
+            connection.on('close', () => { showToast("Estudio desconectado", true); conn = null; });
             connection.on('error', (e) => { console.error("Data error", e); });
         });
         
-        peerCommand.on('error', (err) => { console.error("PeerCMD Error:", err); showToast("Err CMD: " + err.type, true); try { peerCommand.destroy(); } catch(e){} });
+        // REGLA 6 y REGLA 5
+        peerCommand.on('error', (err) => { 
+            console.error("Peer error:", err); 
+            console.error("PeerCMD Error:", err); 
+            showToast("Err CMD: " + err.type, true); 
+            if (err.type === 'network' || err.type === 'disconnected') {
+                if(peerCommand && peerCommand.disconnected && !peerCommand.destroyed) {
+                    peerCommand.reconnect();
+                }
+            } else {
+                try { peerCommand.destroy(); } catch(e){} 
+            }
+        });
 
         if(peerVideoSender) peerVideoSender.destroy();
         peerVideoSender = new Peer(null, PEER_CONFIG);
@@ -2010,20 +2051,64 @@ const paranormalQuestions = [
         peerVideoSender.on('open', async () => {
             const stream = el.canvas.captureStream(30); 
             
+            // REGLA 3 y 4: Asegurar pista de audio integrada
             if (audioStream) {
                 const audioTracks = audioStream.getAudioTracks();
-                if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
+                if(audioTracks.length > 0) {
+                    audioTracks[0].enabled = true;
+                    if (!stream.getAudioTracks().includes(audioTracks[0])) {
+                        stream.addTrack(audioTracks[0]);
+                    }
+                }
             }
             
-            setTimeout(() => {
+            const attemptCall = () => {
+                // REGLA 7: Evitar múltiples llamadas simultáneas
+                if (window.activePeerCall) {
+                    try { window.activePeerCall.close(); } catch(e){}
+                }
+
+                // REGLA 4: Re-asegurar audio encendido
+                if (stream.getAudioTracks().length > 0) {
+                    stream.getAudioTracks()[0].enabled = true;
+                }
+
                 const call = peerVideoSender.call(videoTarget, stream, { metadata: { name: name } });
-                call.on('close', () => { console.log("Video call ended"); if(peerVideoSender) peerVideoSender.destroy(); });
-                call.on('error', (e) => { console.error("Video call error", e); });
+                window.activePeerCall = call;
+
+                call.on('close', () => { 
+                    console.log("Video call ended"); 
+                    // REGLA 5: Reconectar automáticamente si se pierde la llamada sin destruir cámara
+                    if (conn && conn.open && peerVideoSender && !peerVideoSender.disconnected) {
+                        console.log("Reintentando conexión de video...");
+                        setTimeout(attemptCall, 2000);
+                    }
+                });
+                
+                call.on('error', (e) => { 
+                    console.error("Video call error", e); 
+                    if (conn && conn.open && peerVideoSender && !peerVideoSender.disconnected) {
+                        setTimeout(attemptCall, 3000);
+                    }
+                });
+                
                 showToast("Transmitiendo Video...", false);
-            }, 1500);
+            };
+
+            setTimeout(attemptCall, 1500);
         });
 
-        peerVideoSender.on('error', (err) => { console.error("PeerVID Error:", err); showToast("Err VID: " + err.type, true); try { peerVideoSender.destroy(); } catch(e){} });
+        // REGLA 6 y REGLA 5: Manejo robusto de la red móvil
+        peerVideoSender.on('error', (err) => { 
+            console.error("Peer error:", err); 
+            console.error("PeerVID Error:", err); 
+            showToast("Err VID: " + err.type, true); 
+            if (err.type === 'network' || err.type === 'disconnected') {
+                if(peerVideoSender && peerVideoSender.disconnected && !peerVideoSender.destroyed) {
+                    peerVideoSender.reconnect();
+                }
+            }
+        });
     }
 
     function handleCommand(cmd) {
