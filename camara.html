@@ -65,7 +65,7 @@
         body.filter-night-vision #main-view-area::after { content: " "; position: absolute; inset: 0; pointer-events: none; z-index: 10; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 3px); background-size: 100% 3px; }
         
         body.filter-thermal #shared-video-element { filter: grayscale(75%) invert(75%) contrast(1.7) brightness(0.8); }
-        body.filter-urbex #shared-video-element { filter: sepia(100%) hue-rotate(-20deg) saturate(2.5) contrast(1.3) brightness(0.7); }
+        body.filter-urbex #shared-video-element { filter: invert(100%) hue-rotate(180deg) saturate(400%) contrast(150%); }
 
         .hud-burn-hidden { display: none; }
 
@@ -158,8 +158,8 @@
 
     <div id="ui-layer">
         <div id="hud-layer" class="hud-burn-hidden">
-            <img src="obr-logo.png" id="hud-logo" class="absolute top-5 left-5 w-10 h-10 opacity-90" alt="OBR">
-            <div id="hud-text-container" class="absolute top-5 left-20">
+            <img src="obr-logo.png" id="hud-logo" class="absolute top-5 left-5 w-[80px] h-[80px] opacity-90" alt="OBR">
+            <div id="hud-text-container" class="absolute top-5 left-[110px]">
                 <div id="hud-title" class="text-white font-orbitron font-bold text-base shadow-black drop-shadow-md">EXPLORACIONES OBR</div>
                 <div id="hud-time" class="text-[#ff3333] font-mono text-xs shadow-black drop-shadow-md">--/--/-- - --:--:--</div>
             </div>
@@ -966,8 +966,29 @@ const paranormalQuestions = [
         };
     }
 
-    let lastFrameTime = 0;
-    const fpsInterval = 1000 / 120; 
+    // --- OPTIMIZATION GLOBAL VARS ---
+    let lastFrameTime = performance.now();
+    const targetRenderFPS = 30;
+    const fpsInterval = 1000 / targetRenderFPS; 
+    let performanceLagging = false; // Flag to reduce detection frequency during stream
+    
+    // --- SPECIALIZED CANVASES TO AVOID LOOP CREATIONS ---
+    const poseCanvas = document.createElement('canvas'); poseCanvas.width = 256;
+    const poseCtx = poseCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+    
+    const faceScanCanvas = document.createElement('canvas'); faceScanCanvas.width = 192;
+    const faceCtx = faceScanCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+    
+    const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240;
+    const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
+
+    // --- SCAN BOX DOM POOL ---
+    const scanBoxPool = [];
+    
+    // --- TRACKING SMOOTHING ---
+    let smoothedPoses = [];
+    let targetPoses = [];
+    let smoothedFaces = [];
 
     const animState = { hudScale: 1.0, hudTarget: 1.0, aiScale: 0.0, aiTarget: 0.0 };
     const el = { 
@@ -981,15 +1002,11 @@ const paranormalQuestions = [
         statusDot: document.getElementById('status-dot') 
     };
 
-    const ctx = el.canvas.getContext('2d', { alpha: true });
-    const audioLayerCtx = el.audioCanvas.getContext('2d', { alpha: true, desynchronized: true });
-    const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: true });
+    // Optimizacion contexto canvas (Hardware acceleration + memory stability)
+    const ctx = el.canvas.getContext('2d', { alpha: true, desynchronized: true, willReadFrequently: false });
+    const audioLayerCtx = el.audioCanvas.getContext('2d', { alpha: true, desynchronized: true, willReadFrequently: false });
+    const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: true, willReadFrequently: false });
     
-    const aiCanvas = document.createElement('canvas'); 
-    aiCanvas.width = 192; 
-    aiCanvas.height = 108;
-    const aiCtx = aiCanvas.getContext('2d', { willReadFrequently: true });
-
     let aiDetector = null, faceMesh = null, segmenter = null, poses = [], faces = [], lidarMask = null;
     
     let lidarBusy = false; 
@@ -1005,7 +1022,7 @@ const paranormalQuestions = [
     setInterval(systemGC, 15000);
     function systemGC() {
         if (canvasScanBoxes.length > 20) canvasScanBoxes = canvasScanBoxes.slice(-20); 
-        if (poses.length > 15) poses.length = 15;
+        if (targetPoses.length > 15) targetPoses.length = 15;
         if(ctx && ctx.beginPath) ctx.beginPath(); 
         if(audioLayerCtx && audioLayerCtx.beginPath) audioLayerCtx.beginPath();
         if (!state.isPareidolia && !state.isSLS) {
@@ -1188,9 +1205,10 @@ const paranormalQuestions = [
                 }
                 if(window.SelfieSegmentation) { segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); segmenter.setOptions({ modelSelection: 1 }); segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); }
 
-                aiCtx.drawImage(el.video, 0, 0, aiCanvas.width, aiCanvas.height);
-                if(segmenter) await segmenter.send({image: aiCanvas}); 
-                if(aiDetector) await aiDetector.estimatePoses(aiCanvas);
+                // Warmup con el canvas dedicado
+                poseCtx.drawImage(el.video, 0, 0, poseCanvas.width, poseCanvas.width * (el.video.videoHeight/el.video.videoWidth || 9/16));
+                if(segmenter) await segmenter.send({image: poseCanvas}); 
+                if(aiDetector) await aiDetector.estimatePoses(poseCanvas);
 
             } catch(e) { console.log("Warmup partial error", e); }
             
@@ -1205,9 +1223,63 @@ const paranormalQuestions = [
             }
             
             setInterval(telemetryLoop, 1000);
-            setInterval(aiLoop, 80);
+            
+            // Loop Separado para procesamiento en lugar de setInterval
+            requestAnimationFrame(detectionLoop);
             
         }, 800);
+    }
+
+    // --- SEPARACIÓN DE CICLO DE DETECCIÓN ---
+    let lastSlsTime = 0, lastFaceTime = 0;
+    const slsInterval = 1000 / 24; // 24 FPS
+    const faceInterval = 1000 / 15; // 15 FPS
+
+    async function detectionLoop() {
+        if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
+            targetPoses = []; faces = []; lidarMask = null;
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+
+        const now = performance.now();
+        const videoRatio = el.video.videoHeight / el.video.videoWidth || 9/16;
+
+        try {
+            if (state.isLidar && segmenter) { 
+                if(!lidarBusy) { 
+                    lidarBusy = true; 
+                    poseCanvas.height = poseCanvas.width * videoRatio;
+                    poseCtx.drawImage(el.video, 0, 0, poseCanvas.width, poseCanvas.height);
+                    try { await segmenter.send({image: poseCanvas}); } catch(e){ lidarBusy = false; } 
+                } 
+            } else {
+                if (aiDetector && state.isSLS && now - lastSlsTime > slsInterval) {
+                    lastSlsTime = now;
+                    poseCanvas.height = poseCanvas.width * videoRatio;
+                    poseCtx.drawImage(el.video, 0, 0, poseCanvas.width, poseCanvas.height);
+                    try { 
+                        let newPoses = await aiDetector.estimatePoses(poseCanvas, { maxPoses: 5, flipHorizontal: false, scoreThreshold: 0.25 });
+                        // Normalizar coordenadas
+                        targetPoses = newPoses.map(p => ({
+                            ...p,
+                            keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / poseCanvas.width, y: kp.y / poseCanvas.height }))
+                        }));
+                    } catch(e){} 
+                }
+
+                // Ajuste dinámico de FPS para optimización en transmisión
+                const currentFaceInterval = performanceLagging ? (1000 / 7) : faceInterval;
+                if (faceMesh && state.isSLS && now - lastFaceTime > currentFaceInterval) {
+                    lastFaceTime = now;
+                    faceScanCanvas.height = faceScanCanvas.width * videoRatio;
+                    faceCtx.drawImage(el.video, 0, 0, faceScanCanvas.width, faceScanCanvas.height);
+                    try { await faceMesh.send({image: faceScanCanvas}); } catch(e){} 
+                }
+            }
+        } catch(e) {}
+
+        requestAnimationFrame(detectionLoop);
     }
 
     async function initAudioEngine() {
@@ -1522,6 +1594,21 @@ const paranormalQuestions = [
             const grad = lidarCtx.createLinearGradient(0, 0, 0, height);
             grad.addColorStop(0, 'rgba(255, 0, 0, 0.9)'); grad.addColorStop(0.5, 'rgba(255, 255, 0, 0.8)'); grad.addColorStop(1, 'rgba(0, 0, 255, 0.8)');
             lidarCtx.fillStyle = grad; lidarCtx.fillRect(0, 0, width, height);
+
+            // OPTIMIZACION LIDAR: 25 Rayos Simulados sobre la mascara
+            lidarCtx.globalCompositeOperation = 'source-atop'; 
+            lidarCtx.strokeStyle = 'rgba(0, 255, 100, 0.4)';
+            lidarCtx.lineWidth = 2;
+            lidarCtx.beginPath();
+            const rayCount = 25;
+            for (let i = 0; i < rayCount; i++) {
+                let rx = (width / rayCount) * i;
+                let offset = Math.sin((frameCount * 0.05) + i) * 100;
+                lidarCtx.moveTo(rx, 0);
+                lidarCtx.lineTo(rx + offset, height);
+            }
+            lidarCtx.stroke();
+
             lidarCtx.restore();
             lidarGeneratedFrame = currentFrame;
         }
@@ -1565,12 +1652,12 @@ const paranormalQuestions = [
 
         ctx.shadowColor = "black"; ctx.shadowBlur = 4;
         
-        if(logoImg.complete) ctx.drawImage(logoImg, 0, 0, 40, 40); 
+        if(logoImg.complete) ctx.drawImage(logoImg, 0, 0, 80, 80); 
         ctx.fillStyle = "white"; ctx.font = "bold 16px 'Orbitron', sans-serif";
-        ctx.fillText("EXPLORACIONES OBR", 50, 16); 
+        ctx.fillText("EXPLORACIONES OBR", 90, 30); 
         const now = new Date();
         ctx.fillStyle = "#ff3333"; ctx.font = "12px 'Share Tech Mono', monospace";
-        ctx.fillText(now.toLocaleDateString() + " - " + now.toLocaleTimeString(), 50, 34); 
+        ctx.fillText(now.toLocaleDateString() + " - " + now.toLocaleTimeString(), 90, 50); 
         
         ctx.restore(); 
 
@@ -1665,6 +1752,42 @@ const paranormalQuestions = [
         c.restore();
     }
 
+    function updateSmoothing() {
+        // Interpola las poses para un seguimiento ultra fluido
+        const factor = 0.6;
+        if (smoothedPoses.length !== targetPoses.length) {
+            smoothedPoses = JSON.parse(JSON.stringify(targetPoses));
+        } else {
+            for(let i=0; i<targetPoses.length; i++) {
+                if (targetPoses[i] && targetPoses[i].keypoints && smoothedPoses[i] && smoothedPoses[i].keypoints) {
+                    for(let j=0; j<targetPoses[i].keypoints.length; j++) {
+                        let tKp = targetPoses[i].keypoints[j];
+                        let sKp = smoothedPoses[i].keypoints[j];
+                        if(tKp && sKp) {
+                            sKp.x = sKp.x + (tKp.x - sKp.x) * factor;
+                            sKp.y = sKp.y + (tKp.y - sKp.y) * factor;
+                            sKp.score = tKp.score;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Interpola mallas faciales
+        if (smoothedFaces.length !== faces.length) {
+            smoothedFaces = JSON.parse(JSON.stringify(faces));
+        } else {
+            for(let i=0; i<faces.length; i++) {
+                for(let j=0; j<faces[i].length; j++) {
+                     let tF = faces[i][j];
+                     let sF = smoothedFaces[i][j];
+                     sF.x = sF.x + (tF.x - sF.x) * factor;
+                     sF.y = sF.y + (tF.y - sF.y) * factor;
+                }
+            }
+        }
+    }
+
     function renderLoop(now, metadata) {
         if (!now) now = performance.now();
         const elapsed = now - lastFrameTime;
@@ -1681,6 +1804,8 @@ const paranormalQuestions = [
             if (isTransmitting) ctx.clearRect(0, 0, cW, cH);
             audioLayerCtx.clearRect(0, 0, cW, cH);
             
+            updateSmoothing();
+            
             if (vW && vH) {
                 const vRatio = vW / vH, cRatio = cW / cH;
                 let dW, dH, dX, dY;
@@ -1691,7 +1816,7 @@ const paranormalQuestions = [
                     ctx.save();
                     if(state.filter === 'night') { ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)'; } 
                     else if(state.filter === 'thermal') { ctx.filter = 'grayscale(75%) invert(75%) contrast(1.7) brightness(0.8)'; } 
-                    else if(state.filter === 'urbex') { ctx.filter = 'sepia(100%) hue-rotate(-20deg) saturate(2.5) contrast(1.3) brightness(0.7)'; } 
+                    else if(state.filter === 'urbex') { ctx.filter = 'invert(100%) hue-rotate(180deg) saturate(400%) contrast(150%)'; } 
                     else { ctx.filter = 'none'; }
                     
                     ctx.drawImage(el.video, 0, 0, vW, vH, dX, dY, dW, dH);
@@ -1726,7 +1851,7 @@ const paranormalQuestions = [
             if (isTransmitting) drawBurnInHUD(ctx, cW, cH, animState.hudScale);
             drawBurnInHUD(audioLayerCtx, cW, cH, animState.hudScale);
             
-            if (state.isPareidolia) {
+            if (state.isPareidolia && !performanceLagging) {
                  if (isTransmitting) drawCanvasScanBoxes(ctx, cW, cH);
                  drawCanvasScanBoxes(audioLayerCtx, cW, cH);
             }
@@ -1749,27 +1874,18 @@ const paranormalQuestions = [
         }
     }
 
-    async function aiLoop() {
-        if (isAIProcessing) return; 
-        if (!state.isSLS && !state.isLidar && !state.isPareidolia) { poses = []; faces = []; lidarMask = null; return; }
-
-        aiCtx.drawImage(el.video, 0, 0, aiCanvas.width, aiCanvas.height);
-
-        if (state.isLidar && segmenter) { 
-            if(!lidarBusy) { lidarBusy = true; try { await segmenter.send({image: aiCanvas}); } catch(e){ lidarBusy = false; } } 
-        } else {
-            if (aiDetector && state.isSLS) { try { poses = await aiDetector.estimatePoses(aiCanvas, { maxPoses: 5, flipHorizontal: false, scoreThreshold: 0.25 }); } catch(e){} }
-            if (faceMesh && state.isSLS) { try { await faceMesh.send({image: aiCanvas}); } catch(e){} }
-        }
-    }
-
     function drawSLS(targetCtx) {
         if (!window.drawCoords) return;
         const { dW, dH, dX, dY } = window.drawCoords;
-        const mapX = (x) => (x / aiCanvas.width) * dW + dX; const mapY = (y) => (y / aiCanvas.height) * dH + dY;
+        // Map usando coordenadas normalizadas de nuestro canvas procesado
+        const mapX = (x) => (x * dW) + dX; 
+        const mapY = (y) => (y * dH) + dY;
+        
         targetCtx.strokeStyle = '#d946ef'; targetCtx.lineWidth = 4; targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round'; targetCtx.fillStyle = '#a855f7';
         
-        poses.forEach(pose => {
+        const activePoses = smoothedPoses.length > 0 ? smoothedPoses : targetPoses;
+        
+        activePoses.forEach(pose => {
             const k = pose.keypoints;
             const bodyPairs = [[5,7],[7,9],[6,8],[8,10],[11,12],[11,13],[13,15],[12,14],[14,16],[5,11],[6,12]];
             targetCtx.beginPath(); bodyPairs.forEach(([i, j]) => { if(k[i].score > AI_SENSITIVITY && k[j].score > AI_SENSITIVITY) { targetCtx.moveTo(mapX(k[i].x), mapY(k[i].y)); targetCtx.lineTo(mapX(k[j].x), mapY(k[j].y)); } }); targetCtx.stroke();
@@ -1784,12 +1900,17 @@ const paranormalQuestions = [
             if(nose.score > AI_SENSITIVITY) { if(lEye.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.moveTo(mapX(lEye.x), mapY(lEye.y)); targetCtx.lineTo(mapX(nose.x), mapY(nose.y)); targetCtx.stroke(); } if(rEye.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.moveTo(mapX(rEye.x), mapY(rEye.y)); targetCtx.lineTo(mapX(nose.x), mapY(nose.y)); targetCtx.stroke(); } }
             k.forEach((p, i) => { if(i === 3 || i === 4) return; if(p.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.arc(mapX(p.x), mapY(p.y), 4, 0, 2*Math.PI); targetCtx.fill(); } });
         });
-        if(faces.length > 0) {
-            faces.forEach(face => {
+        
+        const activeFaces = smoothedFaces.length > 0 ? smoothedFaces : faces;
+        if(activeFaces.length > 0) {
+            activeFaces.forEach(face => {
                 let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
                 face.forEach((pt) => { const x=pt.x*dW+dX; const y=pt.y*dH+dY; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; });
                 const pad=20; targetCtx.strokeStyle='red'; targetCtx.lineWidth=2; targetCtx.strokeRect(minX-pad, minY-pad, (maxX-minX)+pad*2, (maxY-minY)+pad*2);
-                targetCtx.fillStyle='#39ff14'; face.forEach((pt) => { targetCtx.fillRect(pt.x*dW+dX, pt.y*dH+dY, 1.5, 1.5); });
+                targetCtx.fillStyle='#39ff14';
+                // Optimización Facial: Limitar a 30 puntos
+                const ptsToDraw = face.slice(0, 30);
+                ptsToDraw.forEach((pt) => { targetCtx.fillRect(pt.x*dW+dX, pt.y*dH+dY, 1.5, 1.5); });
             });
         }
     }
@@ -1828,6 +1949,11 @@ const paranormalQuestions = [
         const now = performance.now(); const elapsed = now - lastTime;
         if (elapsed >= 1000) { currentFps = Math.round((frameCount * 1000) / elapsed); frameCount = 0; lastTime = now; }
         updateClock(); 
+        
+        // Dynamic FPS Check
+        if (currentFps < 15) { performanceLagging = true; } 
+        else if (currentFps >= 25) { performanceLagging = false; }
+
         let signal = 0; if(peerCommand && !peerCommand.disconnected && !peerCommand.destroyed) signal++; if(conn && conn.open) signal++; if(peerVideoSender && !peerVideoSender.disconnected) signal++;
         const vW = el.video.videoWidth || 0, vH = el.video.videoHeight || 0;
         document.getElementById('meta-res').innerText = `${vW}x${vH}`; document.getElementById('meta-fps').innerText = `${currentFps} FPS`;
@@ -1936,32 +2062,58 @@ const paranormalQuestions = [
         }
         
         if(f === 'night' || f === 'thermal') toggleTorch(true); else toggleTorch(false); 
-        poses = []; lidarMask = null; lastLidarMask = null;
+        targetPoses = []; smoothedPoses = []; faces = []; smoothedFaces = []; lidarMask = null; lastLidarMask = null;
     }
 
     async function toggleTorch(force) { const t = videoStream?.getVideoTracks()[0]; if(!t) return; const on = (typeof force === 'boolean') ? force : !t.getSettings().torch; try { await t.applyConstraints({advanced:[{torch:on}]}); } catch(e){} }
 
     function startScanningEffect() {
-        const overlay = document.getElementById('ai-scan-overlay'); overlay.innerHTML = ''; overlay.style.display = 'block';
+        const overlay = document.getElementById('ai-scan-overlay'); 
+        overlay.style.display = 'block';
+        if (scanBoxPool.length === 0) {
+            for(let i=0; i<10; i++) {
+                const box = document.createElement('div');
+                box.className = 'scan-box';
+                box.style.display = 'none';
+                overlay.appendChild(box);
+                scanBoxPool.push(box);
+            }
+        }
         if (scanInterval) clearInterval(scanInterval);
         scanInterval = setInterval(() => {
-            const box = document.createElement('div'); box.className = 'scan-box'; const size = Math.floor(Math.random() * 80) + 40;
-            let x, y; do { x = Math.floor(Math.random() * (window.innerWidth - size)); y = Math.floor(Math.random() * (window.innerHeight - size)); } while (x < 250 && y < 200); 
-            canvasScanBoxes.push({ x, y, size, startTime: Date.now() });
-            box.style.width = `${size}px`; box.style.height = `${size}px`; box.style.left = `${x}px`; box.style.top = `${y}px`;
-            overlay.appendChild(box); setTimeout(() => box.remove(), 800);
+            if (performanceLagging) return; // Prevent spawning if CPU is struggling
+            const box = scanBoxPool.find(b => b.style.display === 'none');
+            if (box) {
+                const size = Math.floor(Math.random() * 80) + 40;
+                let x, y; do { x = Math.floor(Math.random() * (window.innerWidth - size)); y = Math.floor(Math.random() * (window.innerHeight - size)); } while (x < 250 && y < 200); 
+                canvasScanBoxes.push({ x, y, size, startTime: Date.now() });
+                box.style.width = `${size}px`; box.style.height = `${size}px`; box.style.left = `${x}px`; box.style.top = `${y}px`;
+                box.style.display = 'block';
+                box.style.animation = 'none';
+                void box.offsetHeight; // trigger reflow
+                box.style.animation = null;
+                setTimeout(() => { box.style.display = 'none'; }, 800);
+            }
         }, 150); 
     }
 
-    function stopScanningEffect() { clearInterval(scanInterval); const overlay = document.getElementById('ai-scan-overlay'); overlay.innerHTML = ''; overlay.style.display = 'none'; canvasScanBoxes = []; }
+    function stopScanningEffect() { 
+        clearInterval(scanInterval); 
+        const overlay = document.getElementById('ai-scan-overlay'); 
+        overlay.style.display = 'none'; 
+        scanBoxPool.forEach(box => box.style.display = 'none');
+        canvasScanBoxes = []; 
+    }
 
     async function triggerPareidolia() {
         const video = el.video; if(!AI_API_KEY) return; if(isAIProcessing || isTtsPlaying) return;
         const now = Date.now(); if (now - lastPareidoliaCall < 12000) return; lastPareidoliaCall = now;
         isAIProcessing = true; currentAiText = "búsqueda de señal..."; currentAiImage = null; startScanningEffect();
-        const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360; canvas.getContext('2d').drawImage(video, 0, 0, 640, 360);
-        const snapshot = new Image(); snapshot.src = canvas.toDataURL('image/jpeg', 0.8);
-        const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+        
+        // Optimize resolution for Pareidolia payload (320x240)
+        aiSnapCtx.drawImage(video, 0, 0, 320, 240);
+        const snapshot = new Image(); snapshot.src = aiSnapCanvas.toDataURL('image/jpeg', 0.8);
+        const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         const prompt = "Actúa como un médium digital. Describe en primera persona lo que ves. Usa frases como 'Veo...', 'Hay algo en...', 'Está...'. Busca caras en las sombras. Sé siniestro. Max 12 palabras.";
         
         try {
@@ -2012,6 +2164,14 @@ const paranormalQuestions = [
         isAIProcessing = false; 
     }
 
+    function schedulePareidolia() {
+        if(!isPareidoliaActive) return;
+        triggerPareidolia();
+        // Dynamic wait time of 20 - 25 seconds
+        let delay = 20000 + Math.random() * 5000;
+        pareidoliaInterval = setTimeout(schedulePareidolia, delay);
+    }
+
     function togglePareidolia(btnElement) {
         if(!AI_API_KEY) { alert("NO API KEY: CONFIGURA EN AJUSTES"); return; }
         const btn = btnElement || document.getElementById('btn-ia'); isPareidoliaActive = !isPareidoliaActive; state.isPareidolia = isPareidoliaActive;
@@ -2019,12 +2179,14 @@ const paranormalQuestions = [
         if(isPareidoliaActive) {
             if(btn) btn.classList.add('active-state'); document.body.classList.add('filter-pareidolia'); speakText("VISIÓN ACTIVADA"); 
             animState.hudTarget = 0.0; animState.aiTarget = 1.0;
-            currentAiText = ""; currentAiImage = null; startScanningEffect(); triggerPareidolia(); pareidoliaInterval = setInterval(triggerPareidolia, 12000);
+            currentAiText = ""; currentAiImage = null; startScanningEffect(); 
+            clearTimeout(pareidoliaInterval);
+            schedulePareidolia();
         } else {
             if(cloudTTSPlayer) { cloudTTSPlayer.pause(); cloudTTSPlayer.currentTime = 0; }
             if(btn) btn.classList.remove('active-state'); document.body.classList.remove('filter-pareidolia'); speakText("VISIÓN DESACTIVADA"); 
             animState.hudTarget = 1.0; animState.aiTarget = 0.0;
-            clearInterval(pareidoliaInterval); isAIProcessing = false; stopScanningEffect(); currentAiText = ""; currentAiImage = null;
+            clearTimeout(pareidoliaInterval); isAIProcessing = false; stopScanningEffect(); currentAiText = ""; currentAiImage = null;
         }
         showMenus();
     }
