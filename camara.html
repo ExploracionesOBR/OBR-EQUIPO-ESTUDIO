@@ -221,7 +221,7 @@
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.50 (Spirit VOX)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.51 (Spirit vox)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -409,125 +409,223 @@
     let aiScannerTimer = 0;
 
     // --- DIRECTORIO ESTRUCTURADO EVP ---
+// ===============================
+// DIRECTORIO EVP COMPLETO
+// ===============================
+
 const DIRECTORIO_EVP = [
+
 {
-triggers: ["que quieres", "que estas buscando", "por que estas aqui", "que buscas", "cual es tu proposito", "por que"],
-respuestas: ["luz", "tu alma", "a ustedes", "cuidarlos", "descansar", "tu miedo", "tu energía", "nada", "solo observo", "la verdad"]
-},
-{
-triggers: ["quien eres", "como te llamas", "cual es tu nombre", "quien es", "eres tu", "nombre"],
-respuestas: ["no tengo nombre", "olvidado", "soy la sombra", "nadie", "el dueño", "el antiguo", "vigilante", "un alma", "espíritu", "alguien perdido", "soy yo", "no me recuerdas"]
-},
-{
-triggers: ["aqui", "cerca", "detras", "alguien", "con nosotros", "estan", "acompanas", "estas vivo"],
-respuestas: ["sí", "aquí estoy", "siempre", "detrás de ti", "a tu lado", "muy cerca", "mirando", "en la oscuridad", "somos muchos", "cerca", "no estamos solos", "frente a ti", "te sigo", "escucha"]
-},
-{
-triggers: ["puedes", "haz", "toca", "mueve", "senal", "hacer", "manifiestate", "habla", "di algo", "ruido"],
-respuestas: ["no", "cuesta mucho", "no puedo", "intento", "mira", "escucha", "falta energía", "no me dejan", "dame fuerza", "es difícil", "presta atención", "otra vez", "no quiero", "tal vez"]
-},
-{
-triggers: ["bien", "enojado", "triste", "ayuda", "paso", "moriste", "como moriste", "cuando moriste", "duele", "sufres"],
-respuestas: ["frío", "dolor", "atrapado", "oscuro", "ayúdame", "vete", "triste", "enojado", "fuego", "no recuerdo", "sufriendo", "paz", "descanso", "hace frío", "miedo", "no sé"]
+triggers: ["que quieres","que buscas","por que estas aqui","que deseas","que necesitas","por que viniste"],
+respuestas: ["tu energia","tu miedo","tu voz","tu luz","tu alma","solo mirar","solo escuchar","solo estar","recuerdo","silencio"]
 },
 
 {
-triggers: ["cuantos son", "cuantos estan aqui", "cuantos hay", "hay muchos", "hay mas contigo", "cuantos espiritus"],
-respuestas: ["somos muchos", "somos tres", "somos varios", "somos dos", "muchos", "no estas solo", "aqui estamos"]
+triggers: ["quien eres","como te llamas","tu nombre","quien habla","quien esta ahi"],
+respuestas: ["nadie","olvidado","una sombra","un eco","un alma","alguien","un guardian","el antiguo","vigilante","perdido"]
 },
 
 {
-triggers: ["te molestamos", "te incomodamos", "te enoja que estemos aqui", "te molesta nuestra presencia"],
-respuestas: ["no", "un poco", "si", "no importa", "sigan", "quedense", "vete"]
+triggers: ["estas aqui","hay alguien","estas cerca","estas con nosotros"],
+respuestas: ["aqui","muy cerca","detras","a tu lado","mirando","esperando","siempre","aun aqui","escucha","silencio"]
 },
 
 {
-triggers: ["que te paso", "que paso aqui", "que ocurrio", "que sucedio", "por que moriste"],
-respuestas: ["accidente", "fuego", "dolor", "caida", "oscuro", "no recuerdo", "triste"]
+triggers: ["puedes hablar","puedes decir algo","puedes responder"],
+respuestas: ["escucha","mira","intento","dificil","no puedo","falta energia","espera","otra vez","mas tarde"]
 },
 
 {
-triggers: ["estas atrapado", "no puedes salir", "estas perdido", "estas aqui para siempre"],
-respuestas: ["si", "atrapado", "no puedo salir", "ayuda", "intento", "no se"]
+triggers: ["estas bien","estas triste","estas enojado"],
+respuestas: ["frio","dolor","oscuro","triste","cansado","perdido","solo","atrapado"]
 },
 
 {
-triggers: ["quieres ayuda", "necesitas ayuda", "podemos ayudarte", "quieres que te ayudemos"],
-respuestas: ["ayudame", "si", "no", "tal vez", "dame energia"]
+triggers: ["que paso aqui","que ocurrio aqui","que paso"],
+respuestas: ["fuego","caida","grito","sangre","oscuridad","silencio","dolor","accidente"]
 },
 
 {
-triggers: ["quieres que nos vayamos", "debemos irnos", "quieres que salgamos", "quieres que nos marchemos"],
-respuestas: ["vete", "quedate", "no", "si", "aun no", "sal ahora"]
+triggers: ["estas atrapado","no puedes salir"],
+respuestas: ["si","atrapado","no puedo","aun aqui","intento","ayuda"]
 },
 
 {
-triggers: ["puedes tocarnos", "puedes tocar algo", "puedes mover algo", "puedes hacer una señal"],
-respuestas: ["intento", "mira", "escucha", "tal vez", "no puedo", "dificil"]
+triggers: ["quieres ayuda","necesitas ayuda"],
+respuestas: ["ayuda","si","tal vez","escucha","energia","dame luz"]
 },
 
 {
-triggers: ["hay niños aqui", "eres un niño", "hay un niño aqui"],
-respuestas: ["niño", "madre", "padre", "solo", "frio"]
+triggers: ["quieres que nos vayamos","debemos irnos"],
+respuestas: ["vete","quedate","aun no","regresa","espera"]
 },
 
 {
-triggers: ["donde estas", "en donde estas", "puedes decir donde estas"],
-respuestas: ["aqui", "detras", "arriba", "abajo", "cerca", "muy cerca"]
+triggers: ["donde estas","puedes decir donde estas"],
+respuestas: ["aqui","detras","arriba","abajo","cerca","muy cerca","en sombra"]
 },
 
 {
-triggers: ["vivias aqui", "esta era tu casa", "este lugar era tuyo"],
-respuestas: ["mi casa", "si", "antes", "hace tiempo", "siempre"]
+triggers: ["cuantos son","cuantos hay aqui"],
+respuestas: ["uno","dos","tres","muchos","varios","somos mas"]
+},
+
+{
+triggers: ["vivias aqui","esta era tu casa"],
+respuestas: ["mi casa","antes","hace tiempo","si","siempre"]
+},
+
+{
+triggers: ["hay niños aqui","eres un niño"],
+respuestas: ["niño","solo","madre","padre","frio"]
+},
+
+{
+triggers: ["nos puedes ver","puedes vernos"],
+respuestas: ["si","te veo","los veo","a todos","claramente"]
+},
+
+{
+triggers: ["nos escuchas","puedes oirnos"],
+respuestas: ["si","escucho","los oigo","muy claro","eco"]
+},
+
+{
+triggers: ["puedes tocar algo","puedes mover algo"],
+respuestas: ["intento","mira","escucha","espera","dificil"]
+},
+
+// DETECCION DE NOMBRES
+{
+triggers: ["como me llamo","sabes mi nombre","di mi nombre","puedes decir mi nombre"],
+respuestas: ["te conozco","lo se","tu nombre","lo recuerdo","te recuerdo"]
+},
+
+// RESPUESTAS DE IDENTIDAD
+{
+triggers: ["tu eras","como era tu nombre","dinos tu nombre","quien era","como te llamabas"],
+respuestas: ["soy luis","soy maria","soy jose","soy ana","soy luz","era luis","era maria","era jose","era ana","me llamo luz"]
 }
 
 ];
-    // Arrays para las EVP aleatorias (cuando nadie pregunta nada)
-   const evpPalabrasSueltas = [
-"aquí","ayuda","frío","oscuro","silencio","mira","detrás","ven","muerte","luz","duele","sombras","nosotros","cerca","sangre","fuego","miedo","dolor","solo","niño","madre","padre","agua",
-"alma","eco","voz","presencia","pasos","respira","mira","arriba","abajo","sombra","rostro","ojos","figura","sigue","escucha","habla","espera","entra","sal","ruido","golpe","susurro","antiguo","viejo",
-"olvido","recuerdo","tumba","puerta","ventana","piso","techo","pared","pasillo","sotano","casa","camino","oscuridad","niebla","aire","viento","energia","temor","grito","eco","señal","cuerpo","espiritu",
-"fantasma","presente","pasado","aqui","siempre","nunca","perdido","atrapado","camina","mira","escucha","observa","respira","siente","viene","vuelve","regresa","sigue","espera","quieto"
+
+
+// ===============================
+// PALABRAS EVP SUELTAS
+// ===============================
+
+const evpPalabrasSueltas = [
+
+"aqui","frio","oscuro","miedo","dolor","sombra","silencio","eco","voz","presencia",
+"mira","escucha","respira","siente","camina","espera","entra","sal","ven","vuelve",
+"arriba","abajo","detras","cerca","lejos","pasos","ruido","golpe","susurro",
+"alma","espiritu","fantasma","energia","luz","niebla","viento","aire","sombras",
+"rostro","ojos","figura","forma","eco","grito","señal","rastro",
+"antiguo","viejo","olvido","recuerdo","perdido","atrapado","solo","nosotros",
+"casa","pasillo","puerta","ventana","techo","pared","sotano","piso","camino",
+"sangre","fuego","agua","humo","ceniza","huesos","tumba","tierra","muerte"
+
 ];
+
+
+// ===============================
+// FRASES EVP CORTAS
+// ===============================
 
 const evpFrasesCortas = [
-"te veo","te escucho","te siento","te sigo","te miro","te observo","te encontramos","te esperamos","te hablamos","te llamo","estoy aquí","aquí estoy","aquí seguimos","a tu lado","detrás tuyo","muy cerca","muy lejos",
-"sigue aquí","ven aquí","entra aquí","mira atrás","mira arriba","mira abajo","mira aquí","mira cerca","mira oscuro","escucha bien","escucha ahora","escucha esto","oye bien",
-"no estás solo","no estamos solos","somos muchos","somos sombras","somos energía","somos voz","somos antiguos","somos aquí","somos silencio","seguimos aquí",
-"algo viene","algo mira","algo camina","algo respira","algo escucha","algo se mueve","algo te sigue","algo te mira","algo está aquí","algo despierta",
-"pasos cerca","pasos atrás","ruido cerca","ruido atrás","susurros aquí","susurros cerca","voz aquí","voz atrás","voz cerca","eco aquí",
-"puerta abierta","puerta cerrada","ventana rota","ventana abierta","pared fría","piso frío","techo oscuro","pasillo largo","sótano oscuro","lugar antiguo",
-"sombras aquí","sombras cerca","sombras atrás","figura aquí","figura oscura","rostro oscuro","ojos miran","ojos aquí","ojos cerca","ojos atrás",
-"energía aquí","energía fría","energía oscura","presencia aquí","presencia cerca","presencia atrás",
-"alma aquí","alma perdida","espíritu aquí","espíritu cerca",
-"niebla aquí","niebla fría","niebla oscura",
-"oscuridad aquí","oscuridad cerca",
-"luz pequeña","luz débil","luz aquí","luz atrás","luz cerca",
-"frío aquí","frío cerca","frío atrás","frío fuerte","mucho frío",
-"siente frío","siente miedo","siente energía","siente presencia","siente sombra",
-"te encontramos","te seguimos","te miramos","te rodeamos","te sentimos","te observamos","te buscamos","te escuchamos","te llamamos","te recordamos",
-"ven despacio","ven ahora","entra despacio","entra ahora","mira despacio","escucha despacio","espera aquí","espera ahora","sigue caminando","sigue mirando",
-"estoy contigo","estoy aquí","te estoy viendo","te estoy mirando","te estoy siguiendo","te estoy escuchando",
-"mira la puerta","mira el pasillo","mira la sombra","escucha el ruido","escucha los pasos","escucha la voz",
-"no te vayas","no mires atrás","no entres aquí","no sigas","no avances","no te acerques",
-"algo respira","algo observa","algo se acerca","algo despierta","algo se mueve"
+
+"te veo","te sigo","te escucho","te siento","te miro","te observo",
+"aqui estoy","aun aqui","sigo aqui",
+"muy cerca","detras tuyo","a tu lado",
+"mira atras","mira arriba","mira abajo","mira aqui",
+"escucha bien","escucha ahora",
+"no estas solo","no estamos solos",
+"somos muchos","somos sombra","somos eco",
+"algo mira","algo viene","algo respira","algo camina",
+"pasos cerca","pasos atras",
+"voz aqui","voz cerca",
+"eco aqui","eco atras",
+"sombra aqui","sombra cerca",
+"figura oscura","rostro oscuro",
+"ojos miran","ojos aqui",
+"energia fria","energia aqui",
+"presencia aqui","presencia cerca",
+"alma perdida","espiritu aqui",
+"niebla fria","niebla oscura",
+"oscuridad aqui","oscuridad cerca",
+"frio aqui","mucho frio",
+"siente miedo","siente frio",
+"te seguimos","te rodeamos","te encontramos",
+"ven aqui","ven ahora",
+"entra aqui","entra ahora",
+"espera aqui","espera ahora",
+"sigue caminando","sigue mirando",
+"no te vayas","no mires atras",
+"no entres aqui","no sigas",
+"algo despierta","algo observa","algo escucha"
+
 ];
+
+
+// ===============================
+// ADVERTENCIAS
+// ===============================
 
 const evpAdvertencias = [
-"cuidado","vete","peligro","huye","corre","no entres","sal de aquí","detente","no mires atrás","es peligroso","cuidado atrás","cállate","escóndete","aléjate","te hará daño","vete ahora","corre de aquí",
-"no avances","no sigas","no entres ahí","no abras","no mires","no regreses","huye ahora","corre ahora","aléjate ahora","vete lejos","no te acerques","no toques","no hables","no escuches"
+
+"cuidado","vete","huye","corre","peligro",
+"no entres","sal ahora","detente",
+"no mires","no regreses",
+"no avances","no sigas",
+"alejate","huye ahora",
+"corre ahora","vete ahora",
+"no toques","no hables",
+"no escuches","es peligroso"
+
 ];
 
-const paranormalQuestions = [
-"hay alguien aqui","puede alguien escucharnos","puedes hablarnos","quien esta aqui","como te llamas","estas aqui","estas cerca","necesitas ayuda","que te paso","vivias aqui","estas solo",
-"puedes dar una senal","puedes decir si","puedes decir no","si estas aqui di algo","quieres que nos vayamos",
-"cuantos estan aqui","cuantos son","hay mas contigo","hay alguien con nosotros",
-"puedes tocarnos","puedes mover algo","puedes hacer ruido","puedes golpe ar algo",
-"nos puedes ver","nos puedes escuchar","puedes repetir eso","puedes decir mi nombre",
-"hay un niño aqui","hay un espiritu aqui","hay algo aqui",
-"estas detras de nosotros","estas en este cuarto","estas en este lugar",
-"quieres hablar","quieres comunicarse","quieres que te ayudemos"
+
+// ===============================
+// LISTA DE NOMBRES EVP
+// ===============================
+
+const evpNombres = [
+
+"juan","pedro","maria","ana","luis","jose","miguel","angel","david","carlos",
+"fernando","roberto","eduardo","diego","andres","alejandro","ricardo","antonio",
+"isabel","sofia","laura","lucia","elena","carmen","patricia","rosa","teresa",
+"daniel","rafael","alberto","manuel","victor","jorge","marco","oscar","pablo",
+"raul","adrian","julio","samuel","ivan","cesar","hector","sebastian","tomas",
+"luz","gloria","dolores","victoria","martin","ramon","agustin","gabriel"
+
 ];
+
+
+// ===============================
+// PREGUNTAS PARANORMALES
+// ===============================
+
+const paranormalQuestions = [
+
+"hay alguien aqui","puede alguien escucharnos","puedes hablarnos","quien esta aqui",
+"como te llamas","estas aqui","estas cerca","necesitas ayuda","que te paso",
+"vivias aqui","estas solo",
+"puedes dar una senal","puedes decir si","puedes decir no",
+"si estas aqui di algo","quieres que nos vayamos",
+"cuantos estan aqui","cuantos son","hay mas contigo",
+"hay alguien con nosotros",
+"puedes tocarnos","puedes mover algo","puedes hacer ruido",
+"puedes golpear algo",
+"nos puedes ver","nos puedes escuchar",
+"puedes repetir eso",
+"puedes decir mi nombre",
+"hay un niño aqui","hay un espiritu aqui","hay algo aqui",
+"estas detras de nosotros","estas en este cuarto",
+"estas en este lugar",
+"quieres hablar","quieres comunicarte","quieres que te ayudemos"
+
+];
+
     let evpHistorial = [];
 
     function obtenerEVP() {
@@ -597,9 +695,26 @@ const paranormalQuestions = [
     let ambientNoiseLevel = 0.01; 
     let cumulativeEVPEnergy = 0; 
 
+    // --- DESBLOQUEO GLOBAL SAFARI iOS ---
+    const unlockAudioContexts = async () => {
+        try {
+            if (evpAudioCtx && evpAudioCtx.state === "suspended") {
+                await evpAudioCtx.resume();
+            }
+            if (audioCtx && audioCtx.state === "suspended") {
+                await audioCtx.resume();
+            }
+        } catch(e) {}
+    };
+    document.body.addEventListener("touchstart", unlockAudioContexts, { once: true });
+    document.body.addEventListener("click", unlockAudioContexts, { once: true });
+
     // --- REPRODUCTOR CLOUD TTS & PIPELINE EVP (GRAVE Y OSCURO) ---
     const cloudTTSPlayer = new Audio();
     cloudTTSPlayer.crossOrigin = "anonymous";
+    cloudTTSPlayer.playsInline = true; 
+    cloudTTSPlayer.preload = "auto";
+    cloudTTSPlayer.muted = false;
 
     let evpAudioCtx = null, ttsSource = null, ttsMainGain = null;
     let bassBoost = null, darkFilter = null;
@@ -693,6 +808,7 @@ const paranormalQuestions = [
             localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
             updateTTSStatusUI(); 
 
+            // Blob para compatibilidad estricta con Safari (no usar stream directo)
             const blob = await response.blob();
             return URL.createObjectURL(blob);
         } catch (e) {
@@ -770,14 +886,16 @@ const paranormalQuestions = [
         cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; 
         cloudTTSPlayer.load(); 
         
-        cloudTTSPlayer.muted = false;
-        cloudTTSPlayer.volume = 1.0;
-        
         try {
             await cloudTTSPlayer.play();
         } catch(err) {
             console.warn("Error reproduciendo audio:", err);
-            showTtsWarning();
+            // DIFERENCIAR: Error real de red vs Bloqueo de Safari
+            if (err.name === 'NotAllowedError') {
+                console.log("Safari bloqueó el autoplay. Esperando interacción del usuario.");
+            } else {
+                showTtsWarning(); // Solo muestra warning si es fallo de motor/red
+            }
             isTtsPlaying = false;
             setTimeout(() => { safeStartSpeechRec(); }, 500);
         }
@@ -824,15 +942,17 @@ const paranormalQuestions = [
         cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03;
         cloudTTSPlayer.load(); 
         
-        cloudTTSPlayer.muted = false;
-        cloudTTSPlayer.volume = 1.0;
-        
         try {
             await cloudTTSPlayer.play();
             startEVPFragmenter(); // Llamada mantenida, pero función desactivada internamente.
         } catch(err) {
             console.warn("Error reproduciendo audio:", err);
-            showTtsWarning();
+            // DIFERENCIAR: Error real de red vs Bloqueo de Safari
+            if (err.name === 'NotAllowedError') {
+                console.log("Safari bloqueó el autoplay. Esperando interacción del usuario.");
+            } else {
+                showTtsWarning();
+            }
             isTtsPlaying = false;
             isSpookySpeaking = false;
             setTimeout(() => { safeStartSpeechRec(); }, 500);
@@ -1091,12 +1211,17 @@ const paranormalQuestions = [
     }
 
     async function initAudioEngine() {
+        // COMPATIBILIDAD TIKTOK LIVE: Usar un único stream de micrófono si ya existe.
         if (!audioStream) {
-            try {
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, channelCount: 2 } 
-                });
-            } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
+            if (videoStream && videoStream.getAudioTracks().length > 0) {
+                audioStream = videoStream;
+            } else {
+                try {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, channelCount: 2 } 
+                    });
+                } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
+            }
         }
 
         if (!audioCtx) {
