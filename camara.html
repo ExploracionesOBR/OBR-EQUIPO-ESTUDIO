@@ -1723,8 +1723,8 @@ const paranormalQuestions = [
     function drawBurnInHUD(ctx, width, height, scale) {
         if(scale <= 0.01) return;
 
-        const HUD_TAMANO    = 1.8;  
-        const HUD_IZQUIERDA = 50;    
+        const HUD_TAMANO    = 1.4;  
+        const HUD_IZQUIERDA = 40;    
         const HUD_ARRIBA    = 50;    
 
         ctx.save();
@@ -1743,8 +1743,8 @@ const paranormalQuestions = [
         
         ctx.restore(); 
 
-        const SLS_TAMANO    = 1.8;         
-        const SLS_IZQUIERDA = width / 2;   
+        const SLS_TAMANO    = 1.5;         
+        const SLS_IZQUIERDA = width / 3;   
         const SLS_ARRIBA    = 80;          
 
         if(state.isSLS) {
