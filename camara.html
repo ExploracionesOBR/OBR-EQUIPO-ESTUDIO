@@ -20,6 +20,7 @@
     <script src="js/tf.min.js"></script>
     <script src="js/pose-detection.min.js"></script>
     <script src="js/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="js/selfie_segmentation.js"></script> 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
@@ -28,6 +29,7 @@
         if(!window.tf) document.write('<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"><\/script>');
         if(!window.poseDetection) document.write('<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"><\/script>');
         if(!window.FaceMesh) document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js"><\/script>');
+        if(!window.drawConnectors) document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"><\/script>');
         if(!window.SelfieSegmentation) document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"><\/script>');
     </script>
     
@@ -46,8 +48,8 @@
         
         #shared-video-element { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 1; pointer-events: none; }
         
-        /* CANVAS DE STREAMING (QUEMADO): Opacidad 0.01 para forzar renderizado en GPU sin ser visible */
-        #sls-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; pointer-events: none; opacity: 0.01 !important; }
+        /* CANVAS DE STREAMING (QUEMADO): 1. SLS VISIBILIDAD -> Visibilidad permanente real */
+        #sls-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; pointer-events: none; opacity: 1 !important; visibility: visible; display: block; }
         
         /* CANVAS LOCAL (VISUALIZACIÓN): Visible para el usuario (HUD sobre CSS) */
         #audio-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
@@ -66,6 +68,8 @@
         
         body.filter-thermal #shared-video-element { filter: grayscale(75%) invert(75%) contrast(1.7) brightness(0.8); }
         body.filter-urbex #shared-video-element { filter: invert(100%) hue-rotate(180deg) saturate(400%) contrast(150%); }
+        /* EFECTO EDGE X-RAY: Fondo invertido oscuro y tintado azul/cyan para alto contraste */
+        body.filter-edge #shared-video-element { filter: grayscale(100%) invert(100%) sepia(100%) hue-rotate(180deg) saturate(3.0) contrast(1.5) brightness(0.4); }
 
         .hud-burn-hidden { display: none; }
 
@@ -203,6 +207,7 @@
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('night', this)" id="btn-night"><i class="fas fa-moon"></i></div><div class="menu-label">NOCT</div></div>
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('thermal', this)" id="btn-thermal"><i class="fas fa-fire"></i></div><div class="menu-label">NEG</div></div>
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('urbex', this)" id="btn-urbex"><i class="fas fa-city"></i></div><div class="menu-label">URBEX</div></div>
+            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('edge', this)" id="btn-edge"><i class="fas fa-wave-square"></i></div><div class="menu-label">X-RAY</div></div>
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('sls', this)" id="btn-sls"><i class="fas fa-ghost"></i></div><div class="menu-label">SLS</div></div>
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('lidar', this)" id="btn-heatmap"><i class="fas fa-fingerprint"></i></div><div class="menu-label">LIDAR</div></div>
         </div>
@@ -221,7 +226,7 @@
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.51 (Spirit vox)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.60 (Spirit vox)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -294,9 +299,11 @@
     </div>
 
 <script>
+    let sharedMicMode = true; // BANDERA GLOBAL MIC COMPARTIDO
+
     // --- VARIABLES GLOBALES DE ESTADO TTS Y CRÉDITOS ---
     let elevenlabsCreditsTotal = 10000;
-    let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '92');
+    let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '1480');
     let elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
     if (elevenlabsCreditsRemaining < 0) elevenlabsCreditsRemaining = 0;
     let usingFallbackTTS = false;
@@ -308,35 +315,25 @@
             return "N2lVS1w4EtoT3dr4eOWO"; // callum 70% Principal
         } else if (r < 0.9) {
             return "cjVigY5qzO86Huf0OWal"; // eric 20% Secundaria
-        } else {
-            return ""; // 10% Terciaria
-        }
+        } 
     }
 
     // --- FUNCIONES EVP FRAGMENTER (MANTENIDAS PERO DESACTIVADAS INTERNAMENTE) ---
-    // Según requerimientos: NO eliminar funciones, pero anular su efecto para evitar romper el audio.
     let evpFragmenterTimer = null;
     let isFragmenting = false;
 
     function startEVPFragmenter() {
-        // Desactivado: El audio se reproducirá de forma natural y clara
-        // isFragmenting = true;
-        // fragmentLoop();
     }
 
     function stopEVPFragmenter() {
-        // Desactivado
-        // isFragmenting = false;
-        // clearTimeout(evpFragmenterTimer);
     }
 
     function fragmentLoop() {
-        // Desactivado para no arruinar la inteligibilidad y evitar voz chillona
     }
 
     // FRAGMENTACIÓN DE TEXTO SPIRIT BOX (Mantenido pero con bypass para texto claro)
     function fragmentEVPText(text) {
-        return text; // Desactivado: Devolvemos el texto intacto para voz limpia
+        return text; 
     }
 
     // --- RENOVACIÓN AUTOMÁTICA DÍA 15 ---
@@ -379,12 +376,13 @@
             .trim();
     }
 
-    const AI_SENSITIVITY = 1.2; 
+    // SENSIBILIDAD ÓPTIMA PARA ESTABILIDAD DE PUNTOS
+    const AI_SENSITIVITY = 1.3; 
     const state = { 
         apiKey: localStorage.getItem("obr_ai_key") || localStorage.getItem("obr_gemini_key") || "", 
         aiProvider: localStorage.getItem("obr_ai_provider") || "gemini",
         aiModel: localStorage.getItem("obr_ai_model") || "gemini-2.5-flash", 
-        studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 
+        studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isEdge: false, isPareidolia: false, isAudioScan: false, zoom: 1 
     };
     
     const PEER_CONFIG = { config: { iceServers: [{ urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }] } };
@@ -689,22 +687,8 @@ const paranormalQuestions = [
     let lastEvpTime = 0; 
     
     let simulatedPikes = new Array(128).fill(0); 
-    let ambientNoiseLevel = 0.01; 
+    let ambientNoiseLevel = 0.03; 
     let cumulativeEVPEnergy = 0; 
-
-    // --- DESBLOQUEO GLOBAL SAFARI iOS ---
-    const unlockAudioContexts = async () => {
-        try {
-            if (evpAudioCtx && evpAudioCtx.state === "suspended") {
-                await evpAudioCtx.resume();
-            }
-            if (audioCtx && audioCtx.state === "suspended") {
-                await audioCtx.resume();
-            }
-        } catch(e) {}
-    };
-    document.body.addEventListener("touchstart", unlockAudioContexts, { once: true });
-    document.body.addEventListener("click", unlockAudioContexts, { once: true });
 
     // --- REPRODUCTOR CLOUD TTS & PIPELINE EVP (GRAVE Y OSCURO) ---
     const cloudTTSPlayer = new Audio();
@@ -712,9 +696,13 @@ const paranormalQuestions = [
     cloudTTSPlayer.playsInline = true; 
     cloudTTSPlayer.preload = "auto";
     cloudTTSPlayer.muted = false;
+    // Forzar salida de audio SIEMPRE al altavoz
+    if (typeof cloudTTSPlayer.setSinkId === 'function') {
+        cloudTTSPlayer.setSinkId("default").catch(err => console.log("Sink ID no soportado en este navegador", err));
+    }
 
-    let evpAudioCtx = null, ttsSource = null, ttsMainGain = null;
-    let bassBoost = null, darkFilter = null;
+    let ttsSource = null, ttsGainNode = null;
+    let mixDestination = null;
 
     function makeDistortionCurve(amount) {
         // Función mantenida por reglas de "NO eliminar funciones", pero inactiva en el pipeline.
@@ -729,40 +717,12 @@ const paranormalQuestions = [
         return curve;
     }
 
-    function initEVPWebAudio() {
-        if (evpAudioCtx) return;
-        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-        evpAudioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
-
-        if (!ttsSource) {
-            try { ttsSource = evpAudioCtx.createMediaElementSource(cloudTTSPlayer); } catch(e) { console.warn("Error MediaElementSource:", e); }
+    // SOLO en interacción usuario para FIX MODO LLAMADA
+    document.addEventListener('click', async () => {
+        if (audioCtx && audioCtx.state === 'suspended') {
+            await audioCtx.resume();
         }
-
-        // --- NUEVO PIPELINE AUDIO GRAVE, FUERTE Y OSCURO ---
-        
-        // 1. Filtro Lowshelf (Bass Boost para voz gruesa)
-        bassBoost = evpAudioCtx.createBiquadFilter();
-        bassBoost.type = "lowshelf";
-        bassBoost.frequency.value = 180;
-        bassBoost.gain.value = 6;
-
-        // 2. Filtro Lowpass (Elimina brillo digital y da oscuridad)
-        darkFilter = evpAudioCtx.createBiquadFilter();
-        darkFilter.type = "lowpass";
-        darkFilter.frequency.value = 4200;
-
-        // 3. Ganancia (Aumenta el volumen para evitar que suene bajo)
-        ttsMainGain = evpAudioCtx.createGain();
-        ttsMainGain.gain.value = 1.6;
-
-        // Enrutamiento Final Limpio y Pesado
-        if (ttsSource) {
-            ttsSource.connect(bassBoost);
-            bassBoost.connect(darkFilter);
-            darkFilter.connect(ttsMainGain);
-            ttsMainGain.connect(evpAudioCtx.destination);
-        }
-    }
+    }, { once: true });
 
     // --- NUEVO SISTEMA TTS ELEVENLABS ---
     const ELEVENLABS_API_KEY = "sk_e4c25b079bd92a788a81593d86ceadb63add38a5afdb04e0";
@@ -858,9 +818,9 @@ const paranormalQuestions = [
         
         safeStopSpeechRec(); 
         
-        initEVPWebAudio(); 
-        if (evpAudioCtx && evpAudioCtx.state === "suspended") {
-            await evpAudioCtx.resume();
+        await initAudioEngine(); 
+        if (audioCtx && audioCtx.state === "suspended") {
+            await audioCtx.resume();
         }
 
         const safeText = text.substring(0, 120);
@@ -912,9 +872,9 @@ const paranormalQuestions = [
         
         safeStopSpeechRec();
         
-        initEVPWebAudio(); 
-        if (evpAudioCtx && evpAudioCtx.state === "suspended") {
-            await evpAudioCtx.resume();
+        await initAudioEngine(); 
+        if (audioCtx && audioCtx.state === "suspended") {
+            await audioCtx.resume();
         }
         
         const safeText = text.substring(0, 120);
@@ -969,12 +929,11 @@ const paranormalQuestions = [
     const fpsInterval = 1000 / targetRenderFPS; 
     let performanceLagging = false; // Flag to reduce detection frequency during stream
     
-    // --- SPECIALIZED CANVASES TO AVOID LOOP CREATIONS ---
-    const poseCanvas = document.createElement('canvas'); poseCanvas.width = 256;
-    const poseCtx = poseCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-    
-    const faceScanCanvas = document.createElement('canvas'); faceScanCanvas.width = 192;
-    const faceCtx = faceScanCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+    // --- SPECIALIZED CANVASES (OPTIMIZED RESOLUTION) ---
+    const analysisCanvas = document.createElement('canvas');
+    const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+    analysisCanvas.width = 256;
+    analysisCanvas.height = 192; // OPTIMIZED 4:3
     
     const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240;
     const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
@@ -982,10 +941,76 @@ const paranormalQuestions = [
     // --- SCAN BOX DOM POOL ---
     const scanBoxPool = [];
     
-    // --- TRACKING SMOOTHING ---
+    // --- GAMING MODE POSE VARS ---
     let smoothedPoses = [];
     let targetPoses = [];
     let smoothedFaces = [];
+
+    let lastPoseTime = 0;
+    let prevPose = null;
+    let currentPose = null;
+    let predictedPose = null;
+    let lastPoseTimestamp = 0;
+    let lastMotionTime = performance.now();
+    window.motionLevel = 0; // GLOBAL FLAG FOR HYBRID RENDER
+
+    function detectMotionSimple(pose) {
+        if (!prevPose || !pose || !pose[0] || !prevPose[0]) {
+            window.motionLevel *= 0.9;
+            return;
+        }
+        const dx = Math.abs(pose[0].x - prevPose[0].x);
+        const dy = Math.abs(pose[0].y - prevPose[0].y);
+        
+        window.motionLevel = (dx + dy) * 0.5 + (window.motionLevel * 0.8);
+        if (dx + dy > 0.01) {
+            lastMotionTime = performance.now();
+        }
+    }
+
+    function updatePose(newPose) {
+        prevPose = currentPose;
+        currentPose = newPose;
+        lastPoseTimestamp = performance.now();
+        detectMotionSimple(newPose);
+    }
+
+    function predictPose() {
+        if (!prevPose || !currentPose) return currentPose;
+        const now = performance.now();
+        const dt = Math.min((now - lastPoseTimestamp) / 1000, 0.1); // Previene estelas gigantes
+
+        return currentPose.map((pt, i) => {
+            const prev = prevPose[i];
+            if (!prev) return pt;
+            const vx = pt.x - prev.x;
+            const vy = pt.y - prev.y;
+            return {
+                x: pt.x + vx * dt * 6,
+                y: pt.y + vy * dt * 6,
+                z: pt.z || 0,
+                score: pt.score
+            };
+        });
+    }
+
+    function lerp(a, b, t = 0.5) {
+        return a + (b - a) * t;
+    }
+
+    function smoothPoseObj(poseA, poseB, alpha = 0.65) {
+        if (!poseA || !poseB) return poseB;
+        return poseB.map((pt, i) => {
+            const prev = poseA[i];
+            if (!prev) return pt;
+            return {
+                x: lerp(prev.x, pt.x, alpha),
+                y: lerp(prev.y, pt.y, alpha),
+                z: pt.z || 0,
+                score: pt.score
+            };
+        });
+    }
 
     const animState = { hudScale: 1.0, hudTarget: 1.0, aiScale: 0.0, aiTarget: 0.0 };
     const el = { 
@@ -1097,6 +1122,12 @@ const paranormalQuestions = [
         }
     }
 
+    // --- DETENER FLUXOS AL SALIR PREVIENE AUDIO BLOQUEADO ---
+    window.addEventListener('beforeunload', () => {
+        if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+        if (audioStream) audioStream.getTracks().forEach(track => track.stop());
+    });
+
     document.addEventListener("visibilitychange", async () => {
         if (document.visibilityState === 'visible') {
             requestWakeLock();
@@ -1119,7 +1150,7 @@ const paranormalQuestions = [
         try {
             if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, // SAFE FOR TIKTOK
                 video: { 
                     facingMode: 'environment', 
                     width: { ideal: 3840 }, 
@@ -1166,12 +1197,11 @@ const paranormalQuestions = [
     async function initApp() {
         document.querySelector('.load-btn').style.display = 'none';
         requestWakeLock(); 
-        initEVPWebAudio(); 
         
         try {
             updateProgress(10, "INICIANDO SENSOR 4K...");
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, 
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, // SAFE FOR TIKTOK
                 video: { 
                     facingMode: 'environment', 
                     width: { ideal: 3840 }, 
@@ -1197,15 +1227,24 @@ const paranormalQuestions = [
                 if(window.poseDetection) aiDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING });
                 if(window.FaceMesh) { 
                     faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`}); 
+                    faceMesh.setOptions({
+                        maxNumFaces: 1,
+                        refineLandmarks: true,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
                     await faceMesh.initialize(); 
+                    // EVITA DUPLICADOS - SOLO UNA VEZ
                     faceMesh.onResults(res => { faces = res.multiFaceLandmarks || []; });
                 }
                 if(window.SelfieSegmentation) { segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); segmenter.setOptions({ modelSelection: 1 }); segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); }
 
                 // Warmup con el canvas dedicado
-                poseCtx.drawImage(el.video, 0, 0, poseCanvas.width, poseCanvas.width * (el.video.videoHeight/el.video.videoWidth || 9/16));
-                if(segmenter) await segmenter.send({image: poseCanvas}); 
-                if(aiDetector) await aiDetector.estimatePoses(poseCanvas);
+                const vRatio = el.video.videoHeight / el.video.videoWidth;
+                analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75); // CORRECT ASPECT RATIO
+                analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+                if(segmenter) await segmenter.send({image: analysisCanvas}); 
+                if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
 
             } catch(e) { console.log("Warmup partial error", e); }
             
@@ -1228,50 +1267,56 @@ const paranormalQuestions = [
     }
 
     // --- SEPARACIÓN DE CICLO DE DETECCIÓN ---
-    let lastSlsTime = 0, lastFaceTime = 0;
-    const slsInterval = 1000 / 24; // 24 FPS
-    const faceInterval = 1000 / 15; // 15 FPS
+    let faceFrameSkip = 0; // Throttle para FaceMesh
 
     async function detectionLoop() {
-        if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
+        if (!state.isSLS && !state.isLidar && !state.isPareidolia && !state.isEdge) {
             targetPoses = []; faces = []; lidarMask = null;
             requestAnimationFrame(detectionLoop);
             return;
         }
 
         const now = performance.now();
-        const videoRatio = el.video.videoHeight / el.video.videoWidth || 9/16;
 
         try {
+            // Optimización: Solo dibujamos 1 vez por fotograma de detección,
+            // y respetamos escrupulosamente el aspect ratio para EVITAR APLASTAMIENTO FACIAL
+            let imageDrawnThisFrame = false;
+            const ensureImageDrawn = () => {
+                if (!imageDrawnThisFrame) {
+                    const vRatio = el.video.videoHeight / el.video.videoWidth;
+                    analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+                    analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+                    imageDrawnThisFrame = true;
+                }
+            };
+
             if (state.isLidar && segmenter) { 
                 if(!lidarBusy) { 
                     lidarBusy = true; 
-                    poseCanvas.height = poseCanvas.width * videoRatio;
-                    poseCtx.drawImage(el.video, 0, 0, poseCanvas.width, poseCanvas.height);
-                    try { await segmenter.send({image: poseCanvas}); } catch(e){ lidarBusy = false; } 
+                    ensureImageDrawn();
+                    try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; } 
                 } 
             } else {
-                if (aiDetector && state.isSLS && now - lastSlsTime > slsInterval) {
-                    lastSlsTime = now;
-                    poseCanvas.height = poseCanvas.width * videoRatio;
-                    poseCtx.drawImage(el.video, 0, 0, poseCanvas.width, poseCanvas.height);
+                // SLS EN BACKGROUND (THROTTLE SEGURO 200ms)
+                if (aiDetector && state.isSLS && now - lastPoseTime > 200) {
+                    lastPoseTime = now;
+                    ensureImageDrawn();
                     try { 
-                        let newPoses = await aiDetector.estimatePoses(poseCanvas, { maxPoses: 5, flipHorizontal: false, scoreThreshold: 0.25 });
-                        // Normalizar coordenadas
-                        targetPoses = newPoses.map(p => ({
-                            ...p,
-                            keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / poseCanvas.width, y: kp.y / poseCanvas.height }))
-                        }));
+                        let newPoses = await aiDetector.estimatePoses(analysisCanvas, { maxPoses: 1, flipHorizontal: false, scoreThreshold: 0.25 });
+                        if (newPoses && newPoses.length > 0 && newPoses[0].keypoints) {
+                            let normalized = newPoses[0].keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height }));
+                            updatePose(normalized);
+                        }
                     } catch(e){} 
                 }
 
-                // Ajuste dinámico de FPS para optimización en transmisión
-                const currentFaceInterval = performanceLagging ? (1000 / 7) : faceInterval;
-                if (faceMesh && state.isSLS && now - lastFaceTime > currentFaceInterval) {
-                    lastFaceTime = now;
-                    faceScanCanvas.height = faceScanCanvas.width * videoRatio;
-                    faceCtx.drawImage(el.video, 0, 0, faceScanCanvas.width, faceScanCanvas.height);
-                    try { await faceMesh.send({image: faceScanCanvas}); } catch(e){} 
+                // FACEMESH MÁS RÁPIDO (SOLO CADA 2 FRAMES)
+                if (faceMesh && state.isSLS) {
+                    if (faceFrameSkip++ % 2 === 0) {
+                        ensureImageDrawn();
+                        try { await faceMesh.send({image: analysisCanvas}); } catch(e){} 
+                    }
                 }
             }
         } catch(e) {}
@@ -1280,102 +1325,142 @@ const paranormalQuestions = [
     }
 
     async function initAudioEngine() {
-        // COMPATIBILIDAD TIKTOK LIVE: Usar un único stream de micrófono si ya existe.
-        if (!audioStream) {
-            if (videoStream && videoStream.getAudioTracks().length > 0) {
-                audioStream = videoStream;
-            } else {
-                try {
-                    audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, channelCount: 2 } 
-                    });
-                } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
-            }
+        if (audioCtx) return;
+        if (!state.isAudioScan && !conn) return;
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext({ latencyHint: 'interactive' }); 
+
+        // 1. TTS Source
+        if (!ttsSource) {
+            try { ttsSource = audioCtx.createMediaElementSource(cloudTTSPlayer); } catch(e) { console.warn("Error MediaElementSource:", e); }
         }
 
-        if (!audioCtx) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AudioContext({ latencyHint: 'interactive' }); 
+        // --- AUDIO PRO (SOLUCIÓN REAL) ---
+        const masterGain = audioCtx.createGain();
+        masterGain.gain.value = 2.8; // volumen alto controlado
 
-            audioAnalyser = audioCtx.createAnalyser();
-            audioAnalyser.fftSize = 2048; 
-            audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -24;
+        compressor.knee.value = 30;
+        compressor.ratio.value = 12;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+
+        // Cadena final local
+        compressor.connect(masterGain);
+        masterGain.connect(audioCtx.destination);
+
+        // TTS MÁS FUERTE Y SIN DISTORSIÓN
+        ttsGainNode = audioCtx.createGain();
+        ttsGainNode.gain.value = 2.5;
+
+        if (ttsSource) {
+            ttsSource.connect(ttsGainNode);
+            ttsGainNode.connect(compressor);
+        }
+
+        // FORZAR SALIDA A ALTAVOZ (CRÍTICO)
+        if (cloudTTSPlayer.setSinkId) {
+            await cloudTTSPlayer.setSinkId("default").catch(e => console.log(e));
+        }
+
+        // 2. MIC Source & Routing (INTENTAR reutilizar stream CLAVE TIKTOK)
+        if (videoStream && videoStream.getAudioTracks().length > 0) {
+            audioStream = videoStream;
+        } else {
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 } 
+                });
+            } catch(e) { console.warn("Mic access denied or unavailable", e); return; }
+        }
+
+        if (audioStream) {
+            micSource = audioCtx.createMediaStreamSource(audioStream);
             
             micGainNode = audioCtx.createGain();
-            micGainNode.gain.value = 3.0;
-            
-            if ('webkitSpeechRecognition' in window) {
-                speechRec = new webkitSpeechRecognition();
-                speechRec.continuous = true; 
-                speechRec.interimResults = true; 
-                speechRec.lang = 'es-MX';
-                
-                speechRec.onstart = () => { isRecognizing = true; };
-                speechRec.onerror = (e) => { isRecognizing = false; };
-                
-                speechRec.onresult = (event) => {
-                    const lastIndex = event.results.length - 1;
-                    const latestText = event.results[lastIndex][0].transcript;
-                    
-                    if (latestText.trim().length > 0) {
-                        
-                        const txtNormalizado = normalizarTexto(latestText);
-                        lastSpokenText = txtNormalizado; 
-                        
-                        clearTimeout(speechTimer);
-                        speechTimer = setTimeout(() => { lastSpokenText = ""; }, 4000); 
-                        
-                        if(event.results[lastIndex].isFinal && conn && conn.open) {
-                             conn.send({type: 'ai-speech', text: `[VOZ]: ${txtNormalizado}`});
-                        }
+            micGainNode.gain.value = 1.8; // MICRO AJUSTADO
 
-                        let isQuestion = paranormalQuestions.some(q => txtNormalizado.includes(q));
-                        
-                        if (!isQuestion) {
-                            for(let cat of DIRECTORIO_EVP) {
-                                if (cat.triggers.some(t => txtNormalizado.includes(t))) {
-                                    isQuestion = true;
-                                    break;
-                                }
+            audioAnalyser = audioCtx.createAnalyser();
+            audioAnalyser.fftSize = 1024; 
+            audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
+            micSource.connect(micGainNode);
+            micGainNode.connect(audioAnalyser);
+            micGainNode.connect(compressor); // MICRO A COMPRESOR
+
+            // 3. MEZCLA PRO REAL (Aseguramos que el stream WebRTC mantenga el audio)
+            mixDestination = audioCtx.createMediaStreamDestination();
+            micGainNode.connect(mixDestination);
+            if (ttsGainNode) ttsGainNode.connect(mixDestination);
+        }
+            
+        if ('webkitSpeechRecognition' in window) {
+            speechRec = new webkitSpeechRecognition();
+            speechRec.continuous = true; 
+            speechRec.interimResults = true; 
+            speechRec.lang = 'es-MX';
+            
+            speechRec.onstart = () => { isRecognizing = true; };
+            speechRec.onerror = (e) => { isRecognizing = false; };
+            
+            speechRec.onresult = (event) => {
+                const lastIndex = event.results.length - 1;
+                const latestText = event.results[lastIndex][0].transcript;
+                
+                if (latestText.trim().length > 0) {
+                    
+                    const txtNormalizado = normalizarTexto(latestText);
+                    lastSpokenText = txtNormalizado; 
+                    
+                    clearTimeout(speechTimer);
+                    speechTimer = setTimeout(() => { lastSpokenText = ""; }, 4000); 
+                    
+                    if(event.results[lastIndex].isFinal && conn && conn.open) {
+                         conn.send({type: 'ai-speech', text: `[VOZ]: ${txtNormalizado}`});
+                    }
+
+                    let isQuestion = paranormalQuestions.some(q => txtNormalizado.includes(q));
+                    
+                    if (!isQuestion) {
+                        for(let cat of DIRECTORIO_EVP) {
+                            if (cat.triggers.some(t => txtNormalizado.includes(t))) {
+                                isQuestion = true;
+                                break;
                             }
                         }
-
-                        if (isQuestion) {
-                            lastQuestionTime = Date.now(); 
-                        }
-
-                        if (isQuestion && state.isAudioScan && !isSpookySpeaking && !isTtsPlaying && (Date.now() - lastEvpTime > 6000)) {
-                            lastEvpTime = Date.now() + 99999; 
-                            setTimeout(() => {
-                                lastEvpTime = Date.now();
-                                
-                                lastSpokenText = obtenerRespuestaContextual(txtNormalizado);
-                                
-                                clearTimeout(speechTimer);
-                                speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3000);
-                                if (conn && conn.open) conn.send({type: 'ai-speech', text: `${lastSpokenText}`});
-                                speakSpooky(lastSpokenText);
-                            }, 2500 + Math.random() * 2000); 
-                        }
                     }
-                };
-                
-                speechRec.onend = () => {
-                    isRecognizing = false;
-                    if(state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
-                         setTimeout(() => { safeStartSpeechRec(); }, 1000);
+
+                    if (isQuestion) {
+                        lastQuestionTime = Date.now(); 
                     }
-                };
-            }
+
+                    if (isQuestion && state.isAudioScan && !isSpookySpeaking && !isTtsPlaying && (Date.now() - lastEvpTime > 6000)) {
+                        lastEvpTime = Date.now() + 99999; 
+                        setTimeout(() => {
+                            lastEvpTime = Date.now();
+                            
+                            lastSpokenText = obtenerRespuestaContextual(txtNormalizado);
+                            
+                            clearTimeout(speechTimer);
+                            speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3000);
+                            if (conn && conn.open) conn.send({type: 'ai-speech', text: `${lastSpokenText}`});
+                            speakSpooky(lastSpokenText);
+                        }, 2500 + Math.random() * 2000); 
+                    }
+                }
+            };
+            
+            speechRec.onend = () => {
+                isRecognizing = false;
+                if(state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
+                     setTimeout(() => { safeStartSpeechRec(); }, 1000);
+                }
+            };
         }
-
-        try {
-            const source = audioCtx.createMediaStreamSource(audioStream);
-            source.connect(micGainNode);
-            micGainNode.connect(audioAnalyser);
-        } catch(e) {}
         
-        if (audioCtx.state !== 'running') {
+        if (audioCtx && audioCtx.state !== 'running') {
             audioCtx.resume().catch(() => {});
         }
     }
@@ -1402,7 +1487,7 @@ const paranormalQuestions = [
         const bufferLength = audioAnalyser.frequencyBinCount; 
         const bottomY = h * 0.85; 
         const waveHeight = 71; 
-        const sensitivity = 8.4; 
+        const sensitivity = 8.8; 
 
         let frameSum = 0;
         let currentMaxVolume = 0;
@@ -1597,7 +1682,7 @@ const paranormalQuestions = [
             lidarCtx.strokeStyle = 'rgba(0, 255, 100, 0.4)';
             lidarCtx.lineWidth = 2;
             lidarCtx.beginPath();
-            const rayCount = 25;
+            const rayCount = 0;
             for (let i = 0; i < rayCount; i++) {
                 let rx = (width / rayCount) * i;
                 let offset = Math.sin((frameCount * 0.05) + i) * 100;
@@ -1638,7 +1723,7 @@ const paranormalQuestions = [
     function drawBurnInHUD(ctx, width, height, scale) {
         if(scale <= 0.01) return;
 
-        const HUD_TAMANO    = 1.0;  
+        const HUD_TAMANO    = 1.8;  
         const HUD_IZQUIERDA = 50;    
         const HUD_ARRIBA    = 50;    
 
@@ -1658,7 +1743,7 @@ const paranormalQuestions = [
         
         ctx.restore(); 
 
-        const SLS_TAMANO    = 1.3;         
+        const SLS_TAMANO    = 1.8;         
         const SLS_IZQUIERDA = width / 2;   
         const SLS_ARRIBA    = 80;          
 
@@ -1750,27 +1835,8 @@ const paranormalQuestions = [
     }
 
     function updateSmoothing() {
-        // Interpola las poses para un seguimiento ultra fluido
-        const factor = 0.6;
-        if (smoothedPoses.length !== targetPoses.length) {
-            smoothedPoses = JSON.parse(JSON.stringify(targetPoses));
-        } else {
-            for(let i=0; i<targetPoses.length; i++) {
-                if (targetPoses[i] && targetPoses[i].keypoints && smoothedPoses[i] && smoothedPoses[i].keypoints) {
-                    for(let j=0; j<targetPoses[i].keypoints.length; j++) {
-                        let tKp = targetPoses[i].keypoints[j];
-                        let sKp = smoothedPoses[i].keypoints[j];
-                        if(tKp && sKp) {
-                            sKp.x = sKp.x + (tKp.x - sKp.x) * factor;
-                            sKp.y = sKp.y + (tKp.y - sKp.y) * factor;
-                            sKp.score = tKp.score;
-                        }
-                    }
-                }
-            }
-        }
-
         // Interpola mallas faciales
+        const faceFactor = 0.5;
         if (smoothedFaces.length !== faces.length) {
             smoothedFaces = JSON.parse(JSON.stringify(faces));
         } else {
@@ -1778,32 +1844,312 @@ const paranormalQuestions = [
                 for(let j=0; j<faces[i].length; j++) {
                      let tF = faces[i][j];
                      let sF = smoothedFaces[i][j];
-                     sF.x = sF.x + (tF.x - sF.x) * factor;
-                     sF.y = sF.y + (tF.y - sF.y) * factor;
+                     if(tF && sF) {
+                         sF.x = lerp(sF.x, tF.x, faceFactor);
+                         sF.y = lerp(sF.y, tF.y, faceFactor);
+                     }
                 }
             }
+        }
+
+        // SISTEMA GAMING: INTERPOLACIÓN + PREDICCIÓN PARA SLS
+        if (currentPose) {
+            let basePose = predictPose();
+            if (!smoothedPoses || smoothedPoses.length === 0 || !smoothedPoses[0] || !smoothedPoses[0].keypoints) {
+                smoothedPoses = [{ keypoints: basePose }];
+            } else {
+                smoothedPoses[0].keypoints = smoothPoseObj(smoothedPoses[0].keypoints, basePose, 0.65);
+            }
+        } else {
+            smoothedPoses = [];
+        }
+    }
+
+    // ==========================================
+    // ⚡ EDGE DETECTOR COMPONENTES (RELIEVE TIPO X-RAY)
+    // ==========================================
+
+    let lastEdgeProcess = 0;
+    const EDGE_INTERVAL = 100; // ms (≈10 FPS)
+
+    const edgeCanvas = document.createElement("canvas");
+    const edgeCtx = edgeCanvas.getContext("2d", { willReadFrequently: true });
+    // Aumento de resolución a la de la cámara de análisis original (256x192) para no perder relieves
+    edgeCanvas.width = 256; 
+    edgeCanvas.height = 192;
+    
+    let edgeFrame = null;
+
+    function processEdgeFrame() {
+        const now = performance.now();
+        if (now - lastEdgeProcess < EDGE_INTERVAL) return;
+        lastEdgeProcess = now;
+
+        try {
+            edgeCtx.drawImage(el.video, 0, 0, 256, 192);
+
+            const frame = edgeCtx.getImageData(0, 0, 256, 192);
+            const data = frame.data;
+
+            // Algoritmo matemático para capturar TODOS los desniveles/relieves
+            for (let y = 0; y < 191; y++) {
+                for (let x = 0; x < 255; x++) {
+                    const i = (y * 256 + x) * 4;
+                    const right = i + 4;
+                    const bottom = i + 256 * 4;
+
+                    // Aproximación de luminiscencia
+                    const g1 = (data[i] * 0.3) + (data[i+1] * 0.59) + (data[i+2] * 0.11);
+                    const g2 = (data[right] * 0.3) + (data[right+1] * 0.59) + (data[right+2] * 0.11);
+                    const g3 = (data[bottom] * 0.3) + (data[bottom+1] * 0.59) + (data[bottom+2] * 0.11);
+
+                    // Calculamos la diferencia de relieve (Gradiente 2D rápido)
+                    const diff = Math.abs(g1 - g2) + Math.abs(g1 - g3);
+
+                    // Estilo X-RAY: Coloreamos de Cyan intenso las orillas si superan el umbral
+                    if (diff > 8) { 
+                        data[i] = 0;       // Red
+                        data[i+1] = 200;   // Green
+                        data[i+2] = 255;   // Blue
+                        data[i+3] = Math.min(255, diff * 6); // Alpha proporcional al relieve
+                    } else {
+                        data[i+3] = 0; // Transparente (solo dibujaremos los trazos energéticos)
+                    }
+                }
+            }
+
+            edgeCtx.putImageData(frame, 0, 0);
+            edgeFrame = edgeCanvas;
+        } catch(e) {
+            console.warn("EDGE ERROR:", e);
+        }
+    }
+
+    function drawEDGE(targetCtx, w, h, dX, dY, dW, dH) {
+        processEdgeFrame();
+
+        if (!edgeFrame) return;
+
+        targetCtx.save();
+        
+        // Efecto luminoso y nítido para no verse borroso
+        targetCtx.globalAlpha = 0.9;
+        targetCtx.globalCompositeOperation = "screen";
+        targetCtx.imageSmoothingEnabled = false; 
+
+        // CRÍTICO: Usar dX, dY, dW, dH para encajar 100% sobre el recuadro del video sin encogerse
+        targetCtx.drawImage(
+            edgeFrame,
+            dX, dY, dW, dH
+        );
+
+        targetCtx.restore();
+
+        // HUD ESPECÍFICO PARA MODO EDGE
+        targetCtx.fillStyle = "#00ccff";
+        targetCtx.font = "bold 16px 'Share Tech Mono', monospace";
+        targetCtx.textAlign = "center";
+        targetCtx.shadowBlur = 5;
+        targetCtx.shadowColor = "#00ccff";
+        targetCtx.fillText("ESCANEANDO X-RAY", w / 2, 80);
+        targetCtx.shadowBlur = 0;
+    }
+
+    // --- RENDER HÍBRIDO ÚNICO (FUSION SLS + FACEMESH) ---
+    function drawHybrid(targetCtx, face, pose) {
+        if (!window.drawCoords) return;
+        const { dW, dH, dX, dY } = window.drawCoords;
+        const mapX = (x) => (x * dW) + dX;
+        const mapY = (y) => (y * dH) + dY;
+
+        let drewSomething = false;
+
+        // =====================
+        // 🎯 FACE (MALLA FACEMESH ORIGINAL ULTRA-OPTIMIZADA)
+        // =====================
+        if (face && face.length > 0) {
+            drewSomething = true;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            
+            face.forEach(pt => {
+                if(!pt) return;
+                const absX = mapX(pt.x); const absY = mapY(pt.y);
+                if (absX < minX) minX = absX; if (absY < minY) minY = absY;
+                if (absX > maxX) maxX = absX; if (absY > maxY) maxY = absY;
+            });
+            
+            // 🔴 RECUADRO MÁS GRUESO Y ROJO
+            if (minX !== Infinity) {
+                targetCtx.strokeStyle = "rgba(255, 0, 0, 0.85)";
+                targetCtx.lineWidth = 2.5;
+                targetCtx.shadowBlur = 8;
+                targetCtx.shadowColor = "#ff0000";
+                const pad = 10;
+                targetCtx.strokeRect(minX - pad, minY - pad, (maxX - minX) + pad * 2, (maxY - minY) + pad * 2);
+                targetCtx.shadowBlur = 0; // reset
+            }
+
+            // ==========================================
+            // 🔥 CONTROL DE DENSIDAD DE MALLA (EDITA AQUÍ) 🔥
+            // ==========================================
+            // 1 = Malla completa (Máximo detalle, red tupida tipo avatar)
+            // 2 = Mitad de líneas (Balance perfecto rendimiento/calidad, recomendada)
+            // 3 o 4 = Malla muy ligera (Si ves que bajan los FPS)
+            const DENSIDAD_MALLA = 4; 
+
+            // 1. MALLA TESSELATION (RED GENERAL)
+            if (window.FACEMESH_TESSELATION) {
+                targetCtx.strokeStyle = "#C0C0C070";
+                targetCtx.lineWidth = 1;
+                targetCtx.beginPath();
+                // Iteramos saltando según la densidad elegida
+                for (let i = 0; i < window.FACEMESH_TESSELATION.length; i += DENSIDAD_MALLA) {
+                    const [a, b] = window.FACEMESH_TESSELATION[i];
+                    const p1 = face[a]; const p2 = face[b];
+                    if (p1 && p2) {
+                        targetCtx.moveTo(mapX(p1.x), mapY(p1.y));
+                        targetCtx.lineTo(mapX(p2.x), mapY(p2.y));
+                    }
+                }
+                targetCtx.stroke();
+            }
+
+            // 2. DETALLES FINOS CLAVE (Ojos, Cejas, Ovalo, Labios) - No se reducen para no perder la expresión
+            const drawFeature = (featureMap, color) => {
+                if (!featureMap) return;
+                targetCtx.strokeStyle = color;
+                targetCtx.lineWidth = 1;
+                targetCtx.beginPath();
+                for (let i = 0; i < featureMap.length; i++) {
+                    const [a, b] = featureMap[i];
+                    const p1 = face[a]; const p2 = face[b];
+                    if (p1 && p2) {
+                        targetCtx.moveTo(mapX(p1.x), mapY(p1.y));
+                        targetCtx.lineTo(mapX(p2.x), mapY(p2.y));
+                    }
+                }
+                targetCtx.stroke();
+            };
+
+            drawFeature(window.FACEMESH_RIGHT_EYE, "#FF0000");
+            drawFeature(window.FACEMESH_RIGHT_EYEBROW, "#FF0000");
+            drawFeature(window.FACEMESH_LEFT_EYE, "#FF0000");
+            drawFeature(window.FACEMESH_LEFT_EYEBROW, "#FF0000");
+            drawFeature(window.FACEMESH_FACE_OVAL, "#E0E0E0");
+            drawFeature(window.FACEMESH_LIPS, "#FF0000");
+
+            // 3. PUNTOS NODALES GLOBALES (Reducidos según DENSIDAD_MALLA para no saturar)
+            targetCtx.fillStyle = '#FFFF00'; 
+            targetCtx.beginPath();
+            for(let i=0; i<face.length; i += DENSIDAD_MALLA) {
+                const p = face[i];
+                if(p) {
+                    targetCtx.moveTo(mapX(p.x), mapY(p.y));
+                    targetCtx.arc(mapX(p.x), mapY(p.y), 0.5, 0, Math.PI*2);
+                }
+            }
+            targetCtx.fill();
+        }
+
+        // =====================
+        // 🦴 SLS (ANATOMÍA CORRECTA Y ANCLAJE CUELLO)
+        // =====================
+        if (pose && pose.keypoints && pose.keypoints.length > 0) {
+            drewSomething = true;
+            const k = pose.keypoints;
+            
+            // Huesos clásicos del cuerpo
+            const bones = [
+                [0,1], [0,2], // Nariz unida a los Ojos
+                [5,7],[7,9],[6,8],[8,10], // Brazos
+                [5,11],[6,12],[11,12],[5,6], // Torso
+                [11,13],[13,15],[12,14],[14,16] // Piernas
+            ];
+            
+            targetCtx.strokeStyle = "#ff00ff";
+            targetCtx.lineWidth = 2.5;
+            targetCtx.beginPath();
+            
+            bones.forEach(([a,b]) => {
+                const p1 = k[a]; const p2 = k[b];
+                if (!p1 || !p2 || p1.score < AI_SENSITIVITY || p2.score < AI_SENSITIVITY) return;
+                targetCtx.moveTo(mapX(p1.x), mapY(p1.y));
+                targetCtx.lineTo(mapX(p2.x), mapY(p2.y));
+            });
+            targetCtx.stroke();
+
+            // LÍNEA DE CUELLO (Nariz conectada al centro de los hombros, SÓLO si se detecta cuerpo)
+            const nose = k[0];
+            const lShoulder = k[5];
+            const rShoulder = k[6];
+            
+            if (nose && lShoulder && rShoulder && 
+                nose.score >= AI_SENSITIVITY && 
+                lShoulder.score >= AI_SENSITIVITY && 
+                rShoulder.score >= AI_SENSITIVITY) {
+                
+                // Calcula el punto medio clavicular
+                const midX = (mapX(lShoulder.x) + mapX(rShoulder.x)) / 2;
+                const midY = (mapY(lShoulder.y) + mapY(rShoulder.y)) / 2;
+                
+                targetCtx.beginPath();
+                targetCtx.moveTo(mapX(nose.x), mapY(nose.y));
+                targetCtx.lineTo(midX, midY);
+                targetCtx.stroke();
+            }
+
+            // 🔴 ARTICULACIONES BRILLANTES
+            k.forEach((p, i) => {
+                if(i === 3 || i === 4 || p.score < AI_SENSITIVITY) return; // omitir orejas
+                targetCtx.beginPath();
+                targetCtx.arc(mapX(p.x), mapY(p.y), 3.5, 0, Math.PI * 2);
+                targetCtx.fillStyle = "#ff0000";
+                targetCtx.shadowBlur = 10;
+                targetCtx.shadowColor = "#ff0000";
+                targetCtx.fill();
+            });
+            targetCtx.shadowBlur = 0; 
+        }
+
+        // =====================
+        // 👁️ PRESENCIA (SOLO SI NO HAY NADA)
+        // =====================
+        if (!drewSomething && window.motionLevel > 0.02) {
+            targetCtx.strokeStyle = "rgba(255,0,0,0.4)";
+            targetCtx.lineWidth = 1;
+            targetCtx.strokeRect(dW * 0.35 + dX, dH * 0.2 + dY, dW * 0.3, dH * 0.6);
         }
     }
 
     function renderLoop(now, metadata) {
         if (!now) now = performance.now();
-        const elapsed = now - lastFrameTime;
+        const delta = now - lastFrameTime;
         
-        if (elapsed > fpsInterval) {
-            lastFrameTime = now - (elapsed % fpsInterval);
-            frameCount++;
-            
-            const vW = el.video.videoWidth, vH = el.video.videoHeight;
-            const cW = el.canvas.width, cH = el.canvas.height;
-            
-            const isTransmitting = (peerVideoSender && !peerVideoSender.disconnected) || (conn && conn.open);
-            
-            if (isTransmitting) ctx.clearRect(0, 0, cW, cH);
-            audioLayerCtx.clearRect(0, 0, cW, cH);
-            
-            updateSmoothing();
-            
-            if (vW && vH) {
+        if (delta < fpsInterval) {
+            if ('requestVideoFrameCallback' in el.video) {
+                 el.video.requestVideoFrameCallback(renderLoop);
+            } else {
+                 requestAnimationFrame(renderLoop);
+            }
+            return;
+        }
+
+        if (document.hidden) return;
+
+        lastFrameTime = now;
+        frameCount++;
+        
+        const vW = el.video.videoWidth, vH = el.video.videoHeight;
+        const cW = el.canvas.width, cH = el.canvas.height;
+        
+        const isTransmitting = (peerVideoSender && !peerVideoSender.disconnected) || (conn && conn.open);
+        
+        ctx.clearRect(0, 0, cW, cH);
+        audioLayerCtx.clearRect(0, 0, cW, cH);
+        
+        updateSmoothing();
+        
+        if (vW && vH) {
                 const vRatio = vW / vH, cRatio = cW / cH;
                 let dW, dH, dX, dY;
                 if (cRatio > vRatio) { dW = cW; dH = cW / vRatio; dX = 0; dY = (cH - dH) / 2; } else { dW = cH * vRatio; dH = cH; dX = (cW - dW) / 2; dY = 0; }
@@ -1814,6 +2160,7 @@ const paranormalQuestions = [
                     if(state.filter === 'night') { ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)'; } 
                     else if(state.filter === 'thermal') { ctx.filter = 'grayscale(75%) invert(75%) contrast(1.7) brightness(0.8)'; } 
                     else if(state.filter === 'urbex') { ctx.filter = 'invert(100%) hue-rotate(180deg) saturate(400%) contrast(150%)'; } 
+                    else if(state.filter === 'edge') { ctx.filter = 'grayscale(100%) invert(100%) sepia(100%) hue-rotate(180deg) saturate(3.0) contrast(1.5) brightness(0.4)'; }
                     else { ctx.filter = 'none'; }
                     
                     ctx.drawImage(el.video, 0, 0, vW, vH, dX, dY, dW, dH);
@@ -1836,9 +2183,28 @@ const paranormalQuestions = [
                 }
             }
 
+            // APLICACIÓN DEL RENDERING HÍBRIDO (FACE + SLS)
             if (state.isSLS && !state.isLidar) {
-                 if (isTransmitting) drawSLS(ctx); 
-                 drawSLS(audioLayerCtx); 
+                 const sFace = (smoothedFaces && smoothedFaces.length > 0) ? smoothedFaces[0] : null;
+                 const sPose = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses[0] : null;
+
+                 if (isTransmitting) {
+                     drawHybrid(ctx, sFace, sPose);
+                 }
+                 // SOLO LOCAL
+                 drawHybrid(audioLayerCtx, sFace, sPose);
+            }
+
+            // APLICACIÓN RENDERING EDGE
+            if (state.isEdge && !state.isLidar) {
+                if (el.video.readyState >= 2) {
+                    const { dX, dY, dW, dH } = window.drawCoords;
+                    if (isTransmitting) {
+                        drawEDGE(ctx, cW, cH, dX, dY, dW, dH);
+                    }
+                    // SOLO LOCAL
+                    drawEDGE(audioLayerCtx, cW, cH, dX, dY, dW, dH);
+                }
             }
             
             const speed = 0.4;
@@ -1859,56 +2225,14 @@ const paranormalQuestions = [
             }
             
             if (state.isAudioScan) {
-                if (isTransmitting) drawAudioVisualizer(ctx, cW, cH);
-                drawAudioVisualizer(audioLayerCtx, cW, cH);
-            }
+            if (isTransmitting) drawAudioVisualizer(ctx, cW, cH);
+            drawAudioVisualizer(audioLayerCtx, cW, cH);
         }
 
         if ('requestVideoFrameCallback' in el.video) {
              el.video.requestVideoFrameCallback(renderLoop);
         } else {
              requestAnimationFrame(renderLoop);
-        }
-    }
-
-    function drawSLS(targetCtx) {
-        if (!window.drawCoords) return;
-        const { dW, dH, dX, dY } = window.drawCoords;
-        // Map usando coordenadas normalizadas de nuestro canvas procesado
-        const mapX = (x) => (x * dW) + dX; 
-        const mapY = (y) => (y * dH) + dY;
-        
-        targetCtx.strokeStyle = '#d946ef'; targetCtx.lineWidth = 4; targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round'; targetCtx.fillStyle = '#a855f7';
-        
-        const activePoses = smoothedPoses.length > 0 ? smoothedPoses : targetPoses;
-        
-        activePoses.forEach(pose => {
-            const k = pose.keypoints;
-            const bodyPairs = [[5,7],[7,9],[6,8],[8,10],[11,12],[11,13],[13,15],[12,14],[14,16],[5,11],[6,12]];
-            targetCtx.beginPath(); bodyPairs.forEach(([i, j]) => { if(k[i].score > AI_SENSITIVITY && k[j].score > AI_SENSITIVITY) { targetCtx.moveTo(mapX(k[i].x), mapY(k[i].y)); targetCtx.lineTo(mapX(k[j].x), mapY(k[j].y)); } }); targetCtx.stroke();
-            const nose = k[0], lEye = k[1], rEye = k[2], lShoulder = k[5], rShoulder = k[6];
-            let neckX, neckY;
-            if(lShoulder.score > AI_SENSITIVITY && rShoulder.score > AI_SENSITIVITY) {
-                neckX = (mapX(lShoulder.x) + mapX(rShoulder.x)) / 2; neckY = (mapY(lShoulder.y) + mapY(rShoulder.y)) / 2;
-                targetCtx.beginPath(); targetCtx.moveTo(mapX(lShoulder.x), mapY(lShoulder.y)); targetCtx.lineTo(neckX, neckY); targetCtx.stroke();
-                targetCtx.beginPath(); targetCtx.moveTo(mapX(rShoulder.x), mapY(rShoulder.y)); targetCtx.lineTo(neckX, neckY); targetCtx.stroke();
-                if(nose.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.moveTo(mapX(nose.x), mapY(nose.y)); targetCtx.lineTo(neckX, neckY); targetCtx.stroke(); }
-            }
-            if(nose.score > AI_SENSITIVITY) { if(lEye.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.moveTo(mapX(lEye.x), mapY(lEye.y)); targetCtx.lineTo(mapX(nose.x), mapY(nose.y)); targetCtx.stroke(); } if(rEye.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.moveTo(mapX(rEye.x), mapY(rEye.y)); targetCtx.lineTo(mapX(nose.x), mapY(nose.y)); targetCtx.stroke(); } }
-            k.forEach((p, i) => { if(i === 3 || i === 4) return; if(p.score > AI_SENSITIVITY) { targetCtx.beginPath(); targetCtx.arc(mapX(p.x), mapY(p.y), 4, 0, 2*Math.PI); targetCtx.fill(); } });
-        });
-        
-        const activeFaces = smoothedFaces.length > 0 ? smoothedFaces : faces;
-        if(activeFaces.length > 0) {
-            activeFaces.forEach(face => {
-                let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
-                face.forEach((pt) => { const x=pt.x*dW+dX; const y=pt.y*dH+dY; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; });
-                const pad=20; targetCtx.strokeStyle='red'; targetCtx.lineWidth=2; targetCtx.strokeRect(minX-pad, minY-pad, (maxX-minX)+pad*2, (maxY-minY)+pad*2);
-                targetCtx.fillStyle='#39ff14';
-                // Optimización Facial: Limitar a 30 puntos
-                const ptsToDraw = face.slice(0, 30);
-                ptsToDraw.forEach((pt) => { targetCtx.fillRect(pt.x*dW+dX, pt.y*dH+dY, 1.5, 1.5); });
-            });
         }
     }
 
@@ -2007,7 +2331,9 @@ const paranormalQuestions = [
         peerVideoSender.on('open', async () => {
             const stream = el.canvas.captureStream(30); 
             
-            if (audioStream) {
+            if (mixDestination && mixDestination.stream) {
+                mixDestination.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+            } else if (audioStream) {
                 const audioTracks = audioStream.getAudioTracks();
                 if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
             }
@@ -2031,7 +2357,7 @@ const paranormalQuestions = [
         if(cmd.type === 'cmd' || cmd.category === 'cam') {
             const action = cmd.action; const value = cmd.value;
             if(action === 'filter') { 
-                const map = { 'night':'btn-night', 'thermal':'btn-thermal', 'urbex':'btn-urbex', 'rad': 'btn-rad', 'sls':'btn-sls', 'lidar':'btn-heatmap', 'normal': null }; 
+                const map = { 'night':'btn-night', 'thermal':'btn-thermal', 'urbex':'btn-urbex', 'edge': 'btn-edge', 'sls':'btn-sls', 'lidar':'btn-heatmap', 'normal': null }; 
                 setFilter(value, document.getElementById(map[value])); 
             }
             else if(action === 'flash') toggleTorch(value); 
@@ -2046,7 +2372,12 @@ const paranormalQuestions = [
     }
 
     function setFilter(f, btn) {
-        if(state.filter === f && f !== 'normal') f = 'normal'; state.filter = f; state.isSLS = (f === 'sls'); state.isLidar = (f === 'lidar');
+        if(state.filter === f && f !== 'normal') f = 'normal'; 
+        state.filter = f; 
+        state.isSLS = (f === 'sls'); 
+        state.isLidar = (f === 'lidar');
+        state.isEdge = (f === 'edge');
+        
         document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state')); if(btn && f !== 'normal') btn.classList.add('active-state');
         
         document.body.className = ''; 
@@ -2054,12 +2385,12 @@ const paranormalQuestions = [
             if(f === 'night') document.body.classList.add('filter-night-vision'); 
             else if(f === 'thermal') document.body.classList.add('filter-thermal'); 
             else if(f === 'urbex') document.body.classList.add('filter-urbex'); 
-            else if(f === 'rad') document.body.classList.add('filter-rad'); 
+            else if(f === 'edge') document.body.classList.add('filter-edge'); 
             else if(f === 'sls') document.body.classList.add('filter-pareidolia'); 
         }
         
         if(f === 'night' || f === 'thermal') toggleTorch(true); else toggleTorch(false); 
-        targetPoses = []; smoothedPoses = []; faces = []; smoothedFaces = []; lidarMask = null; lastLidarMask = null;
+        targetPoses = []; smoothedPoses = []; faces = []; smoothedFaces = []; lidarMask = null; lastLidarMask = null; window.motionLevel = 0;
     }
 
     async function toggleTorch(force) { const t = videoStream?.getVideoTracks()[0]; if(!t) return; const on = (typeof force === 'boolean') ? force : !t.getSettings().torch; try { await t.applyConstraints({advanced:[{torch:on}]}); } catch(e){} }
@@ -2108,7 +2439,7 @@ const paranormalQuestions = [
         isAIProcessing = true; currentAiText = "búsqueda de señal..."; currentAiImage = null; startScanningEffect();
         
         // Optimize resolution for Pareidolia payload (320x240)
-        aiSnapCtx.drawImage(video, 0, 0, 320, 240);
+        aiSnapCtx.drawImage(video, 0, 0, 480, 460);
         const snapshot = new Image(); snapshot.src = aiSnapCanvas.toDataURL('image/jpeg', 0.8);
         const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         const prompt = "Actúa como un médium digital. Describe en primera persona lo que ves. Usa frases como 'Veo...', 'Hay algo en...', 'Está...'. Busca caras en las sombras. Sé siniestro. Max 12 palabras.";
