@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>CAMARA OBR PRO v6.1.50 (SMART EVP ENGINE)</title> 
     
     <link rel="icon" type="image/png" href="obr-logo.png">
@@ -38,23 +38,32 @@
     // SERVICE WORKER INLINE — Caché offline completo
     // ════════════════════════════════════════════
     const SW_CODE = `
-const CACHE = 'obr-cam-v1';
-const ASSETS = [
+const CACHE = 'obr-cam-v3';
+const STATIC = [
   './',
   './index.html',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
+  'https://fonts.gstatic.com/s/sharetechmono/v15/J7aHnp1uDWRBEqV98dVQztYldFcLowEFA87Heg.woff2',
+  'https://fonts.gstatic.com/s/orbitron/v29/yMJRMIlzdpvBhQQL_Qq7dys.woff2',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2',
   'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js',
   'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js'
 ];
 
+// Hosts que NUNCA se interceptan (APIs dinámicas, cámara, WebRTC)
+const BYPASS = ['elevenlabs.io','api.elevenlabs.io','peer','googleapis.com/upload',
+                 'api.peerjs.com','stun.','turn.','mediapipe-tasks'];
+
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(cache => {
-      return Promise.allSettled(ASSETS.map(url => cache.add(url).catch(() => {})));
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE).then(cache =>
+      Promise.allSettled(STATIC.map(url =>
+        cache.add(new Request(url, { credentials: 'omit' })).catch(() => {})
+      ))
+    ).then(() => self.skipWaiting())
   );
 });
 
@@ -67,21 +76,23 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Solo interceptar GET, no cámaras ni WebRTC
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.protocol === 'blob:' || url.hostname.includes('peer') ||
-      url.hostname.includes('elevenlabs') || url.hostname.includes('googleapis.com/upload')) return;
+  if (url.protocol === 'blob:' || url.protocol === 'chrome-extension:') return;
+  if (BYPASS.some(b => url.hostname.includes(b) || url.href.includes(b))) return;
 
   e.respondWith(
     caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        if (!res || res.status !== 200 || res.type === 'opaque') return res;
+      // Estrategia: Cache-first para estáticos, Network-first para HTML
+      const isHtml = e.request.destination === 'document';
+      if (cached && !isHtml) return cached;
+
+      return fetch(e.request, { credentials: 'omit' }).then(res => {
+        if (!res || res.status !== 200) return cached || res;
         const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        caches.open(CACHE).then(c => c.put(e.request, clone)).catch(() => {});
         return res;
-      }).catch(() => cached);
+      }).catch(() => cached || new Response('Offline', { status: 503 }));
     })
   );
 });
@@ -164,10 +175,6 @@ self.addEventListener('fetch', e => {
         
         body.filter-thermal #shared-video-element { filter: grayscale(75%) invert(75%) contrast(1.7) brightness(0.8); }
         body.filter-urbex #shared-video-element { filter: invert(100%) hue-rotate(180deg) saturate(400%) contrast(150%); }
-        /* EFECTO EDGE X-RAY: Fondo invertido oscuro — líneas cyan sobre oscuro */
-        /* X-RAY: fondo negro profundo, cero color residual — solo líneas cyan encima */
-        /* X-RAY: fondo oscuro invertido — líneas cyan y volumen encima */
-        body.filter-edge #shared-video-element { filter: grayscale(100%) invert(100%) sepia(100%) hue-rotate(180deg) saturate(3.0) contrast(1.5) brightness(0.4); }
 
         .hud-burn-hidden { display: none; }
 
@@ -193,6 +200,15 @@ self.addEventListener('fetch', e => {
         .menu-btn.active-state { background: white; border-color: white; color: black; box-shadow: 0 0 20px white; }
         @media (max-height: 500px) { .menu-container { gap: 4px; } .menu-btn { width: 36px; height: 36px; font-size: 0.9rem; } .menu-label { display: none; } }
         .menu-label { font-size: 0.55rem; color: white; text-align: center; margin-top: 4px; font-family: 'Share Tech Mono'; background: rgba(0,0,0,0.6); border-radius: 4px; }
+        /* MOBILE UI SCALE FIX — elementos del HUD legibles en pantallas pequeñas */
+        @media (max-width: 480px) {
+            .menu-btn { width: 46px !important; height: 46px !important; font-size: 1.1rem !important; }
+            .menu-label { font-size: 0.6rem !important; }
+            .stat-row { font-size: 12px !important; padding: 3px 6px !important; }
+            #telemetry-container { gap: 4px !important; }
+            #link-status { font-size: 11px !important; padding: 4px 8px !important; }
+            #status-indicators { font-size: 13px !important; }
+        }
 
         #telemetry-container { position: absolute; bottom: 10px; right: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; pointer-events: none; z-index: 150; }
         .stat-row { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: rgba(0, 255, 0, 0.7); text-shadow: 1px 1px 0px black; background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 2px; display: flex; align-items: center; gap: 6px; }
@@ -319,7 +335,6 @@ self.addEventListener('fetch', e => {
         </div>
         <div id="menu-right" class="menu-container right-side">
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="togglePareidolia(this)" id="btn-ia"><i class="fas fa-eye"></i></div><div class="menu-label">VISION</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('edge', this)" id="btn-edge"><i class="fas fa-wave-square"></i></div><div class="menu-label">X-RAY</div></div>
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('sls', this)" id="btn-sls"><i class="fas fa-ghost"></i></div><div class="menu-label">SLS</div></div>
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="resetZoom(this)"><i class="fas fa-compress"></i></div><div class="menu-label">RESET</div></div>
         </div>
@@ -333,7 +348,7 @@ self.addEventListener('fetch', e => {
     <div id="loading">
         <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
         <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.51 (Spirit vox)</p>
+        <p class="text-xs font-mono text-gray-500 mb-8">v6.1.66 (Spirit vox)</p>
         <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden"><div id="progress-bar"></div></div>
         <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
         <button class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
@@ -518,7 +533,7 @@ self.addEventListener('fetch', e => {
         apiKey: localStorage.getItem("obr_ai_key") || localStorage.getItem("obr_gemini_key") || "", 
         aiProvider: localStorage.getItem("obr_ai_provider") || "gemini",
         aiModel: localStorage.getItem("obr_ai_model") || "gemini-2.5-flash", 
-        studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isEdge: false, isPareidolia: false, isAudioScan: false, zoom: 1 
+        studioId: localStorage.getItem("obr_studio_id") || "", filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 
     };
     
     const PEER_CONFIG = { config: { iceServers: [{ urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }] } };
@@ -856,12 +871,22 @@ const paranormalQuestions = [
         return curve;
     }
 
-    // SOLO en interacción usuario para FIX MODO LLAMADA
-    document.addEventListener('click', async () => {
+    // ── DESBLOQUEO GLOBAL iOS/Safari ────────────────────────────────────────
+    // Fuerza resume() del AudioContext en la primera interacción táctil o click
+    let _iosUnlocked = false;
+    async function _unlockAudio() {
+        if (_iosUnlocked) return;
+        _iosUnlocked = true;
         if (audioCtx && audioCtx.state === 'suspended') {
-            await audioCtx.resume();
+            await audioCtx.resume().catch(() => {});
         }
-    }, { once: true });
+        // Reintento silencioso de cloudTTSPlayer si estaba bloqueado por Safari
+        if (cloudTTSPlayer.src && cloudTTSPlayer.paused && !isTtsPlaying) {
+            cloudTTSPlayer.play().catch(() => {});
+        }
+    }
+    document.body.addEventListener('touchstart', _unlockAudio, { passive: true });
+    document.body.addEventListener('click',      _unlockAudio, { once: true });
 
     // --- NUEVO SISTEMA TTS ELEVENLABS ---
     const ELEVENLABS_API_KEY = "sk_e4c25b079bd92a788a81593d86ceadb63add38a5afdb04e0";
@@ -1164,11 +1189,12 @@ const paranormalQuestions = [
     };
 
     // Optimizacion contexto canvas (Hardware acceleration + memory stability)
-    const ctx = el.canvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
-    const audioLayerCtx = el.audioCanvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
-    const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
+    const ctx = el.canvas.getContext('2d', { alpha: true, desynchronized: true, willReadFrequently: false });
+    const audioLayerCtx = el.audioCanvas.getContext('2d', { alpha: true, desynchronized: true, willReadFrequently: false });
+    const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: true, willReadFrequently: false });
     
     let aiDetector = null, faceMesh = null, segmenter = null, poses = [], faces = [], lidarMask = null;
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
     let lidarBusy = false; 
     let lastLidarMask = null; 
@@ -1262,19 +1288,40 @@ const paranormalQuestions = [
     }
 
     // --- DETENER FLUXOS AL SALIR PREVIENE AUDIO BLOQUEADO ---
-    window.addEventListener('beforeunload', () => {
-        if (videoStream) videoStream.getTracks().forEach(track => track.stop());
-        if (audioStream) audioStream.getTracks().forEach(track => track.stop());
+    // Solo detener tracks al cerrar real la pestaña, NO al cambiar de app (TikTok/PiP)
+    window.addEventListener('pagehide', (e) => {
+        if (!e.persisted) { // persisted=true = página en BFCache, NO detener
+            if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+            if (audioStream && audioStream !== videoStream) audioStream.getTracks().forEach(track => track.stop());
+        }
     });
 
     document.addEventListener("visibilitychange", async () => {
         if (document.visibilityState === 'visible') {
             requestWakeLock();
+            // Reanudar audio si estaba suspendido (iOS/Android al volver de TikTok)
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+
             if (videoStream) {
                 const track = videoStream.getVideoTracks()[0];
-                if (!track || track.readyState === 'ended' || el.video.paused) {
+                if (!track || track.readyState === 'ended') {
+                    // Track muerto — solo ahora reiniciar
                     restartCamera();
-                } else { el.video.play().catch(() => restartCamera()); }
+                } else {
+                    // Track vivo — solo reanudar reproducción, SIN pedir permisos
+                    el.video.play().catch(() => {
+                        // Si falla play(), intentar reanudar suavemente primero
+                        setTimeout(() => el.video.play().catch(() => {}), 300);
+                    });
+                }
+            } else if (localStorage.getItem("camPermission") === "granted") {
+                // No hay stream pero tenemos permiso guardado — reanudar sin popup
+                restartCamera();
+            }
+        } else {
+            // Al ocultar: guardar estado de permisos
+            if (videoStream && videoStream.active) {
+                localStorage.setItem("camPermission", "granted");
             }
         }
     });
@@ -1287,9 +1334,13 @@ const paranormalQuestions = [
         
         isRestartingCamera = true;
         try {
-            if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); }
+            // Solo detener tracks si realmente están muertos
+            if (videoStream) {
+                const aliveTrack = videoStream.getVideoTracks().find(t => t.readyState === 'live');
+                if (!aliveTrack) videoStream.getTracks().forEach(t => t.stop());
+            }
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, // SAFE FOR TIKTOK
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
                 video: { 
                     facingMode: 'environment', 
                     width: { ideal: 3840 }, 
@@ -1302,6 +1353,8 @@ const paranormalQuestions = [
             audioStream = stream; 
             el.video.srcObject = stream; 
             await el.video.play();
+            // Guardar permiso exitoso
+            localStorage.setItem("camPermission", "granted");
             
             if (state.zoom > 1) {
                  const track = stream.getVideoTracks()[0];
@@ -1446,6 +1499,8 @@ const paranormalQuestions = [
 
         // ── Éxito ────────────────────────────────────────────────────────
         localStorage.setItem("camPermission", "granted");
+        localStorage.setItem("obr_last_session", Date.now().toString());
+        localStorage.setItem("obr_cam_facing", "environment");
         videoStream = stream;
         audioStream = stream;
         el.video.srcObject = stream;
@@ -1470,10 +1525,10 @@ const paranormalQuestions = [
                 if(window.FaceMesh) { 
                     faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`}); 
                     faceMesh.setOptions({
-                        maxNumFaces: 1,
+                        maxNumFaces: 4,
                         refineLandmarks: true,
-                        minDetectionConfidence: 0.5,
-                        minTrackingConfidence: 0.5
+                        minDetectionConfidence: 0.4,
+                        minTrackingConfidence: 0.4
                     });
                     await faceMesh.initialize(); 
                     // EVITA DUPLICADOS - SOLO UNA VEZ
@@ -1512,7 +1567,7 @@ const paranormalQuestions = [
     let faceFrameSkip = 0; // Throttle para FaceMesh
 
     async function detectionLoop() {
-        if (!state.isSLS && !state.isLidar && !state.isPareidolia && !state.isEdge) {
+        if (!state.isSLS && !state.isLidar && !state.isPareidolia ) {
             targetPoses = []; faces = []; lidarMask = null;
             requestAnimationFrame(detectionLoop);
             return;
@@ -1564,7 +1619,7 @@ const paranormalQuestions = [
 
                 // FACEMESH MÁS RÁPIDO (SOLO CADA 2 FRAMES)
                 if (faceMesh && state.isSLS) {
-                    if (faceFrameSkip++ % 2 === 0) {
+                    if (faceFrameSkip++ % (isMobileDevice ? 3 : 2) === 0) {
                         ensureImageDrawn();
                         try { await faceMesh.send({image: analysisCanvas}); } catch(e){} 
                     }
@@ -1581,6 +1636,11 @@ const paranormalQuestions = [
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext({ latencyHint: 'interactive' }); 
+
+        // iOS/Safari: desbloquear contexto inmediatamente si ya hubo interacción
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume().catch(() => {});
+        }
 
         // 1. TTS Source
         if (!ttsSource) {
@@ -2023,7 +2083,7 @@ const paranormalQuestions = [
         ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA);
         ctx.scale(adjustedScale, adjustedScale);
 
-        ctx.shadowColor = "black"; ctx.shadowBlur = 4;
+        ctx.shadowColor = "black"; ctx.shadowBlur = performanceLagging ? 0 : 4;
         
         if(logoImg.complete) ctx.drawImage(logoImg, 0, 0, 80, 80); 
         ctx.fillStyle = "white"; ctx.font = "bold 16px 'Orbitron', sans-serif";
@@ -2157,387 +2217,7 @@ const paranormalQuestions = [
     }
 
     // ==========================================
-    // ==========================================
-    // ⚡ EDGE DETECTOR X-RAY — FIX 1+2+7: alineación real + contorno + anti-temblor
-    // ==========================================
 
-    let lastEdgeProcess = 0;
-    const EDGE_INTERVAL = 80; // ms (~12 FPS, más fluido)
-
-    const edgeCanvas = document.createElement("canvas");
-    const edgeCtx = edgeCanvas.getContext("2d", { willReadFrequently: true });
-    edgeCanvas.width  = 320;
-    edgeCanvas.height = 240;
-
-    let edgeFrame    = null;
-    let lastEdgeData = null;
-
-    // ==========================================
-    // ⚡ XRAY PRO — PROFUNDIDAD + VOLUMEN + PRESENCIA AMBIENTAL
-    // ==========================================
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    let rawFrameForPro  = null;
-    let presenceMapPro  = [];
-    let xrayProCache    = null;
-    let xrayProLastProc = 0;
-    const XRAY_PRO_INTERVAL = isMobileDevice ? 250 : 120;
-
-    function generateDepthMap(imageData) {
-        const depth = new Uint8ClampedArray(imageData.data.length);
-        for (let i = 0; i < imageData.data.length; i += 4) {
-            const z = 255 - ((imageData.data[i] + imageData.data[i+1] + imageData.data[i+2]) / 3);
-            depth[i] = z; depth[i+1] = z; depth[i+2] = z; depth[i+3] = 255;
-        }
-        return new ImageData(depth, imageData.width, imageData.height);
-    }
-
-    function detectEdgesPro(imageData) {
-        const edges = [];
-        const w = imageData.width;
-        const d = imageData.data;
-        const step = isMobileDevice ? 8 : 4;
-        for (let y = 1; y < imageData.height - 1; y += step) {
-            for (let x = 1; x < w - 1; x += step) {
-                const i = (y * w + x) * 4;
-                const diff = Math.abs(d[i] - d[i + 4]) + Math.abs(d[i] - d[i + w * 4]);
-                if (diff > 40) edges.push({ x, y, strength: diff });
-            }
-        }
-        return edges;
-    }
-
-    function processXRayProData() {
-        const now = performance.now();
-        if (now - xrayProLastProc < XRAY_PRO_INTERVAL || !rawFrameForPro) return;
-        xrayProLastProc = now;
-        try {
-            const depthMap = generateDepthMap(rawFrameForPro);
-            const edges    = detectEdgesPro(rawFrameForPro);
-            presenceMapPro = edges.filter(e => e.strength > 60);
-            xrayProCache   = { depthMap, srcW: rawFrameForPro.width, srcH: rawFrameForPro.height };
-        } catch(e) {}
-    }
-
-    function processEdgeFrame() {
-        const now = performance.now();
-        const interval = performanceLagging ? EDGE_INTERVAL * 2 : EDGE_INTERVAL;
-        if (now - lastEdgeProcess < interval) return;
-        lastEdgeProcess = now;
-
-        const vW = el.video.videoWidth  || 320;
-        const vH = el.video.videoHeight || 240;
-
-        const targetW = 320;
-        const targetH = Math.round(targetW * (vH / vW));
-        if (edgeCanvas.width !== targetW || edgeCanvas.height !== targetH) {
-            edgeCanvas.width  = targetW;
-            edgeCanvas.height = targetH;
-            lastEdgeData = null;
-        }
-
-        try {
-            edgeCtx.drawImage(el.video, 0, 0, targetW, targetH);
-            const frame = edgeCtx.getImageData(0, 0, targetW, targetH);
-            // Guardar frame crudo para XRAY PRO
-            if (state.isEdge) rawFrameForPro = new ImageData(new Uint8ClampedArray(frame.data), targetW, targetH);
-            const data = frame.data;
-            const W = targetW, H = targetH;
-
-            // Bordes por gradiente de luminancia
-            for (let y = 0; y < H - 1; y++) {
-                for (let x = 0; x < W - 1; x++) {
-                    const i      = (y * W + x) * 4;
-                    const right  = i + 4;
-                    const bottom = i + W * 4;
-                    const g1 = data[i]      * 0.299 + data[i+1]      * 0.587 + data[i+2]      * 0.114;
-                    const g2 = data[right]  * 0.299 + data[right+1]  * 0.587 + data[right+2]  * 0.114;
-                    const g3 = data[bottom] * 0.299 + data[bottom+1] * 0.587 + data[bottom+2] * 0.114;
-                    const diff = Math.abs(g1 - g2) + Math.abs(g1 - g3);
-                    if (diff > 10) {
-                        const intensity = Math.min(255, diff * 2.5);
-                        data[i]   = 0;
-                        data[i+1] = Math.round(intensity * 0.78);
-                        data[i+2] = intensity;
-                        data[i+3] = Math.min(220, intensity);
-                    } else {
-                        data[i+3] = 0;
-                    }
-                }
-            }
-
-            // Suavizado temporal 60/40
-            if (lastEdgeData && lastEdgeData.length === data.length) {
-                for (let i = 0; i < data.length; i++) {
-                    data[i] = Math.round(data[i] * 0.6 + lastEdgeData[i] * 0.4);
-                }
-            }
-            lastEdgeData = new Uint8ClampedArray(data);
-
-            edgeCtx.putImageData(frame, 0, 0);
-            edgeFrame = edgeCanvas;
-        } catch(e) { console.warn("EDGE ERROR:", e); }
-    }
-
-    // Pareidolia reforzada: círculos pulsantes en caras + torso + anomalías de borde
-    function drawPareidoliaHints(targetCtx, dX, dY, dW, dH) {
-        if (!window.drawCoords) return;
-        const mapX = (x) => (x * dW) + dX;
-        const mapY = (y) => (y * dH) + dY;
-        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.003); // 0–1 animado
-
-        // — CARA detectada: círculo pulsante más visible
-        if (smoothedFaces && smoothedFaces.length > 0) {
-            smoothedFaces.forEach(face => {
-                if (!face || face.length === 0) return;
-                const nose = face[1] || face[0];
-                if (!nose) return;
-                const cx = mapX(nose.x);
-                const cy = mapY(nose.y);
-                const alpha = 0.18 + pulse * 0.25; // ⚙️ SENSIBILIDAD: subir = círculo más visible
-                targetCtx.save();
-                targetCtx.strokeStyle = `rgba(100,220,255,${alpha.toFixed(2)})`;
-                targetCtx.lineWidth = 1.5;
-                targetCtx.shadowBlur = pulse * 10;
-                targetCtx.shadowColor = "rgba(0,180,255,0.8)";
-                targetCtx.beginPath();
-                targetCtx.arc(cx, cy, 26 + pulse * 8, 0, Math.PI * 2); // ⚙️ SENSIBILIDAD: radio mayor
-                targetCtx.stroke();
-                targetCtx.restore();
-            });
-        }
-
-        // — TORSO detectado: elipse sutil pulsante
-        if (targetPoses && targetPoses.length > 0) {
-            targetPoses.forEach(p => {
-                if (!p || !p.keypoints) return;
-                const ls = p.keypoints[5]; const rs = p.keypoints[6];
-                if (!ls || !rs || ls.score < 0.2 || rs.score < 0.2) return;
-                const cx = mapX((ls.x + rs.x) / 2);
-                const cy = mapY((ls.y + rs.y) / 2);
-                const alpha = 0.06 + pulse * 0.10;
-                targetCtx.save();
-                targetCtx.strokeStyle = `rgba(100,200,255,${alpha.toFixed(2)})`;
-                targetCtx.lineWidth = 1;
-                targetCtx.beginPath();
-                targetCtx.arc(cx, cy, 16 + pulse * 4, 0, Math.PI * 2);
-                targetCtx.stroke();
-                targetCtx.restore();
-            });
-        }
-
-        // — ANOMALÍAS DE BORDE: puntos rojos de presencia ambiental
-        if (presenceMapPro && presenceMapPro.length > 0) {
-            targetCtx.save();
-            targetCtx.globalCompositeOperation = "screen";
-            presenceMapPro.forEach(pt => {
-                const intensity = Math.min(1, pt.strength / 200);
-                const px = mapX(pt.x / (xrayProCache ? xrayProCache.srcW : 1));
-                const py = mapY(pt.y / (xrayProCache ? xrayProCache.srcH : 1));
-                targetCtx.beginPath();
-                targetCtx.arc(px, py, 2 + intensity * 3, 0, Math.PI * 2);
-                targetCtx.fillStyle = `rgba(255,80,80,${(intensity * 0.55).toFixed(2)})`;
-                targetCtx.fill();
-            });
-            targetCtx.restore();
-        }
-    }
-
-    // ==========================================
-    // 👤 DETECCIÓN HUMANOIDE GEOMÉTRICA (sin IA pesada)
-    // ==========================================
-
-    function detectClusters(points) {
-        const clusters = [];
-        points.forEach(p => {
-            let added = false;
-            for (let ci = 0; ci < clusters.length; ci++) {
-                const cluster = clusters[ci];
-                const dx = p.x - cluster.cx;
-                const dy = p.y - cluster.cy;
-                if (Math.sqrt(dx*dx + dy*dy) < 60) {
-                    cluster.points.push(p);
-                    cluster.cx = (cluster.cx + p.x) / 2;
-                    cluster.cy = (cluster.cy + p.y) / 2;
-                    added = true;
-                    break;
-                }
-            }
-            if (!added) clusters.push({ cx: p.x, cy: p.y, points: [p] });
-        });
-        return clusters;
-    }
-
-    function isHumanoid(cluster) {
-        if (cluster.points.length < 6) return false;
-        const ys = cluster.points.map(p => p.y);
-        const xs = cluster.points.map(p => p.x);
-        const height = Math.max(...ys) - Math.min(...ys);
-        const width  = Math.max(...xs) - Math.min(...xs);
-        if (width === 0) return false;
-        const ratio = height / width;
-        return ratio > 1.2 && ratio < 4;
-    }
-
-    function detectHead(cluster) {
-        const topY = Math.min(...cluster.points.map(p => p.y));
-        const headPoints = cluster.points.filter(p => p.y < topY + 25);
-        if (headPoints.length < 2) return null;
-        const avgX = headPoints.reduce((a, p) => a + p.x, 0) / headPoints.length;
-        const avgY = headPoints.reduce((a, p) => a + p.y, 0) / headPoints.length;
-        return { x: avgX, y: avgY };
-    }
-
-    function drawHumanoidHint(targetCtx, cluster, mapX, mapY) {
-        if (!isHumanoid(cluster)) return;
-        const head = detectHead(cluster);
-        if (!head) return;
-
-        const hx = mapX(head.x);
-        const hy = mapY(head.y);
-        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.002);
-        const alpha = (0.12 + pulse * 0.12).toFixed(2);
-
-        targetCtx.save();
-        targetCtx.strokeStyle = `rgba(100,220,255,${alpha})`;
-        targetCtx.lineWidth = 1;
-        targetCtx.shadowBlur = pulse * 6;
-        targetCtx.shadowColor = "rgba(0,180,255,0.5)";
-        targetCtx.globalCompositeOperation = "source-over";
-
-        // Cabeza — círculo con glow leve
-        targetCtx.beginPath();
-        targetCtx.arc(hx, hy, 13, 0, Math.PI * 2);
-        targetCtx.stroke();
-
-        // Torso — línea vertical sutil
-        targetCtx.beginPath();
-        targetCtx.moveTo(hx, hy + 13);
-        targetCtx.lineTo(hx, hy + 48);
-        targetCtx.stroke();
-
-        targetCtx.restore();
-    }
-
-    // Extrae puntos SLS normalizados desde todas las poses detectadas
-    function getSLSPoints() {
-        const pts = [];
-        if (!targetPoses || targetPoses.length === 0) return pts;
-        targetPoses.forEach(pose => {
-            if (!pose || !pose.keypoints) return;
-            pose.keypoints.forEach(kp => {
-                if (kp && kp.score >= 0.9) {  // ⚙️ SENSIBILIDAD PAREIDOLIA X-RAY: bajar = más puntos detectados 0.15 DEFECTO
-                    pts.push({ x: kp.x, y: kp.y });
-                }
-            });
-        });
-        return pts;
-    }
-
-    // Dibuja hints humanoides sobre el canvas dado (X-RAY o SLS)
-    function drawHumanoidLayer(targetCtx, dX, dY, dW, dH) {
-        if (!window.drawCoords) return;
-        const mapX = (x) => (x * dW) + dX;
-        const mapY = (y) => (y * dH) + dY;
-
-        const slsPoints = getSLSPoints();
-        if (slsPoints.length === 0) return;
-
-        const clusters = detectClusters(slsPoints);
-        clusters.forEach(cluster => drawHumanoidHint(targetCtx, cluster, mapX, mapY));
-    }
-
-
-
-    function drawEDGE(targetCtx, w, h, dX, dY, dW, dH) {
-        processEdgeFrame();
-        processXRayProData();
-
-        // ── Capa 1: Bordes originales (líneas cyan) ──────────────────────
-        if (edgeFrame) {
-            targetCtx.save();
-            targetCtx.globalAlpha = 0.85;
-            targetCtx.globalCompositeOperation = "lighter";
-            targetCtx.imageSmoothingEnabled = true;
-            targetCtx.imageSmoothingQuality = "low";
-            targetCtx.drawImage(edgeFrame, dX, dY, dW, dH);
-            targetCtx.restore();
-        }
-
-        // ── Capa 2: XRAY PRO sobre los bordes ────────────────────────────
-        if (xrayProCache) {
-            const { depthMap, srcW, srcH } = xrayProCache;
-            const scaleX = dW / srcW;
-            const scaleY = dH / srcH;
-            const step   = isMobileDevice ? 8 : 4;
-
-            // Volumen corporal
-            targetCtx.save();
-            targetCtx.globalCompositeOperation = "lighter";
-            for (let y = 0; y < srcH; y += step) {
-                for (let x = 0; x < srcW; x += step) {
-                    const z = depthMap.data[(y * srcW + x) * 4];
-                    if (z < 25) continue;
-                    const alpha = (z / 255) * 0.22;
-                    targetCtx.fillStyle = `rgba(100,220,255,${alpha.toFixed(3)})`;
-                    targetCtx.fillRect(dX + x*scaleX, dY + y*scaleY,
-                        Math.max(2, step*scaleX*0.6), Math.max(2, step*scaleY*0.6));
-                }
-            }
-            targetCtx.restore();
-
-            // Presencia ambiental (anomalías rojas)
-            if (presenceMapPro.length > 0) {
-                targetCtx.save();
-                targetCtx.globalCompositeOperation = "screen";
-                const maxPoints = isMobileDevice ? 200 : 500;
-                const slice = presenceMapPro.length > maxPoints
-                    ? presenceMapPro.filter((_, i) => i % Math.ceil(presenceMapPro.length / maxPoints) === 0)
-                    : presenceMapPro;
-                slice.forEach(p => {
-                    const intensity = Math.min(1, p.strength / 200);
-                    targetCtx.beginPath();
-                    targetCtx.arc(dX + p.x*scaleX, dY + p.y*scaleY, 2 + intensity*3, 0, Math.PI*2);
-                    targetCtx.fillStyle = `rgba(255,80,80,${(intensity*0.6).toFixed(3)})`;
-                    targetCtx.fill();
-                });
-                targetCtx.restore();
-            }
-
-            // Campo de energía dinámico
-            const time = performance.now();
-            targetCtx.save();
-            targetCtx.globalCompositeOperation = "overlay";
-            targetCtx.lineWidth = 1;
-            for (let i = dX; i < dX + dW; i += 20) {
-                const y0 = Math.sin((i + time * 0.001) * 0.1) * 12;
-                targetCtx.beginPath();
-                targetCtx.moveTo(i, dY + y0);
-                targetCtx.lineTo(i + Math.sin(time * 0.002) * 4, dY + dH + y0);
-                targetCtx.strokeStyle = 'rgba(0,255,255,0.04)';
-                targetCtx.stroke();
-            }
-            targetCtx.restore();
-        }
-
-        // ── Capa 3: Pareidolia + Humanoides ──────────────────────────────
-        // ⚙️ SENSIBILIDAD PAREIDOLIA X-RAY:
-        // drawPareidoliaHints → alpha cara: 0.10+pulse*0.18 | radio: 22+pulse*6
-        // drawHumanoidLayer   → isHumanoid ratio 1.2–4, min 6 puntos
-        // Para más sensibilidad: bajar threshold score en getSLSPoints (0.15)
-        //                        o bajar radio mínimo de clusters (45px)
-        drawPareidoliaHints(targetCtx, dX, dY, dW, dH);
-        drawHumanoidLayer(targetCtx, dX, dY, dW, dH);
-
-        // ── HUD ──────────────────────────────────────────────────────────
-        targetCtx.save();
-        targetCtx.fillStyle   = "#00ffff";
-        targetCtx.font        = "bold 11px 'Share Tech Mono', monospace";
-        targetCtx.textAlign   = "right";
-        targetCtx.shadowBlur  = 5;
-        targetCtx.shadowColor = "#00ffff";
-        targetCtx.fillText(`X-RAY ● ANOMALÍAS: ${presenceMapPro.length}`, w - 15, 100);
-        targetCtx.restore();
-    }
 
 
     // --- RENDER HÍBRIDO ÚNICO (FUSION SLS + FACEMESH) ---
@@ -2580,7 +2260,7 @@ const paranormalQuestions = [
             // 1 = Malla completa (Máximo detalle, red tupida tipo avatar)
             // 2 = Mitad de líneas (Balance perfecto rendimiento/calidad, recomendada)
             // 3 o 4 = Malla muy ligera (Si ves que bajan los FPS)
-            const DENSIDAD_MALLA = 4; 
+            const DENSIDAD_MALLA = isMobileDevice ? 6 : 4;
 
             // 1. MALLA TESSELATION (RED GENERAL)
             if (window.FACEMESH_TESSELATION) {
@@ -2654,10 +2334,11 @@ const paranormalQuestions = [
                 [11,13],[13,15],[12,14],[14,16] // Piernas
             ];
             
-            targetCtx.strokeStyle = "rgba(0,255,180,0.6)";
-            targetCtx.lineWidth = 1.5;
-            targetCtx.shadowBlur = 4;
-            targetCtx.shadowColor = "rgba(0,255,180,0.3)";
+            const slsLineW = isMobileDevice ? 4.5 : 2.5;
+            targetCtx.strokeStyle = "rgba(180,0,255,0.9)";
+            targetCtx.lineWidth = slsLineW;
+            targetCtx.shadowBlur = 8;
+            targetCtx.shadowColor = "rgba(200,0,255,0.7)";
             targetCtx.beginPath();
             
             bones.forEach(([a,b]) => {
@@ -2684,28 +2365,29 @@ const paranormalQuestions = [
                 const midY = (mapY(lShoulder.y) + mapY(rShoulder.y)) / 2;
                 
                 targetCtx.beginPath();
-                targetCtx.strokeStyle = "rgba(0,255,180,0.6)";
-                targetCtx.lineWidth = 1.5;
-                targetCtx.shadowBlur = 4;
-                targetCtx.shadowColor = "rgba(0,255,180,0.3)";
+                targetCtx.strokeStyle = "rgba(180,0,255,0.9)";
+                targetCtx.lineWidth = isMobileDevice ? 4.5 : 2.5;
+                targetCtx.shadowBlur = 8;
+                targetCtx.shadowColor = "rgba(200,0,255,0.7)";
                 targetCtx.moveTo(mapX(nose.x), mapY(nose.y));
                 targetCtx.lineTo(midX, midY);
                 targetCtx.stroke();
                 targetCtx.shadowBlur = 0;
             }
 
-            // 🔴 ARTICULACIONES — rojo brillante tipo escáner
+            // 🔴 ARTICULACIONES — rojo con efecto pulso animado
+            const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.005);
             k.forEach((p, i) => {
-                if(i === 3 || i === 4 || p.score < AI_SENSITIVITY) return; // omitir orejas
-                // Radio y brillo mayor en cabeza (keypoint 0=nariz, 1-2=ojos)
+                if(i === 3 || i === 4 || p.score < AI_SENSITIVITY) return;
                 const isHead = (i === 0 || i === 1 || i === 2);
-                const radius = isHead ? 3 : 2.5;
-                const alpha  = isHead ? 0.95 : 0.7;
+                const baseR  = isHead ? 4 : 3;
+                const radius = baseR + pulse * (isHead ? 2.5 : 1.5); // pulso
+                const alpha  = (isHead ? 0.95 : 0.75) * (0.7 + pulse * 0.3);
                 targetCtx.beginPath();
                 targetCtx.arc(mapX(p.x), mapY(p.y), radius, 0, Math.PI * 2);
-                targetCtx.fillStyle = `rgba(255,0,0,${alpha})`;
-                targetCtx.shadowBlur = isHead ? 10 : 4;
-                targetCtx.shadowColor = `rgba(255,0,0,${alpha})`;
+                targetCtx.fillStyle = `rgba(255,0,0,${alpha.toFixed(2)})`;
+                targetCtx.shadowBlur = isHead ? (10 + pulse * 8) : (5 + pulse * 4);
+                targetCtx.shadowColor = `rgba(255,60,60,${alpha.toFixed(2)})`;
                 targetCtx.fill();
             });
             targetCtx.shadowBlur = 0; 
@@ -2718,6 +2400,129 @@ const paranormalQuestions = [
             targetCtx.strokeStyle = "rgba(255,0,0,0.4)";
             targetCtx.lineWidth = 1;
             targetCtx.strokeRect(dW * 0.35 + dX, dH * 0.2 + dY, dW * 0.3, dH * 0.6);
+        }
+    }
+
+    // ==========================================
+    // 👤 DETECCIÓN HUMANOIDE GEOMÉTRICA + PAREIDOLIA (SLS overlay)
+    // ==========================================
+
+    function detectClusters(points) {
+        const clusters = [];
+        points.forEach(p => {
+            let added = false;
+            for (let ci = 0; ci < clusters.length; ci++) {
+                const c = clusters[ci];
+                const dx = p.x - c.cx, dy = p.y - c.cy;
+                if (Math.sqrt(dx*dx + dy*dy) < 60) {
+                    c.points.push(p);
+                    c.cx = (c.cx + p.x) / 2;
+                    c.cy = (c.cy + p.y) / 2;
+                    added = true; break;
+                }
+            }
+            if (!added) clusters.push({ cx: p.x, cy: p.y, points: [p] });
+        });
+        return clusters;
+    }
+
+    function isHumanoid(cluster) {
+        if (cluster.points.length < 6) return false;
+        const ys = cluster.points.map(p => p.y);
+        const xs = cluster.points.map(p => p.x);
+        const h = Math.max(...ys) - Math.min(...ys);
+        const w = Math.max(...xs) - Math.min(...xs);
+        if (w === 0) return false;
+        const ratio = h / w;
+        return ratio > 1.2 && ratio < 4;
+    }
+
+    function detectHead(cluster) {
+        const topY = Math.min(...cluster.points.map(p => p.y));
+        const hp = cluster.points.filter(p => p.y < topY + 25);
+        if (hp.length < 2) return null;
+        return { x: hp.reduce((a,p) => a+p.x, 0) / hp.length, y: hp.reduce((a,p) => a+p.y, 0) / hp.length };
+    }
+
+    function drawHumanoidHint(targetCtx, cluster, mapX, mapY) {
+        if (!isHumanoid(cluster)) return;
+        const head = detectHead(cluster);
+        if (!head) return;
+        const hx = mapX(head.x), hy = mapY(head.y);
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.002);
+        const alpha = (0.12 + pulse * 0.12).toFixed(2);
+        targetCtx.save();
+        targetCtx.strokeStyle = `rgba(100,220,255,${alpha})`;
+        targetCtx.lineWidth = 1;
+        targetCtx.shadowBlur = pulse * 6;
+        targetCtx.shadowColor = "rgba(0,180,255,0.5)";
+        targetCtx.globalCompositeOperation = "source-over";
+        targetCtx.beginPath(); targetCtx.arc(hx, hy, 13, 0, Math.PI * 2); targetCtx.stroke();
+        targetCtx.beginPath(); targetCtx.moveTo(hx, hy + 13); targetCtx.lineTo(hx, hy + 48); targetCtx.stroke();
+        targetCtx.restore();
+    }
+
+    function getSLSPoints() {
+        const pts = [];
+        if (!targetPoses || targetPoses.length === 0) return pts;
+        targetPoses.forEach(pose => {
+            if (!pose || !pose.keypoints) return;
+            pose.keypoints.forEach(kp => {
+                if (kp && kp.score >= 0.15) pts.push({ x: kp.x, y: kp.y });
+            });
+        });
+        return pts;
+    }
+
+    function drawHumanoidLayer(targetCtx, dX, dY, dW, dH) {
+        if (!window.drawCoords) return;
+        const mapX = x => (x * dW) + dX;
+        const mapY = y => (y * dH) + dY;
+        const pts = getSLSPoints();
+        if (pts.length === 0) return;
+        detectClusters(pts).forEach(cl => drawHumanoidHint(targetCtx, cl, mapX, mapY));
+    }
+
+    function drawPareidoliaHints(targetCtx, dX, dY, dW, dH) {
+        if (!window.drawCoords) return;
+        const mapX = x => (x * dW) + dX;
+        const mapY = y => (y * dH) + dY;
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.003);
+
+        if (smoothedFaces && smoothedFaces.length > 0) {
+            smoothedFaces.forEach(face => {
+                if (!face || face.length === 0) return;
+                const nose = face[1] || face[0];
+                if (!nose) return;
+                const cx = mapX(nose.x), cy = mapY(nose.y);
+                const alpha = (0.18 + pulse * 0.25).toFixed(2);
+                targetCtx.save();
+                targetCtx.strokeStyle = `rgba(100,220,255,${alpha})`;
+                targetCtx.lineWidth = 1.5;
+                targetCtx.shadowBlur = pulse * 10;
+                targetCtx.shadowColor = "rgba(0,180,255,0.8)";
+                targetCtx.beginPath();
+                targetCtx.arc(cx, cy, 26 + pulse * 8, 0, Math.PI * 2);
+                targetCtx.stroke();
+                targetCtx.restore();
+            });
+        }
+
+        if (targetPoses && targetPoses.length > 0) {
+            targetPoses.forEach(p => {
+                if (!p || !p.keypoints) return;
+                const ls = p.keypoints[5], rs = p.keypoints[6];
+                if (!ls || !rs || ls.score < 0.2 || rs.score < 0.2) return;
+                const cx = mapX((ls.x + rs.x) / 2), cy = mapY((ls.y + rs.y) / 2);
+                const alpha = (0.06 + pulse * 0.10).toFixed(2);
+                targetCtx.save();
+                targetCtx.strokeStyle = `rgba(100,200,255,${alpha})`;
+                targetCtx.lineWidth = 1;
+                targetCtx.beginPath();
+                targetCtx.arc(cx, cy, 16 + pulse * 4, 0, Math.PI * 2);
+                targetCtx.stroke();
+                targetCtx.restore();
+            });
         }
     }
 
@@ -2763,7 +2568,6 @@ const paranormalQuestions = [
                     if(state.filter === 'night') { ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)'; } 
                     else if(state.filter === 'thermal') { ctx.filter = 'grayscale(75%) invert(75%) contrast(1.7) brightness(0.8)'; } 
                     else if(state.filter === 'urbex') { ctx.filter = 'invert(100%) hue-rotate(180deg) saturate(400%) contrast(150%)'; } 
-                    else if(state.filter === 'edge') { ctx.filter = 'grayscale(100%) invert(100%) sepia(100%) hue-rotate(180deg) saturate(3.0) contrast(1.5) brightness(0.4)'; }
                     else { ctx.filter = 'none'; }
                     
                     ctx.drawImage(el.video, 0, 0, vW, vH, dX, dY, dW, dH);
@@ -2791,20 +2595,27 @@ const paranormalQuestions = [
                  const sFace = (smoothedFaces && smoothedFaces.length > 0) ? smoothedFaces[0] : null;
                  const sPose = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses[0] : null;
 
-                 // Fallback visual si no hay detección
                  if (!sFace && !sPose && (!targetPoses || targetPoses.length === 0)) { drawFallbackSilhouette(); }
 
                  if (isTransmitting) {
+                     // Persona principal
                      drawHybrid(ctx, sFace, sPose);
+                     // Caras adicionales detectadas (multi-face)
+                     if (smoothedFaces && smoothedFaces.length > 1) {
+                         for (let fi = 1; fi < smoothedFaces.length; fi++) drawHybrid(ctx, smoothedFaces[fi], null);
+                     }
+                     // Poses adicionales (multi-persona)
                      if (targetPoses && targetPoses.length > 1) {
                          for (let pi = 1; pi < targetPoses.length; pi++) drawHybrid(ctx, null, targetPoses[pi]);
                      }
-                     // Hints humanoides geométricos sobre SLS
                      const { dX: slsDx, dY: slsDy, dW: slsDw, dH: slsDh } = window.drawCoords;
                      drawHumanoidLayer(ctx, slsDx, slsDy, slsDw, slsDh);
                  }
                  // SOLO LOCAL
                  drawHybrid(audioLayerCtx, sFace, sPose);
+                 if (smoothedFaces && smoothedFaces.length > 1) {
+                     for (let fi = 1; fi < smoothedFaces.length; fi++) drawHybrid(audioLayerCtx, smoothedFaces[fi], null);
+                 }
                  if (targetPoses && targetPoses.length > 1) {
                      for (let pi = 1; pi < targetPoses.length; pi++) drawHybrid(audioLayerCtx, null, targetPoses[pi]);
                  }
@@ -2812,17 +2623,6 @@ const paranormalQuestions = [
                  drawHumanoidLayer(audioLayerCtx, slsDxL, slsDyL, slsDwL, slsDhL);
             }
 
-            // APLICACIÓN RENDERING EDGE
-            if (state.isEdge && !state.isLidar) {
-                if (el.video.readyState >= 2) {
-                    const { dX, dY, dW, dH } = window.drawCoords;
-                    if (isTransmitting) {
-                        drawEDGE(ctx, cW, cH, dX, dY, dW, dH);
-                    }
-                    // SOLO LOCAL
-                    drawEDGE(audioLayerCtx, cW, cH, dX, dY, dW, dH);
-                }
-            }
             
             const speed = 0.4;
             animState.hudScale += (animState.hudTarget - animState.hudScale) * speed;
@@ -2831,7 +2631,7 @@ const paranormalQuestions = [
             if (isTransmitting) drawBurnInHUD(ctx, cW, cH, animState.hudScale);
             drawBurnInHUD(audioLayerCtx, cW, cH, animState.hudScale);
             
-            if (state.isPareidolia && !performanceLagging) {
+            if (state.isPareidolia && (!performanceLagging || frameCount % 2 === 0)) {
                  if (isTransmitting) drawCanvasScanBoxes(ctx, cW, cH);
                  drawCanvasScanBoxes(audioLayerCtx, cW, cH);
             }
@@ -2986,7 +2786,7 @@ const paranormalQuestions = [
         if(cmd.type === 'cmd' || cmd.category === 'cam') {
             const action = cmd.action; const value = cmd.value;
             if(action === 'filter') { 
-                const map = { 'night':'btn-night', 'thermal':'btn-thermal', 'urbex':'btn-urbex', 'edge': 'btn-edge', 'sls':'btn-sls', 'lidar':'btn-heatmap', 'normal': null }; 
+                const map = { 'night':'btn-night', 'thermal':'btn-thermal', 'urbex':'btn-urbex', 'sls':'btn-sls', 'lidar':'btn-heatmap', 'normal': null }; 
                 setFilter(value, document.getElementById(map[value])); 
             }
             else if(action === 'flash') toggleTorch(value); 
@@ -3011,7 +2811,6 @@ const paranormalQuestions = [
                     neg:    state.filter === 'thermal',
                     urbx:   state.filter === 'urbex',
                     lidar:  state.isLidar,
-                    xray:   state.isEdge,
                     sls:    state.isSLS,
                     vision: state.isPareidolia,
                     // Estado de audio scan
@@ -3034,17 +2833,15 @@ const paranormalQuestions = [
         state.filter = f; 
         state.isSLS = (f === 'sls'); 
         state.isLidar = (f === 'lidar');
-        state.isEdge = (f === 'edge');
         
         document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state')); if(btn && f !== 'normal') btn.classList.add('active-state');
         
         // Eliminar solo clases de filtro (sin romper otras clases del body)
-        ['filter-night-vision','filter-thermal','filter-urbex','filter-edge','filter-pareidolia'].forEach(c => document.body.classList.remove(c));
+        ['filter-night-vision','filter-thermal','filter-urbex','filter-pareidolia'].forEach(c => document.body.classList.remove(c));
         if(f !== 'normal') { 
             if(f === 'night') document.body.classList.add('filter-night-vision'); 
             else if(f === 'thermal') document.body.classList.add('filter-thermal'); 
             else if(f === 'urbex') document.body.classList.add('filter-urbex'); 
-            else if(f === 'edge') document.body.classList.add('filter-edge'); 
             else if(f === 'sls') document.body.classList.add('filter-pareidolia'); 
         }
         
