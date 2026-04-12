@@ -86,16 +86,45 @@
             backup2: './BACKUP_2.mp4'  
         };
 
+        localStorage.removeItem("TURN_DOMAIN");
+        const TURN_DOMAIN = "exploracionesobr.duckdns.org";
+        const FORCE_TURN = false;
+        const DISABLE_ICE = false;
+
         const PEER_CONFIG = {
             config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ],
+                ...(DISABLE_ICE ? {
+                    iceServers: []
+                } : (FORCE_TURN ? {
+                    iceTransportPolicy: 'relay',
+                    iceServers: [
+                        {
+                            urls: `turn:${TURN_DOMAIN}:3478`,
+                            username: 'user',
+                            credential: 'MI_SECRETO_SUPER_SEGURO'
+                        }
+                    ]
+                } : {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        {
+                            urls: `turn:${TURN_DOMAIN}:3478`,
+                            username: 'user',
+                            credential: 'MI_SECRETO_SUPER_SEGURO'
+                        }
+                    ]
+                })),
                 sdpSemantics: 'unified-plan',
                 pingInterval: 5000 
             }
         };
+
+        // Logs de validación
+        console.log("================ TURN CONFIG ================");
+        console.log("TURN DOMAIN ACTIVO:", TURN_DOMAIN);
+        console.log("FORCE TURN:", FORCE_TURN);
+        console.log("ICE DISABLED:", DISABLE_ICE);
+        console.log("=============================================");
 
         const triggerHaptic = (pattern = 15) => {
             if (navigator.vibrate) {
@@ -123,6 +152,36 @@
             }, [active]);
         };
 
+        // FIX PARA EL ERROR DE CLIPBOARD CON FALLBACK
+        const fallbackCopyTextToClipboard = (text) => {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            document.body.removeChild(textArea);
+        };
+
+        const copyToClipboard = (text) => {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(err => {
+                    console.warn('Async clipboard blocked/failed, using fallback: ', err);
+                    fallbackCopyTextToClipboard(text);
+                });
+            } else {
+                fallbackCopyTextToClipboard(text);
+            }
+        };
+
         const ShareModal = ({ onClose, dockId }) => (
             <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 animate-fade-in">
                 <div className="bg-[#111] p-6 rounded-2xl border border-red-900/30 max-w-sm w-full text-center relative shadow-2xl">
@@ -132,7 +191,7 @@
                          <div className="text-3xl font-mono font-bold text-white mb-2 tracking-widest">{dockId}</div>
                          <div className="text-[10px] text-gray-500 uppercase tracking-widest">ID Único de Sesión</div>
                     </div>
-                    <button onClick={() => { navigator.clipboard.writeText(dockId); triggerHaptic(20); onClose(); }} className="w-full bg-red-800 hover:bg-red-700 text-white font-bold py-4 rounded-lg uppercase tracking-widest flex items-center justify-center gap-2 transition-colors">
+                    <button onClick={() => { copyToClipboard(dockId); triggerHaptic(20); onClose(); }} className="w-full bg-red-800 hover:bg-red-700 text-white font-bold py-4 rounded-lg uppercase tracking-widest flex items-center justify-center gap-2 transition-colors">
                         <Copy size={16}/> Copiar ID
                     </button>
                 </div>
@@ -607,6 +666,7 @@
           const [backupIndex, setBackupIndex] = useState(0);
           
           const [forceCam1Audio, setForceCam1Audio] = useState(false);
+          const [showFullscreenProgram, setShowFullscreenProgram] = useState(false);
           
           const [blobAssets, setBlobAssets] = useState(initialBlobAssets || {}); 
           const [assetStatus, setAssetStatus] = useState(() => {
@@ -991,7 +1051,7 @@
 
           const generateObsLink = () => {
               const url = `${window.location.href.split('?')[0]}?mode=obs-clean&target=${myId}`;
-              navigator.clipboard.writeText(url);
+              copyToClipboard(url);
               notify("LINK OBS COPIADO");
               alert("ENLACE LOCAL GENERADO:\n\n1. Ve a OBS en esta PC.\n2. Agrega 'Navegador'.\n3. Pega el enlace.\n\n" + url);
           };
@@ -1008,6 +1068,28 @@
 
           return (
             <div className={`h-screen flex flex-col bg-[#0a0a0a] text-neutral-300 font-sans overflow-hidden select-none ${isFailoverMode ? 'emergency-mode' : ''}`}>
+                
+                {/* SALIDA FULLSCREEN MÓVIL Y MONITOR NATIVO */}
+                {showFullscreenProgram && (
+                    <div className="fixed inset-0 bg-black flex items-center justify-center" style={{ zIndex: 99999 }}>
+                        <VideoPeer stream={cameras[programId]?.stream} className="w-full h-full object-cover" muted={isProgramMuted} />
+                        <MediaOverlay activeMedia={activeMedia} blobAssets={blobAssets} onFinish={handleMediaFinish} onTimeUpdate={handleTimeUpdate} />
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowFullscreenProgram(false);
+                                try { 
+                                    if (document.exitFullscreen) document.exitFullscreen(); 
+                                    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                                } catch(e){}
+                            }} 
+                            className="absolute top-10 right-6 sm:top-12 sm:right-12 bg-white/0 opacity-0 p-4 rounded-full pointer-events-auto"
+                            style={{ zIndex: 999999 }}>
+                            <X size={32} strokeWidth={3} />
+                        </button>
+                    </div>
+                )}
+
                 <ToastContainer notifications={notifications} />
                 {isShareModalOpen && <ShareModal onClose={() => setIsShareModalOpen(false)} dockId={myId} />}
                 {zoomedCamId && cameras[zoomedCamId] && <ZoomModal stream={cameras[zoomedCamId].stream} name={cameras[zoomedCamId].name} onClose={() => setZoomedCamId(null)} />}
@@ -1034,9 +1116,25 @@
                         </button>
                     </div>
 
-                    <div className="absolute right-4 flex items-center gap-4">
-                        <div className="font-mono text-cyan-400 text-[10px] bg-[#111] px-2 py-1 border border-[#333] rounded cursor-pointer uppercase tracking-widest" onClick={() => { navigator.clipboard.writeText(myId); notify("Copiado"); }}>ID: {myId || '---'}</div>
-                        <button onClick={generateObsLink} className="text-[10px] bg-blue-900/30 text-blue-200 border border-blue-800 px-3 py-1 rounded font-bold uppercase flex items-center gap-1 shadow-lg active:scale-95 transition-all"><Link size={12}/> Link Local OBS</button>
+                    <div className="absolute right-4 flex items-center gap-2 sm:gap-4">
+                        <div className="font-mono text-cyan-400 text-[10px] bg-[#111] px-2 py-1 border border-[#333] rounded cursor-pointer uppercase tracking-widest hidden sm:block" onClick={() => { copyToClipboard(myId); notify("Copiado"); }}>ID: {myId || '---'}</div>
+                        
+                        <button onClick={() => {
+                            setShowFullscreenProgram(true);
+                            try { 
+                                if(document.documentElement.requestFullscreen) {
+                                    document.documentElement.requestFullscreen();
+                                } else if (document.documentElement.webkitRequestFullscreen) {
+                                    document.documentElement.webkitRequestFullscreen();
+                                }
+                            } catch(e){}
+                        }} className="text-[10px] bg-green-900/30 text-green-200 border border-green-800 px-3 py-1 rounded font-bold uppercase flex items-center gap-1 shadow-lg active:scale-95 transition-all">
+                            <Maximize size={12}/> <span className="hidden sm:inline">Ver Salida</span>
+                        </button>
+
+                        <button onClick={generateObsLink} className="text-[10px] bg-blue-900/30 text-blue-200 border border-blue-800 px-3 py-1 rounded font-bold uppercase flex items-center gap-1 shadow-lg active:scale-95 transition-all">
+                            <Link size={12}/> <span className="hidden sm:inline">Link Local OBS</span><span className="sm:hidden">OBS</span>
+                        </button>
                     </div>
                 </div>
 
