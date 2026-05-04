@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ESTUDIO EXPLORACIONES OBR | STUDIO v7.1 (AGORA + OVERLAY)</title>
+    <title>ESTUDIO EXPLORACIONES OBR | STUDIO v7.2 (AGORA UNIFICADO)</title>
     
     <link rel="icon" type="image/png" href="./obr-logo.png">
     <link rel="apple-touch-icon" href="./obr-logo.png">
@@ -15,10 +15,9 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- AGORA SDK -->
+    <!-- AGORA SDKs (RTC + RTM) -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
-    <!-- PeerJS para comandos -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://download.agora.io/sdk/release/AgoraRTM.js"></script>
 
     <script type="importmap">
     {
@@ -92,21 +91,11 @@
         const AGORA_CHANNEL = 'obr-estudio';
         AgoraRTC.setLogLevel(3);
 
-        const TURN_DOMAIN = "exploracionesobr.duckdns.org";
-        const PEER_CONFIG = {
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    {
-                        urls: `turn:${TURN_DOMAIN}:3478`,
-                        username: 'user',
-                        credential: 'MI_SECRETO_SUPER_SEGURO'
-                    }
-                ],
-                sdpSemantics: 'unified-plan',
-                pingInterval: 5000 
-            }
-        };
+        // Canal para micrófono remoto
+        const MIC_CHANNEL = 'obr-mic';
+
+        // RTM token (debug mode sin token)
+        const RTM_TOKEN = undefined;
 
         const triggerHaptic = (pattern = 15) => {
             if (navigator.vibrate) {
@@ -206,8 +195,8 @@
             </div>
         );
 
-        // NUEVO: Componente CanvasOverlay para dibujar SLS, HUD, texto, audio sobre el video
-        const CanvasOverlay = ({ width, height, overlayData, filter }) => {
+        // Componente CanvasOverlay para pintar SLS, HUD, texto, audio sobre el video
+        const CanvasOverlay = ({ width, height, overlayData }) => {
             const canvasRef = useRef(null);
             
             useEffect(() => {
@@ -235,7 +224,6 @@
                         const mapX = (x) => x * width;
                         const mapY = (y) => y * height;
                         
-                        // Huesos
                         const bones = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
                         ctx.strokeStyle = "#ff00ff";
                         ctx.lineWidth = 3;
@@ -248,7 +236,6 @@
                         });
                         ctx.stroke();
                         
-                        // Puntos
                         [0,5,6,7,8,9,10,11,12,13,14,15,16].forEach(i => {
                             const p = k[i];
                             if (!p || p.score < 0.1) return;
@@ -293,12 +280,12 @@
                 }
                 
                 ctx.filter = 'none';
-            }, [overlayData, width, height, filter]);
+            }, [overlayData, width, height]);
             
             return <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" style={{width:'100%',height:'100%'}} />;
         };
 
-        // Componente de video con canvas integrado para filtros
+        // Componente de video con canvas integrado para filtros y overlays
         const VideoWithCanvas = ({ stream, camFilter, muted = true, className, overlayData }) => {
             const videoRef = useRef(null);
             const containerRef = useRef(null);
@@ -323,7 +310,7 @@
             return (
                 <div ref={containerRef} className={`relative ${className}`}>
                     <video ref={videoRef} autoPlay playsInline muted={muted} className="absolute inset-0 w-full h-full object-cover" />
-                    <CanvasOverlay width={dims.w} height={dims.h} overlayData={overlayData} filter={camFilter} />
+                    <CanvasOverlay width={dims.w} height={dims.h} overlayData={overlayData} />
                 </div>
             );
         };
@@ -389,7 +376,7 @@
         const DirectorPanel = ({ activeCam, onCommand, isOffline, currentFilter }) => {
             const handleFilterToggle = (filterName) => { 
                 triggerHaptic(10);
-                onCommand({ category: 'cam', action: 'filter', value: currentFilter === filterName ? 'normal' : filterName, target: activeCam?.id }); 
+                onCommand({ type: 'cmd', action: 'filter', value: currentFilter === filterName ? 'normal' : filterName, target: activeCam?.id }); 
             };
             const canUseAI = activeCam?.hasAI || false;
             return (
@@ -411,9 +398,9 @@
                                         <button onClick={() => handleFilterToggle('urbex')} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold ${currentFilter === 'urbex' ? 'bg-white text-black border-white' : 'bg-[#1a1a1a] text-orange-500 border-orange-900/30'}`}><Box size={16}/> URBEX</button>
                                         <button onClick={() => handleFilterToggle('lidar')} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 transition-colors font-bold ${currentFilter === 'lidar' ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'bg-[#1a1a1a] text-teal-400 border-teal-900/30'}`}><ScanLine size={16}/> LIDAR</button>
                                         <button onClick={() => handleFilterToggle('sls')} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold ${currentFilter === 'sls' ? 'bg-white text-black border-white' : 'bg-[#1a1a1a] text-purple-400 border-purple-900/30'}`}><Ghost size={16}/> SLS</button>
-                                        <button onClick={() => { triggerHaptic(10); onCommand({ category: 'cmd', action: 'toggle', value: 'pareidolia', target: activeCam?.id }); }} disabled={!canUseAI} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold ${canUseAI ? (currentFilter === 'pareidolia' ? 'bg-white text-black border-white' : 'bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border-red-900/50') : 'bg-[#151515] text-gray-600 border-gray-800 opacity-50 cursor-not-allowed'}`}><Eye size={16}/> {canUseAI ? 'VISION IA' : 'IA N/A'}</button>
-                                        <button onClick={() => { triggerHaptic(10); onCommand({ category: 'cmd', action: 'toggle', value: 'audioscan', target: activeCam?.id }); }} className="text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold bg-yellow-900/20 text-yellow-500 border-yellow-900/50 hover:bg-yellow-600 hover:text-white"><Mic size={16}/> AUDIO SCAN</button>
-                                        <button onClick={() => { triggerHaptic(10); onCommand({ category: 'cmd', action: 'reset', value: '', target: activeCam?.id }); }} className="col-span-2 mt-2 bg-neutral-900 hover:bg-neutral-800 text-gray-400 text-[10px] py-3 rounded-lg border border-neutral-800 flex items-center justify-center gap-2 uppercase font-bold tracking-widest"><RotateCcw size={12}/> Reset</button>
+                                        <button onClick={() => { triggerHaptic(10); onCommand({ type: 'cmd', action: 'toggle', value: 'pareidolia', target: activeCam?.id }); }} disabled={!canUseAI} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold ${canUseAI ? (currentFilter === 'pareidolia' ? 'bg-white text-black border-white' : 'bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border-red-900/50') : 'bg-[#151515] text-gray-600 border-gray-800 opacity-50 cursor-not-allowed'}`}><Eye size={16}/> {canUseAI ? 'VISION IA' : 'IA N/A'}</button>
+                                        <button onClick={() => { triggerHaptic(10); onCommand({ type: 'cmd', action: 'toggle', value: 'audioscan', target: activeCam?.id }); }} className="text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold bg-yellow-900/20 text-yellow-500 border-yellow-900/50 hover:bg-yellow-600 hover:text-white"><Mic size={16}/> AUDIO SCAN</button>
+                                        <button onClick={() => { triggerHaptic(10); onCommand({ type: 'cmd', action: 'reset', value: '', target: activeCam?.id }); }} className="col-span-2 mt-2 bg-neutral-900 hover:bg-neutral-800 text-gray-400 text-[10px] py-3 rounded-lg border border-neutral-800 flex items-center justify-center gap-2 uppercase font-bold tracking-widest"><RotateCcw size={12}/> Reset</button>
                                     </div>
                                 </section>
                             </>
@@ -478,7 +465,7 @@
             const [activeMedia, setActiveMedia] = useState(null);
             const [camFilter, setCamFilter] = useState('normal');
             const [overlayData, setOverlayData] = useState(null);
-            const peerRef = useRef(null);
+            const rtmClientRef = useRef(null);
             const audioRef = useRef(null);
             
             // Conexión Agora para recibir video/audio
@@ -490,7 +477,6 @@
                         setStream(new MediaStream([user.videoTrack.getMediaStreamTrack()]));
                     }
                     if (mediaType === 'audio') {
-                        // Reproducir audio para OBS
                         const audioEl = document.createElement('audio');
                         audioEl.autoplay = true;
                         audioEl.playsInline = true;
@@ -503,23 +489,29 @@
                 return () => client.leave();
             }, []);
             
-            // PeerJS para recibir overlay_data y comandos
+            // RTM para recibir overlay_data y comandos
             useEffect(() => {
-                const peer = new window.Peer(null, PEER_CONFIG);
-                peerRef.current = peer;
-                peer.on('open', () => {
-                    const conn = peer.connect(targetId, { reliable: true });
-                    conn.on('open', () => conn.send({ type: 'register-obs-client' }));
-                    conn.on('data', (data) => {
-                        if (data.type === 'program-update') setActiveMedia(data.activeMedia);
-                        if (data.type === 'overlay_data') {
-                            setOverlayData(data);
-                            if (data.filter) setCamFilter(data.filter);
+                const initRTM = async () => {
+                    const rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
+                    await rtmClient.login({ uid: 'estudio_principal', token: RTM_TOKEN });
+                    rtmClientRef.current = rtmClient;
+                    
+                    rtmClient.on('message', (message) => {
+                        if (message.messageType === 'TEXT') {
+                            const data = JSON.parse(message.text);
+                            if (data.type === 'overlay_data') {
+                                setOverlayData(data);
+                                if (data.filter) setCamFilter(data.filter);
+                            }
+                            if (data.type === 'program-update') setActiveMedia(data.activeMedia);
                         }
                     });
-                });
-                return () => peer.destroy();
-            }, [targetId]);
+                };
+                initRTM();
+                return () => {
+                    if (rtmClientRef.current) rtmClientRef.current.logout();
+                };
+            }, []);
 
             return (
                 <div className="w-screen h-screen bg-black overflow-hidden relative flex items-center justify-center">
@@ -548,8 +540,7 @@
             
             const [assetStatus, setAssetStatus] = useState({intro:'loading', outro:'loading', banner:'loading', standby:'loading', transicion:'loading', backup1: 'loading', backup2: 'loading'});
             
-            const peerRef = useRef(null);
-            const connRef = useRef(null);
+            const rtmClientRef = useRef(null);
             
             const activeProgramCam = cameraList.find(c => c.tally === 'program');
             const activePreviewCam = cameraList.find(c => c.tally === 'preview');
@@ -579,43 +570,41 @@
                 }
             }, [peekStream]);
 
-            const connect = () => {
+            const connect = async () => {
                 if(!dockId) return;
                 triggerHaptic(20);
-                const peer = new window.Peer(null, { ...PEER_CONFIG });
-                peerRef.current = peer;
                 
-                let targetId = dockId.trim();
-                if (targetId.endsWith("-8889")) { targetId = targetId.slice(0, -5); }
-                if (targetId.includes('.')) { targetId = targetId.replace(/\./g, '-'); }
-                
-                peer.on('open', (id) => {
-                    const conn = peer.connect(targetId, { reliable: true });
-                    connRef.current = conn;
-                    conn.on('open', () => { setIsConnected(true); conn.send({ type: 'register-director' }); notify("CONEXIÓN CON ESTUDIO EXITOSA"); });
-                    conn.on('data', (data) => {
-                        if (data.type === 'camera-list-update') setCameraList(data.cameras);
-                        if (data.type === 'obs-state-update') setObsState(data.state);
-                        if (data.type === 'media-time') setMediaTimers(data.timers);
-                        if (data.type === 'dock-status') { 
-                            setActiveMedia(data.activeMedia); 
-                            if (data.assetStatus) setAssetStatus(data.assetStatus);
-                            if (typeof data.forceCam1Audio !== 'undefined') setForceCam1Audio(data.forceCam1Audio);
+                try {
+                    const rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
+                    await rtmClient.login({ uid: 'director_' + Date.now(), token: RTM_TOKEN });
+                    rtmClientRef.current = rtmClient;
+                    setIsConnected(true);
+                    notify("CONEXIÓN CON ESTUDIO EXITOSA (AGORA)");
+                    
+                    rtmClient.on('message', (message) => {
+                        if (message.messageType === 'TEXT') {
+                            const data = JSON.parse(message.text);
+                            if (data.type === 'camera-list-update') setCameraList(data.cameras);
+                            if (data.type === 'obs-state-update') setObsState(data.state);
+                            if (data.type === 'media-time') setMediaTimers(data.timers);
+                            if (data.type === 'dock-status') { 
+                                setActiveMedia(data.activeMedia); 
+                                if (data.assetStatus) setAssetStatus(data.assetStatus);
+                                if (typeof data.forceCam1Audio !== 'undefined') setForceCam1Audio(data.forceCam1Audio);
+                            }
+                            if (data.type === 'toast') notify(data.msg, data.toastType);
                         }
-                        if (data.type === 'toast') notify(data.msg, data.toastType);
                     });
-                    conn.on('close', () => { setIsConnected(false); notify("CONEXIÓN PERDIDA", "error"); });
-                });
-                
-                peer.on('call', (call) => {
-                    call.answer();
-                    call.on('stream', (remoteStream) => { setPeekStream(remoteStream); });
-                });
+                } catch(e) {
+                    notify("Error al conectar con Agora RTM", "error");
+                }
             };
 
             const send = (category, action, value) => {
                 triggerHaptic(10);
-                if(connRef.current) connRef.current.send({ type: 'director-cmd', category, action, value }); 
+                if(rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
+                    rtmClientRef.current.publish('estudio_principal', JSON.stringify({ type: 'director-cmd', category, action, value }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+                }
             };
             
             const handlePointerDown = (camId, camName) => {
@@ -658,7 +647,7 @@
                             <span className="font-bold text-xs tracking-tighter text-red-500 uppercase truncate">Director OBR</span>
                             <StatusIndicators isLive={obsState.streaming} isRec={obsState.recording} isObs={obsState.connected} />
                         </div>
-                        <button onClick={() => { if(connRef.current) connRef.current.close(); setIsConnected(false); }} className="text-[9px] text-gray-500 px-2 py-1 rounded font-bold uppercase border border-neutral-800">Salir</button>
+                        <button onClick={() => { if(rtmClientRef.current) rtmClientRef.current.logout(); setIsConnected(false); }} className="text-[9px] text-gray-500 px-2 py-1 rounded font-bold uppercase border border-neutral-800">Salir</button>
                     </div>
 
                     <div className="flex-1 director-scroll p-4 space-y-6 select-none bg-black">
@@ -755,7 +744,7 @@
           const obsClientsRef = useRef([]);
 
           const obsRef = useRef(null); 
-          const peerRef = useRef(null);
+          const rtmClientRef = useRef(null);
           const agoraClientRef = useRef(null);
           const agoraUsersRef = useRef({});
           const overlayDataRef = useRef({});
@@ -775,7 +764,10 @@
               const id = Date.now(); 
               setNotifications(prev => [...prev, { id, msg, type }]); 
               setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000); 
-              if (directorConnRef.current?.open) directorConnRef.current.send({ type: 'toast', msg, toastType: type });
+              // Enviar toast al director si está conectado
+              if (rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
+                  rtmClientRef.current.publish('director_*', JSON.stringify({ type: 'toast', msg, toastType: type }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+              }
           };
           
           const handleTimeUpdate = (duration, currentTime) => {
@@ -787,8 +779,8 @@
                   standby: activeMedia === 'standby' ? 1 : 0 
               };
               setMediaTimers(newTimers);
-              if (directorConnRef.current?.open && activeMedia) { 
-                  directorConnRef.current.send({ type: 'media-time', timers: newTimers }); 
+              if (rtmClientRef.current && rtmClientRef.current.isLoggedIn && activeMedia) { 
+                  rtmClientRef.current.publish('director_*', JSON.stringify({ type: 'media-time', timers: newTimers }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
               }
           };
 
@@ -868,7 +860,7 @@
              }));
           };
 
-          // Integración Agora: recepción de streams y asignación a cámaras
+          // Integración Agora RTC: recepción de streams de video
           useEffect(() => {
             const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
             agoraClientRef.current = client;
@@ -916,113 +908,106 @@
             };
           }, []);
 
-          // PeerJS para comandos y registro de nombres + recepción de overlays
+          // Agora RTM: registro de cámaras, recepción de comandos del director y overlays
           useEffect(() => {
-            let baseId = preferredId;
-            if (baseId?.endsWith("-8889")) baseId = baseId.slice(0, -5);
-            baseId = baseId ? baseId.replace(/\./g, '-') : null;
-            if (!baseId) return;
+            const initRTM = async () => {
+                const rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
+                await rtmClient.login({ uid: 'estudio_principal', token: RTM_TOKEN });
+                rtmClientRef.current = rtmClient;
+                setMyId('estudio_principal');
 
-            const peerCmd = new window.Peer(baseId, PEER_CONFIG);
-            peerRef.current = peerCmd;
-
-            peerCmd.on('open', (id) => setMyId(id));
-
-            peerCmd.on('connection', (conn) => {
-                conn.on('data', (data) => {
-                    if (data.type === 'register') { 
-                        const camName = data.name;
-                        const agoraUid = data.agoraUid;
-                        setCameras(prev => {
-                            const existing = prev[camName] || prev[agoraUid];
-                            if (existing) {
-                                return { ...prev, [camName]: { ...existing, id: camName, name: camName, hasAI: data.hasAI, conn }, [agoraUid]: undefined };
-                            }
-                            return { ...prev, [camName]: { id: camName, name: camName, conn, tally: 'idle', hasAI: data.hasAI, filter: 'normal' } };
-                        });
-                        notify(`CAMARA: ${camName}`); 
-                    }
-                    if (data.type === 'register-director') { 
-                        directorConnRef.current = conn; 
-                        notify("DIRECTOR CONECTADO");
-                        conn.send({ type: 'obs-state-update', state: obsStateRef.current });
-                        conn.send({ type: 'camera-list-update', cameras: getSerializableCameras() });
-                    }
-                    if (data.type === 'register-obs-client') { 
-                        obsClientsRef.current.push(conn.peer);
-                        conn.send({ type: 'program-update', activeMedia: activeMediaRef.current });
-                    }
-                    if (data.type === 'director-cmd') handleDirectorCommand(data);
-                    if (data.type === 'overlay_data') {
-                        // Guardar overlay para la cámara que lo envió
-                        const camId = conn.peer;
-                        overlayDataRef.current[camId] = data;
-                        // Forzar un re-render ligero actualizando el estado
-                        setCameras(prev => {
-                            let changed = false;
-                            const updated = { ...prev };
-                            Object.keys(updated).forEach(k => {
-                                if (updated[k].conn && updated[k].conn.peer === camId) {
-                                    if (updated[k]._overlayTimestamp !== data.timestamp) {
-                                        updated[k] = { ...updated[k], _overlay: data, _overlayTimestamp: data.timestamp };
+                rtmClient.on('message', (message) => {
+                    if (message.messageType === 'TEXT') {
+                        const data = JSON.parse(message.text);
+                        
+                        if (data.type === 'register') {
+                            const camName = data.name || message.publisher;
+                            const agoraUid = data.agoraUid;
+                            setCameras(prev => {
+                                // Si ya existe una entrada con el mismo nombre o uid de Agora, fusionar
+                                const existing = prev[camName] || (agoraUid && prev[agoraUid]);
+                                const base = existing || { tally: 'idle', hasAI: data.hasAI || true, filter: 'normal' };
+                                const newEntry = {
+                                    ...base,
+                                    id: camName,
+                                    name: camName,
+                                    hasAI: data.hasAI || base.hasAI,
+                                    filter: base.filter || 'normal',
+                                    stream: base.stream || (agoraUid && agoraUsersRef.current[agoraUid]?.videoTrack ? new MediaStream([agoraUsersRef.current[agoraUid].videoTrack]) : null)
+                                };
+                                const updated = { ...prev, [camName]: newEntry };
+                                // Eliminar entrada antigua por UID si existe
+                                if (agoraUid && updated[agoraUid]) {
+                                    delete updated[agoraUid];
+                                }
+                                return updated;
+                            });
+                            notify(`CAMARA: ${camName}`);
+                        }
+                        if (data.type === 'director-cmd') {
+                            handleDirectorCommand(data);
+                        }
+                        if (data.type === 'overlay_data') {
+                            // Guardar overlay para la cámara que lo envió
+                            const camUid = message.publisher;
+                            overlayDataRef.current[camUid] = data;
+                            setCameras(prev => {
+                                let changed = false;
+                                const updated = { ...prev };
+                                Object.keys(updated).forEach(k => {
+                                    if (updated[k].id && (updated[k].id === camUid || updated[k]._rtmId === camUid)) {
+                                        updated[k] = { ...updated[k], _overlay: data };
                                         changed = true;
                                     }
-                                }
+                                });
+                                return changed ? updated : prev;
                             });
-                            return changed ? updated : prev;
-                        });
-                    }
-                    if (data.type === 'scan-state' && data.filters) {
-                        const camId = conn.peer;
-                        setCameras(prev => {
-                            let changed = false;
-                            const updated = { ...prev };
-                            Object.keys(updated).forEach(k => {
-                                if (updated[k].conn && updated[k].conn.peer === camId) {
-                                    let f = 'normal';
-                                    if (data.filters.noc) f = 'night';
-                                    else if (data.filters.neg) f = 'thermal';
-                                    else if (data.filters.urbx) f = 'urbex';
-                                    if (updated[k].filter !== f) {
-                                        updated[k] = { ...updated[k], filter: f };
-                                        changed = true;
+                        }
+                        if (data.type === 'scan-state' && data.filters) {
+                            const camUid = message.publisher;
+                            setCameras(prev => {
+                                let changed = false;
+                                const updated = { ...prev };
+                                Object.keys(updated).forEach(k => {
+                                    if (updated[k].id && (updated[k].id === camUid || updated[k]._rtmId === camUid)) {
+                                        let f = 'normal';
+                                        if (data.filters.noc) f = 'night';
+                                        else if (data.filters.neg) f = 'thermal';
+                                        else if (data.filters.urbx) f = 'urbex';
+                                        if (updated[k].filter !== f) {
+                                            updated[k] = { ...updated[k], filter: f };
+                                            changed = true;
+                                        }
                                     }
-                                }
+                                });
+                                return changed ? updated : prev;
                             });
-                            return changed ? updated : prev;
-                        });
+                        }
                     }
                 });
-                conn.on('error', (err) => console.error("Conn Error", err));
-            });
-            peerCmd.on('error', (err) => { 
-                console.error("Peer Error", err);
-                if(err.type === 'disconnected') peerCmd.reconnect();
-            });
 
-            const statusInterval = setInterval(() => {
-                 if (directorConnRef.current?.open) {
-                     directorConnRef.current.send({ 
-                         type: 'dock-status', 
-                         activeMedia: activeMediaRef.current, 
-                         assetStatus: assetStatusRef.current,
-                         forceCam1Audio: forceCam1AudioRef.current
-                     });
-                     directorConnRef.current.send({ type: 'obs-state-update', state: obsStateRef.current });
-                     directorConnRef.current.send({ type: 'camera-list-update', cameras: getSerializableCameras() });
-                 }
-                 Object.values(camerasRef.current).forEach(cam => {
-                     if(cam.conn && cam.conn.open) {
-                         cam.conn.send({ type: 'ping' });
-                     }
-                 });
-            }, 1000);
+                // Enviar estado periódicamente
+                const statusInterval = setInterval(() => {
+                    if (rtmClient.isLoggedIn) {
+                        // Enviar dock-status a todos los directores conectados
+                        rtmClient.publish('director_*', JSON.stringify({ 
+                            type: 'dock-status', 
+                            activeMedia: activeMediaRef.current, 
+                            assetStatus: assetStatusRef.current,
+                            forceCam1Audio: forceCam1AudioRef.current
+                        }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+                        rtmClient.publish('director_*', JSON.stringify({ type: 'obs-state-update', state: obsStateRef.current }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+                        rtmClient.publish('director_*', JSON.stringify({ type: 'camera-list-update', cameras: getSerializableCameras() }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+                    }
+                }, 1000);
 
-            return () => { 
-                peerCmd.destroy(); 
-                clearInterval(statusInterval); 
+                return () => {
+                    clearInterval(statusInterval);
+                    rtmClient.logout();
+                };
             };
-          }, []); 
+            initRTM();
+          }, []);
 
           useEffect(() => {
               if (programId && !activeMedia) {
@@ -1072,10 +1057,9 @@
 
           useEffect(() => {
               if (programId && cameras[programId]?.stream) {
-                  if(peerRef.current) {
-                      Object.values(peerRef.current.connections).forEach(conns => conns.forEach(c => {
-                          if(c.open) c.send({ type: 'program-update', activeMedia });
-                      }));
+                  if(rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
+                      // Enviar program-update a clientes OBS
+                      rtmClientRef.current.publish('obs_client_*', JSON.stringify({ type: 'program-update', activeMedia }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
                   }
               }
           }, [programId, activeMedia, cameras]);
@@ -1085,8 +1069,12 @@
                   const targetCamId = cmd.target; 
                   const cam = camerasRef.current[targetCamId];
 
-                  if (targetCamId && cam?.conn) {
-                      cam.conn.send({ type: 'cmd', action: cmd.action, value: cmd.value });
+                  if (targetCamId && cam) {
+                      // Enviar comando a la cámara por RTM
+                      const camUid = cam._rtmId || targetCamId;
+                      if (rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
+                          rtmClientRef.current.publish(camUid, JSON.stringify({ type: 'cmd', action: cmd.action, value: cmd.value }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+                      }
                       
                       if(cmd.action === 'filter') {
                           setCameras(prev => ({...prev, [targetCamId]: {...prev[targetCamId], filter: cmd.value}}));
@@ -1101,13 +1089,9 @@
                    if (cmd.action === 'start') {
                        const camId = cmd.value;
                        const cam = camerasRef.current[camId];
-                       if (cam && cam.stream && directorConnRef.current) {
-                            try {
-                                const peerVid = new window.Peer(null, PEER_CONFIG);
-                                peerVid.on('open', () => {
-                                    peerVid.call(directorConnRef.current.peer, cam.stream);
-                                });
-                            } catch(e) { console.error("Error iniciando Peek", e); }
+                       if (cam && cam.stream && rtmClientRef.current) {
+                            // Enviar stream vía Agora? No, solo notificar.
+                            notify("Función Peek no implementada en esta versión", "warning");
                        }
                    }
               }
@@ -1126,9 +1110,6 @@
           const switchProgram = (id) => { 
               triggerHaptic(25);
               setProgramId(id); setPreviewId(null); setActiveMedia(null); setHeaderHidden(false); 
-              Object.values(cameras).forEach(c => {
-                  if(c.conn) c.conn.send({ type: 'tally', state: c.id === id ? 'program' : 'idle' });
-              });
           };
           
           const handleAuto = () => {
@@ -1178,7 +1159,7 @@
           };
 
           const previewCam = previewId ? cameras[previewId] : null;
-          const camList = Object.values(cameras).filter(c => c && c.id && c.name); // Filtra entradas válidas
+          const camList = Object.values(cameras).filter(c => c && c.id && c.name);
           const isTransicionReady = assetStatus['transicion'] === 'ready';
           const isFailoverMode = activeMedia && activeMedia.startsWith('backup');
           
@@ -1219,7 +1200,7 @@
                 <div className="h-12 bg-black border-b border-[#222] flex items-center justify-center relative shrink-0">
                     <div className="absolute left-4 flex items-center">
                         <img src="./obr-logo.png" className="w-6 h-6 object-contain mr-3" />
-                        <span className="font-bold text-white tracking-widest text-[10px] uppercase hidden sm:block">Exploraciones OBR | Studio v7.1</span>
+                        <span className="font-bold text-white tracking-widest text-[10px] uppercase hidden sm:block">Exploraciones OBR | Studio v7.2</span>
                         <StatusIndicators isLive={obsStreaming} isRec={obsRecording} isObs={obsConnected} isFailover={isFailoverMode} />
                     </div>
                     
@@ -1372,7 +1353,7 @@
                 <div className="text-center">
                     <img src="./obr-logo.png" className="w-24 h-24 mx-auto mb-4 object-contain drop-shadow-[0_0_20px_rgba(220,38,38,0.6)]" />
                     <h1 className="text-2xl font-bold text-white tracking-widest uppercase">Estudio <span className="text-red-600">OBR</span></h1>
-                    <p className="text-gray-500 text-[10px] mt-1 uppercase tracking-[0.4em] opacity-50 font-bold">v7.1 AGORA</p>
+                    <p className="text-gray-500 text-[10px] mt-1 uppercase tracking-[0.4em] opacity-50 font-bold">v7.2 AGORA UNIFICADO</p>
                 </div>
                 <div className="bg-black/50 p-4 rounded border border-gray-800">
                     <label className="text-[10px] text-gray-500 font-bold mb-1 block uppercase tracking-widest">ID (Tailscale IP)</label>
