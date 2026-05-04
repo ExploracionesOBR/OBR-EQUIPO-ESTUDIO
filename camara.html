@@ -1906,6 +1906,7 @@ const paranormalQuestions = [
         initMiniMap();
 
         const constraintSets = [
+            { audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
             { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
             { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60, max: 60 } } },
             { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 60 } } }
@@ -1913,18 +1914,30 @@ const paranormalQuestions = [
 
         let stream = null; let lastError = null;
         for (let i = 0; i < constraintSets.length; i++) {
-            try { updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 1080p..." : i === 1 ? "INTENTANDO 720p..." : "MODO BÁSICO..."); stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]); break; } 
-            catch(e) { lastError = e; if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break; }
+            try {
+                updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 4K..." : i === 1 ? "INICIANDO SENSOR 1080p..." : i === 2 ? "INTENTANDO 720p..." : "MODO BÁSICO...");
+                stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
+                break;
+            } catch(e) {
+                lastError = e;
+                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
+            }
         }
 
         if (!stream) {
-            const e = lastError; localStorage.removeItem("camPermission"); 
+            const e = lastError; localStorage.removeItem("camPermission");
             document.querySelectorAll('.load-btn').forEach(b => {
-                b.style.display = 'block'; 
+                b.style.display = 'block';
                 if(b.id === 'main-cam-btn') { b.innerText = "INICIAR CÁMARA"; b.style.borderColor = ""; b.style.color = ""; }
             });
-            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') showCamError('PERMISO DENEGADO', 'El navegador bloqueó el acceso a la cámara. Revisa los permisos.', null);
-            else showCamError('ERROR DE CÁMARA', `${e.name}: ${e.message}`, null); return;
+            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+                showCamError('PERMISO DENEGADO', 'El navegador bloqueó el acceso a la cámara. Revisa los permisos.', null);
+            } else if (e.name === 'NotFoundError') {
+                showCamError('CÁMARA NO DISPONIBLE', 'No se encontró ninguna cámara en este dispositivo. Si tu dispositivo tiene cámara, reinicia la app.', null);
+            } else {
+                showCamError('ERROR DE CÁMARA', `${e.name}: ${e.message}`, null);
+            }
+            return;
         }
 
         localStorage.setItem("camPermission", "granted"); try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
