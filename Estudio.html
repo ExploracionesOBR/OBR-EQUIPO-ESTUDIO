@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ESTUDIO EXPLORACIONES OBR | STUDIO v7.0 (AGORA)</title>
+    <title>ESTUDIO EXPLORACIONES OBR | STUDIO v7.1 (AGORA + OVERLAY)</title>
     
     <link rel="icon" type="image/png" href="./obr-logo.png">
     <link rel="apple-touch-icon" href="./obr-logo.png">
@@ -15,9 +15,9 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- AGORA SDK (reemplaza a PeerJS para recepción de video) -->
+    <!-- AGORA SDK -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
-    <!-- PeerJS SOLO para comandos/director -->
+    <!-- PeerJS para comandos -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
     <script type="importmap">
@@ -43,7 +43,7 @@
         ::-webkit-scrollbar-track { background: #111; }
         ::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
         
-        .preview-selected { box-shadow: 0 0 0 2px #22c55e; background-color: rgba(22, 163, 74, 0.2); }
+        .preview-selected { box-shadow: 0 0 12px 3px #00ff00; background-color: rgba(22, 163, 74, 0.2); }
 
         @keyframes pop-in { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .animate-pop-in { animation: pop-in 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
@@ -58,15 +58,10 @@
             -webkit-mask-composite: source-in;
         }
         
-        /* FIX CALIDAD VIDEO */
         video {
             image-rendering: -webkit-optimize-contrast;
             image-rendering: high-quality;
         }
-        /* Filtros replicados desde cámara */
-        .filter-night { filter: grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0); }
-        .filter-thermal { filter: invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2); }
-        .filter-urbex { filter: invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85); }
     </style>
 </head>
 <body>
@@ -92,13 +87,9 @@
             backup2: './BACKUP_2.mp4'  
         };
 
-        // Configuración de Agora (copiar de camara)
         const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
-        // ⚠️ Token actualizado (el mismo que en Camara)
         const AGORA_TOKEN  = '007eJxTYLj96oFFVtaV1JvvpvEHM3x4nd/89f7k4M/94qn9tv3zuQ0VGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNKx1/ZDYEMjLcM+JgZWSAQBCfmyE/qUg3tbikNCUzn4EBAO3qI78=';
         const AGORA_CHANNEL = 'obr-estudio';
-
-        // Silenciar logs de depuración de Agora
         AgoraRTC.setLogLevel(3);
 
         const TURN_DOMAIN = "exploracionesobr.duckdns.org";
@@ -143,7 +134,6 @@
             }, [active]);
         };
 
-        // FIX PARA EL ERROR DE CLIPBOARD CON FALLBACK
         const fallbackCopyTextToClipboard = (text) => {
             const textArea = document.createElement("textarea");
             textArea.value = text;
@@ -216,9 +206,104 @@
             </div>
         );
 
-        // Componente de video que aplica filtro dinámico
-        const FilteredVideo = ({ stream, filter, muted = true, className }) => {
+        // NUEVO: Componente CanvasOverlay para dibujar SLS, HUD, texto, audio sobre el video
+        const CanvasOverlay = ({ width, height, overlayData, filter }) => {
+            const canvasRef = useRef(null);
+            
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas || !width || !height) return;
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, width, height);
+                
+                if (!overlayData) return;
+                
+                // Aplicar filtro si la cámara tiene uno activo
+                if (overlayData.filter && overlayData.filter !== 'normal') {
+                    if (overlayData.filter === 'night') ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)';
+                    else if (overlayData.filter === 'thermal') ctx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
+                    else if (overlayData.filter === 'urbex') ctx.filter = 'invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85)';
+                }
+                
+                // Dibujar poses SLS
+                if (overlayData.poses && overlayData.poses.length > 0) {
+                    overlayData.poses.forEach(pose => {
+                        if (!pose.keypoints || pose.keypoints.length === 0) return;
+                        const k = pose.keypoints;
+                        const mapX = (x) => x * width;
+                        const mapY = (y) => y * height;
+                        
+                        // Huesos
+                        const bones = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+                        ctx.strokeStyle = "#ff00ff";
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        bones.forEach(([a, b]) => {
+                            const p1 = k[a], p2 = k[b];
+                            if (!p1 || !p2 || p1.score < 0.1 || p2.score < 0.1) return;
+                            ctx.moveTo(mapX(p1.x), mapY(p1.y));
+                            ctx.lineTo(mapX(p2.x), mapY(p2.y));
+                        });
+                        ctx.stroke();
+                        
+                        // Puntos
+                        [0,5,6,7,8,9,10,11,12,13,14,15,16].forEach(i => {
+                            const p = k[i];
+                            if (!p || p.score < 0.1) return;
+                            ctx.beginPath();
+                            ctx.arc(mapX(p.x), mapY(p.y), 3, 0, Math.PI*2);
+                            ctx.fillStyle = "#ff3333";
+                            ctx.fill();
+                        });
+                    });
+                }
+                
+                // Texto EVP
+                if (overlayData.evpText) {
+                    ctx.filter = 'none';
+                    ctx.font = "bold 18px 'Share Tech Mono'";
+                    ctx.fillStyle = "rgba(255,255,255,0.85)";
+                    ctx.shadowColor = "#ab0202";
+                    ctx.shadowBlur = 10;
+                    ctx.textAlign = "center";
+                    ctx.fillText(overlayData.evpText.toUpperCase(), width/2, height - 40);
+                    ctx.shadowBlur = 0;
+                }
+                
+                // Texto del usuario
+                if (overlayData.userText) {
+                    ctx.filter = 'none';
+                    ctx.font = "bold 16px 'Share Tech Mono'";
+                    ctx.fillStyle = "rgba(255,255,255,0.85)";
+                    ctx.shadowColor = "#00d4ff";
+                    ctx.shadowBlur = 10;
+                    ctx.textAlign = "center";
+                    ctx.fillText(overlayData.userText.toUpperCase(), width/2, height - 80);
+                    ctx.shadowBlur = 0;
+                }
+                
+                // Barra de energía de audio
+                if (overlayData.audioEnergy && overlayData.audioEnergy > 1) {
+                    ctx.filter = 'none';
+                    const barWidth = (overlayData.audioEnergy / 100) * (width * 0.6);
+                    ctx.fillStyle = "rgba(0,255,255,0.7)";
+                    ctx.fillRect(width*0.2, height - 10, barWidth, 4);
+                }
+                
+                ctx.filter = 'none';
+            }, [overlayData, width, height, filter]);
+            
+            return <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" style={{width:'100%',height:'100%'}} />;
+        };
+
+        // Componente de video con canvas integrado para filtros
+        const VideoWithCanvas = ({ stream, camFilter, muted = true, className, overlayData }) => {
             const videoRef = useRef(null);
+            const containerRef = useRef(null);
+            const [dims, setDims] = useState({w:640, h:480});
+            
             useEffect(() => {
                 if (videoRef.current && stream) {
                     videoRef.current.srcObject = stream;
@@ -226,12 +311,21 @@
                 }
             }, [stream]);
             
-            let filterClass = '';
-            if (filter === 'night') filterClass = 'filter-night';
-            else if (filter === 'thermal') filterClass = 'filter-thermal';
-            else if (filter === 'urbex') filterClass = 'filter-urbex';
+            useEffect(() => {
+                const iv = setInterval(() => {
+                    if (videoRef.current && videoRef.current.videoWidth) {
+                        setDims({w: videoRef.current.videoWidth, h: videoRef.current.videoHeight});
+                    }
+                }, 500);
+                return () => clearInterval(iv);
+            }, []);
             
-            return <video ref={videoRef} autoPlay playsInline muted={muted} className={`${className} ${filterClass}`} />;
+            return (
+                <div ref={containerRef} className={`relative ${className}`}>
+                    <video ref={videoRef} autoPlay playsInline muted={muted} className="absolute inset-0 w-full h-full object-cover" />
+                    <CanvasOverlay width={dims.w} height={dims.h} overlayData={overlayData} filter={camFilter} />
+                </div>
+            );
         };
 
         const ToastContainer = ({ notifications }) => (
@@ -318,6 +412,7 @@
                                         <button onClick={() => handleFilterToggle('lidar')} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 transition-colors font-bold ${currentFilter === 'lidar' ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'bg-[#1a1a1a] text-teal-400 border-teal-900/30'}`}><ScanLine size={16}/> LIDAR</button>
                                         <button onClick={() => handleFilterToggle('sls')} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold ${currentFilter === 'sls' ? 'bg-white text-black border-white' : 'bg-[#1a1a1a] text-purple-400 border-purple-900/30'}`}><Ghost size={16}/> SLS</button>
                                         <button onClick={() => { triggerHaptic(10); onCommand({ category: 'cmd', action: 'toggle', value: 'pareidolia', target: activeCam?.id }); }} disabled={!canUseAI} className={`text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold ${canUseAI ? (currentFilter === 'pareidolia' ? 'bg-white text-black border-white' : 'bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white border-red-900/50') : 'bg-[#151515] text-gray-600 border-gray-800 opacity-50 cursor-not-allowed'}`}><Eye size={16}/> {canUseAI ? 'VISION IA' : 'IA N/A'}</button>
+                                        <button onClick={() => { triggerHaptic(10); onCommand({ category: 'cmd', action: 'toggle', value: 'audioscan', target: activeCam?.id }); }} className="text-xs py-4 rounded-lg border flex flex-col items-center justify-center gap-2 font-bold bg-yellow-900/20 text-yellow-500 border-yellow-900/50 hover:bg-yellow-600 hover:text-white"><Mic size={16}/> AUDIO SCAN</button>
                                         <button onClick={() => { triggerHaptic(10); onCommand({ category: 'cmd', action: 'reset', value: '', target: activeCam?.id }); }} className="col-span-2 mt-2 bg-neutral-900 hover:bg-neutral-800 text-gray-400 text-[10px] py-3 rounded-lg border border-neutral-800 flex items-center justify-center gap-2 uppercase font-bold tracking-widest"><RotateCcw size={12}/> Reset</button>
                                     </div>
                                 </section>
@@ -382,39 +477,44 @@
             const [stream, setStream] = useState(null);
             const [activeMedia, setActiveMedia] = useState(null);
             const [camFilter, setCamFilter] = useState('normal');
+            const [overlayData, setOverlayData] = useState(null);
             const peerRef = useRef(null);
-
+            const audioRef = useRef(null);
+            
+            // Conexión Agora para recibir video/audio
             useEffect(() => {
-                // El feed limpio recibe video por Agora en lugar de PeerJS
                 const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
                 client.on('user-published', async (user, mediaType) => {
                     await client.subscribe(user, mediaType);
                     if (mediaType === 'video') {
-                        setStream(user.videoTrack.getMediaStreamTrack());
+                        setStream(new MediaStream([user.videoTrack.getMediaStreamTrack()]));
                     }
                     if (mediaType === 'audio') {
-                        user.audioTrack.play();
+                        // Reproducir audio para OBS
+                        const audioEl = document.createElement('audio');
+                        audioEl.autoplay = true;
+                        audioEl.playsInline = true;
+                        audioEl.srcObject = new MediaStream([user.audioTrack.getMediaStreamTrack()]);
+                        audioEl.play().catch(()=>{});
+                        audioRef.current = audioEl;
                     }
                 });
                 client.join(AGORA_APP_ID, AGORA_CHANNEL, AGORA_TOKEN, null).catch(console.error);
                 return () => client.leave();
-            }, [targetId]);
-
+            }, []);
+            
+            // PeerJS para recibir overlay_data y comandos
             useEffect(() => {
-                // Comandos (PeerJS): obtener filtro activo
                 const peer = new window.Peer(null, PEER_CONFIG);
                 peerRef.current = peer;
                 peer.on('open', () => {
                     const conn = peer.connect(targetId, { reliable: true });
-                    conn.on('open', () => { conn.send({ type: 'register-obs-client' }); });
+                    conn.on('open', () => conn.send({ type: 'register-obs-client' }));
                     conn.on('data', (data) => {
-                        if(data.type === 'program-update') setActiveMedia(data.activeMedia);
-                        // Recibir estado de filtro
-                        if(data.type === 'scan-state' && data.filters) {
-                            if(data.filters.noc) setCamFilter('night');
-                            else if(data.filters.neg) setCamFilter('thermal');
-                            else if(data.filters.urbx) setCamFilter('urbex');
-                            else setCamFilter('normal');
+                        if (data.type === 'program-update') setActiveMedia(data.activeMedia);
+                        if (data.type === 'overlay_data') {
+                            setOverlayData(data);
+                            if (data.filter) setCamFilter(data.filter);
                         }
                     });
                 });
@@ -424,7 +524,7 @@
             return (
                 <div className="w-screen h-screen bg-black overflow-hidden relative flex items-center justify-center">
                     {stream ? (
-                        <FilteredVideo stream={new MediaStream([stream])} filter={camFilter} className="w-full h-full object-cover" muted={false} />
+                        <VideoWithCanvas stream={stream} camFilter={camFilter} className="w-full h-full object-cover" muted={false} overlayData={overlayData} />
                     ) : (
                         <div className="text-neutral-800 font-bold text-2xl animate-pulse tracking-widest font-mono">ESPERANDO SEÑAL OBR...</div>
                     )}
@@ -616,7 +716,6 @@
                 </div>
             );
         };
-
         const DockMode = ({ preferredId, initialBlobAssets }) => {
           useWakeLock(true);
           const [myId, setMyId] = useState(null);
@@ -656,9 +755,10 @@
           const obsClientsRef = useRef([]);
 
           const obsRef = useRef(null); 
-          const peerRef = useRef(null);   // Solo comandos
+          const peerRef = useRef(null);
           const agoraClientRef = useRef(null);
-          const agoraUsersRef = useRef({}); // uid -> { videoTrack, audioTrack, filter }
+          const agoraUsersRef = useRef({});
+          const overlayDataRef = useRef({});
           
           const previewRef = useRef(null);
           const programRef = useRef(null);
@@ -776,31 +876,28 @@
             client.on('user-published', async (user, mediaType) => {
                 await client.subscribe(user, mediaType);
                 if (mediaType === 'video') {
-                    // Agora no da el nombre directamente; se usará el uid, pero después se actualizará con el nombre vía PeerJS
                     const uid = user.uid;
                     const videoTrack = user.videoTrack;
                     agoraUsersRef.current[uid] = { 
                         ...agoraUsersRef.current[uid], 
                         videoTrack: videoTrack.getMediaStreamTrack() 
                     };
-                    // Crear entrada de cámara si no existe
                     setCameras(prev => {
                         if (!prev[uid]) {
                             return { ...prev, [uid]: { id: uid, name: uid, stream: new MediaStream([videoTrack.getMediaStreamTrack()]), tally: 'idle', hasAI: true, filter: 'normal' } };
                         }
-                        // Si ya existe, actualizar el stream (puede que ya tenga nombre)
                         return { ...prev, [uid]: { ...prev[uid], stream: new MediaStream([videoTrack.getMediaStreamTrack()]) } };
                     });
                 }
                 if (mediaType === 'audio') {
                     user.audioTrack.play();
-                    // Opcional: mezclar audio o manejarlo
                 }
             });
 
             client.on('user-unpublished', (user) => {
                 const uid = user.uid;
                 delete agoraUsersRef.current[uid];
+                delete overlayDataRef.current[uid];
                 setCameras(prev => {
                     const newCams = { ...prev };
                     delete newCams[uid];
@@ -819,7 +916,7 @@
             };
           }, []);
 
-          // PeerJS para comandos y registro de nombres
+          // PeerJS para comandos y registro de nombres + recepción de overlays
           useEffect(() => {
             let baseId = preferredId;
             if (baseId?.endsWith("-8889")) baseId = baseId.slice(0, -5);
@@ -835,16 +932,12 @@
                 conn.on('data', (data) => {
                     if (data.type === 'register') { 
                         const camName = data.name;
-                        // Buscar cámara Agora por uid (asumimos que el nombre puede ser el uid inicial)
-                        // Pero la cámara nos envía su nombre al registrarse; actualizamos la entrada con ese nombre
-                        // La cámara también podría enviar su uid en algún campo, pero usaremos el nombre como id
+                        const agoraUid = data.agoraUid;
                         setCameras(prev => {
-                            // Buscamos si ya hay una cámara con el mismo nombre (uid)
-                            const existing = prev[camName];
+                            const existing = prev[camName] || prev[agoraUid];
                             if (existing) {
-                                return { ...prev, [camName]: { ...existing, name: camName, hasAI: data.hasAI, conn } };
+                                return { ...prev, [camName]: { ...existing, id: camName, name: camName, hasAI: data.hasAI, conn }, [agoraUid]: undefined };
                             }
-                            // Si no, creamos una nueva entrada (algunas cámaras pueden usar nombre directo)
                             return { ...prev, [camName]: { id: camName, name: camName, conn, tally: 'idle', hasAI: data.hasAI, filter: 'normal' } };
                         });
                         notify(`CAMARA: ${camName}`); 
@@ -860,11 +953,44 @@
                         conn.send({ type: 'program-update', activeMedia: activeMediaRef.current });
                     }
                     if (data.type === 'director-cmd') handleDirectorCommand(data);
-                    // Recibir estado de filtros desde la cámara
+                    if (data.type === 'overlay_data') {
+                        // Guardar overlay para la cámara que lo envió
+                        const camId = conn.peer;
+                        overlayDataRef.current[camId] = data;
+                        // Forzar un re-render ligero actualizando el estado
+                        setCameras(prev => {
+                            let changed = false;
+                            const updated = { ...prev };
+                            Object.keys(updated).forEach(k => {
+                                if (updated[k].conn && updated[k].conn.peer === camId) {
+                                    if (updated[k]._overlayTimestamp !== data.timestamp) {
+                                        updated[k] = { ...updated[k], _overlay: data, _overlayTimestamp: data.timestamp };
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            return changed ? updated : prev;
+                        });
+                    }
                     if (data.type === 'scan-state' && data.filters) {
-                        // Suponemos que la cámara envía su nombre en algún lugar, si no, usamos el origen de la conexión
-                        // De momento, aplicamos a la cámara que envió el mensaje
-                        // Implementación simplificada: no se mapea por cámara ahora
+                        const camId = conn.peer;
+                        setCameras(prev => {
+                            let changed = false;
+                            const updated = { ...prev };
+                            Object.keys(updated).forEach(k => {
+                                if (updated[k].conn && updated[k].conn.peer === camId) {
+                                    let f = 'normal';
+                                    if (data.filters.noc) f = 'night';
+                                    else if (data.filters.neg) f = 'thermal';
+                                    else if (data.filters.urbx) f = 'urbex';
+                                    if (updated[k].filter !== f) {
+                                        updated[k] = { ...updated[k], filter: f };
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            return changed ? updated : prev;
+                        });
                     }
                 });
                 conn.on('error', (err) => console.error("Conn Error", err));
@@ -944,11 +1070,8 @@
               }
           };
 
-          // Envío de stream de programa a clientes OBS (si se usa Agora, no es necesario, pero mantenemos compatibilidad)
           useEffect(() => {
               if (programId && cameras[programId]?.stream) {
-                  // En lugar de llamar a PeerJS, podríamos republicar? No necesario.
-                  // Solo mantenemos la parte de comandos
                   if(peerRef.current) {
                       Object.values(peerRef.current.connections).forEach(conns => conns.forEach(c => {
                           if(c.open) c.send({ type: 'program-update', activeMedia });
@@ -979,8 +1102,6 @@
                        const camId = cmd.value;
                        const cam = camerasRef.current[camId];
                        if (cam && cam.stream && directorConnRef.current) {
-                            // Enviar stream por PeerJS (antiguo), pero podríamos usar Agora también
-                            // Se mantiene temporalmente
                             try {
                                 const peerVid = new window.Peer(null, PEER_CONFIG);
                                 peerVid.on('open', () => {
@@ -1057,7 +1178,7 @@
           };
 
           const previewCam = previewId ? cameras[previewId] : null;
-          const camList = Object.values(cameras);
+          const camList = Object.values(cameras).filter(c => c.id && c.name); // Filtra entradas válidas
           const isTransicionReady = assetStatus['transicion'] === 'ready';
           const isFailoverMode = activeMedia && activeMedia.startsWith('backup');
           
@@ -1072,7 +1193,7 @@
                 {showFullscreenProgram && (
                     <div className="fixed inset-0 bg-black flex items-center justify-center" style={{ zIndex: 99999 }}>
                         {cameras[programId]?.stream && 
-                            <FilteredVideo stream={cameras[programId].stream} filter={cameras[programId].filter || 'normal'} className="w-full h-full object-cover" muted={isProgramMuted} />
+                            <VideoWithCanvas stream={cameras[programId].stream} camFilter={cameras[programId].filter || 'normal'} className="w-full h-full object-cover" muted={isProgramMuted} overlayData={cameras[programId]._overlay} />
                         }
                         <MediaOverlay activeMedia={activeMedia} blobAssets={blobAssets} onFinish={handleMediaFinish} onTimeUpdate={handleTimeUpdate} />
                         <button 
@@ -1098,7 +1219,7 @@
                 <div className="h-12 bg-black border-b border-[#222] flex items-center justify-center relative shrink-0">
                     <div className="absolute left-4 flex items-center">
                         <img src="./obr-logo.png" className="w-6 h-6 object-contain mr-3" />
-                        <span className="font-bold text-white tracking-widest text-[10px] uppercase hidden sm:block">Exploraciones OBR | Studio v7.0</span>
+                        <span className="font-bold text-white tracking-widest text-[10px] uppercase hidden sm:block">Exploraciones OBR | Studio v7.1</span>
                         <StatusIndicators isLive={obsStreaming} isRec={obsRecording} isObs={obsConnected} isFailover={isFailoverMode} />
                     </div>
                     
@@ -1145,7 +1266,7 @@
                             <div className="flex-1 bg-black rounded-xl border border-neutral-800 relative overflow-hidden shadow-2xl">
                                 <div className="absolute top-3 left-3 bg-green-600 text-[9px] px-2 py-1 rounded font-bold uppercase z-10 shadow-lg tracking-widest">Preview</div>
                                 {previewCam?.stream ? ( 
-                                    <FilteredVideo stream={previewCam.stream} filter={previewCam.filter || 'normal'} className="w-full h-full object-contain" muted={true} />
+                                    <VideoWithCanvas stream={previewCam.stream} camFilter={previewCam.filter || 'normal'} className="w-full h-full object-contain" muted={true} overlayData={previewCam._overlay} />
                                 ) : ( 
                                     <div className="w-full h-full flex items-center justify-center opacity-10"><Monitor size={48} /></div>
                                 )}
@@ -1154,7 +1275,7 @@
                                  <div className="absolute top-3 left-3 bg-red-600 text-[9px] px-2 py-1 rounded font-bold uppercase z-10 shadow-lg tracking-widest">Program</div>
                                  <div className="relative w-full h-full bg-[#050505]">
                                     {cameras[programId]?.stream && 
-                                        <FilteredVideo stream={cameras[programId].stream} filter={cameras[programId].filter || 'normal'} className="w-full h-full object-cover" muted={isProgramMuted} />
+                                        <VideoWithCanvas stream={cameras[programId].stream} camFilter={cameras[programId].filter || 'normal'} className="w-full h-full object-cover" muted={isProgramMuted} overlayData={cameras[programId]._overlay} />
                                     }
                                     <MediaOverlay activeMedia={activeMedia} blobAssets={blobAssets} onFinish={handleMediaFinish} onTimeUpdate={handleTimeUpdate} />
                                  </div>
@@ -1171,7 +1292,7 @@
                                     <div key={cam.id} 
                                         onClick={() => { triggerHaptic(10); setPreviewId(cam.id); }}
                                         className={`aspect-video bg-black rounded-lg border-2 cursor-pointer relative overflow-hidden transition-all group ${cam.tally === 'program' ? 'border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.4)]' : cam.tally === 'preview' ? 'preview-selected border-green-600' : 'border-neutral-800 hover:border-neutral-600'}`}>
-                                        {cam.stream && <FilteredVideo stream={cam.stream} filter={cam.filter || 'normal'} className="w-full h-full object-cover opacity-60 pointer-events-none" muted={true} />}
+                                        {cam.stream && <VideoWithCanvas stream={cam.stream} camFilter={cam.filter || 'normal'} className="w-full h-full object-cover opacity-60 pointer-events-none" muted={true} overlayData={cam._overlay} />}
                                         <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 text-[9px] font-bold uppercase tracking-tighter truncate">{cam.name}</div>
                                     </div>
                                 ))}
@@ -1191,7 +1312,6 @@
             </div>
           );
         };
-
         const AssetLoader = ({ onReady }) => {
             const [status, setStatus] = useState({});
             const [progress, setProgress] = useState(0);
@@ -1252,7 +1372,7 @@
                 <div className="text-center">
                     <img src="./obr-logo.png" className="w-24 h-24 mx-auto mb-4 object-contain drop-shadow-[0_0_20px_rgba(220,38,38,0.6)]" />
                     <h1 className="text-2xl font-bold text-white tracking-widest uppercase">Estudio <span className="text-red-600">OBR</span></h1>
-                    <p className="text-gray-500 text-[10px] mt-1 uppercase tracking-[0.4em] opacity-50 font-bold">v7.0 AGORA</p>
+                    <p className="text-gray-500 text-[10px] mt-1 uppercase tracking-[0.4em] opacity-50 font-bold">v7.1 AGORA</p>
                 </div>
                 <div className="bg-black/50 p-4 rounded border border-gray-800">
                     <label className="text-[10px] text-gray-500 font-bold mb-1 block uppercase tracking-widest">ID (Tailscale IP)</label>
