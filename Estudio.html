@@ -466,8 +466,8 @@
             const [camFilter, setCamFilter] = useState('normal');
             const [overlayData, setOverlayData] = useState(null);
             const rtmClientRef = useRef(null);
-            const audioRef = useRef(null);
-            
+            const audioContainerRef = useRef(null);
+
             // Conexión Agora para recibir video/audio
             useEffect(() => {
                 const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
@@ -477,25 +477,42 @@
                         setStream(new MediaStream([user.videoTrack.getMediaStreamTrack()]));
                     }
                     if (mediaType === 'audio') {
+                        // Crear un elemento de audio, añadirlo al DOM e intentar reproducción
                         const audioEl = document.createElement('audio');
                         audioEl.autoplay = true;
                         audioEl.playsInline = true;
                         audioEl.srcObject = new MediaStream([user.audioTrack.getMediaStreamTrack()]);
-                        audioEl.play().catch(()=>{});
-                        audioRef.current = audioEl;
+                        audioEl.controls = false;
+                        audioEl.style.display = 'none';
+                        document.body.appendChild(audioEl);
+                        audioEl.play().catch(() => {
+                            // Si el navegador bloquea el autoplay, mostrar un botón para iniciar
+                            const btn = document.createElement('button');
+                            btn.innerText = '🔊 Activar audio OBS';
+                            btn.onclick = () => {
+                                audioEl.play();
+                                btn.remove();
+                            };
+                            btn.style.cssText = 'position:fixed; bottom:20px; left:20px; z-index:9999; background:red; color:white; padding:10px; border:none; border-radius:5px; cursor:pointer;';
+                            document.body.appendChild(btn);
+                        });
+                        if (audioContainerRef.current) {
+                            audioContainerRef.current.appendChild(audioEl);
+                        }
                     }
                 });
                 client.join(AGORA_APP_ID, AGORA_CHANNEL, AGORA_TOKEN, null).catch(console.error);
                 return () => client.leave();
             }, []);
-            
-            // RTM para recibir overlay_data y comandos
+
+            // RTM para recibir overlay_data y comandos (UID único para evitar conflicto con DockMode)
             useEffect(() => {
+                let rtmClient;
                 const initRTM = async () => {
-                    const rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
-                    await rtmClient.login({ uid: 'estudio_principal', token: RTM_TOKEN });
+                    rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
+                    await rtmClient.login({ uid: 'obs_feed_' + Date.now(), token: RTM_TOKEN });
                     rtmClientRef.current = rtmClient;
-                    
+
                     rtmClient.on('message', (message) => {
                         if (message.messageType === 'TEXT') {
                             const data = JSON.parse(message.text);
@@ -515,6 +532,7 @@
 
             return (
                 <div className="w-screen h-screen bg-black overflow-hidden relative flex items-center justify-center">
+                    <div ref={audioContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden' }}></div>
                     {stream ? (
                         <VideoWithCanvas stream={stream} camFilter={camFilter} className="w-full h-full object-cover" muted={false} overlayData={overlayData} />
                     ) : (
