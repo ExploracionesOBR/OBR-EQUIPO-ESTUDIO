@@ -450,10 +450,10 @@
     const CHAT_OVERLAY_URL  = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 
     const AI_SENSITIVITY = 0.2;
-    const VOLUMEN_BARRIDO = 0.80;
-    const VOLUMEN_RESPUESTA = 0.70;
-    const VOLUMEN_EVP = 1.0;
-    const VOLUMEN_IA_VISION = 1.0;
+    const VOLUMEN_BARRIDO = 0.60;
+    const VOLUMEN_RESPUESTA = 0.50;
+    const VOLUMEN_EVP = 1.5;
+    const VOLUMEN_IA_VISION = 1.5;
 
     let loadingTimer = setTimeout(() => {
         const loader = document.getElementById('loading');
@@ -1382,58 +1382,33 @@ const paranormalQuestions = [
 ];
     let evpHistorial = [];
 function generarEventoEVP(objetosDetectados = []) {
-    // Construye un EVP fragmentado tipo interferencia
     const partes = [];
-    
-    // 1. Decidir cuántos bloques (2-5)
     const numBloques = Math.floor(Math.random() * 4) + 2;
     
     for (let i = 0; i < numBloques; i++) {
         const tipo = Math.random();
         
         if (tipo < 0.35) {
-            // Verbo aleatorio
             partes.push(evpVerbos[Math.floor(Math.random() * evpVerbos.length)]);
         } else if (tipo < 0.60) {
-            // Sensación o posición
             const pool = Math.random() < 0.5 ? evpSensaciones : evpPosiciones;
             partes.push(pool[Math.floor(Math.random() * pool.length)]);
         } else if (tipo < 0.75 && objetosDetectados.length > 0) {
-            // Objeto detectado
             const obj = objetosDetectados[Math.floor(Math.random() * objetosDetectados.length)];
             if (obj && obj.trim()) partes.push(obj.trim().toLowerCase());
         } else if (tipo < 0.90) {
-            // Palabra suelta clásica
             partes.push(evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)]);
         } else {
-            // Advertencia (eventos intensos)
             partes.push(evpAdvertencias[Math.floor(Math.random() * evpAdvertencias.length)]);
         }
     }
     
-    // 2. A veces repetir la última palabra para efecto "interferencia"
     if (Math.random() < 0.4 && partes.length > 0) {
         partes.push(partes[partes.length - 1]);
     }
     
-    // 3. Unir con puntos suspensivos simulando transmisión fragmentada
-    let evp = "";
-    for (let i = 0; i < partes.length; i++) {
-        evp += partes[i];
-        if (i < partes.length - 1) {
-            // Pausa variable: a veces más larga
-            if (Math.random() < 0.3) {
-                evp += "... ";
-            } else {
-                evp += "... ";
-            }
-        }
-    }
-    
-    // 4. A veces añadir "..." al final para sensación incompleta
-    if (Math.random() < 0.6) {
-        evp += "...";
-    }
+    // Unir solo con espacios, sin puntos suspensivos
+    const evp = partes.join(' ');
     
     return evp;
 }
@@ -2371,7 +2346,7 @@ function generarEventoEVP(objetosDetectados = []) {
         _ttsBassFilter = ctx1.createBiquadFilter(); _ttsBassFilter.type = 'lowshelf';
         _ttsHighFilter = ctx1.createBiquadFilter(); _ttsHighFilter.type = 'highshelf';
         
-        ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
+        ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 8.0; ttsGainNode = ttsMainGain;
         ttsSource.connect(_ttsBassFilter); _ttsBassFilter.connect(_ttsHighFilter); _ttsHighFilter.connect(ttsMainGain); 
         
         ttsMainGain.connect(ctx1.destination);
