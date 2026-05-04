@@ -67,7 +67,6 @@
         .filter-night { filter: grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0); }
         .filter-thermal { filter: invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2); }
         .filter-urbex { filter: invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85); }
-        /* ... (otros filtros según se necesiten) */
     </style>
 </head>
 <body>
@@ -95,8 +94,12 @@
 
         // Configuración de Agora (copiar de camara)
         const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
+        // ⚠️ Token actualizado (el mismo que en Camara)
         const AGORA_TOKEN  = '007eJxTYLj96oFFVtaV1JvvpvEHM3x4nd/89f7k4M/94qn9tv3zuQ0VGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNKx1/ZDYEMjLcM+JgZWSAQBCfmyE/qUg3tbikNCUzn4EBAO3qI78=';
         const AGORA_CHANNEL = 'obr-estudio';
+
+        // Silenciar logs de depuración de Agora
+        AgoraRTC.setLogLevel(3);
 
         const TURN_DOMAIN = "exploracionesobr.duckdns.org";
         const PEER_CONFIG = {
