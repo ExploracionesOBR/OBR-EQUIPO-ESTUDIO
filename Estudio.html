@@ -91,10 +91,7 @@
         const AGORA_CHANNEL = 'obr-estudio';
         AgoraRTC.setLogLevel(3);
 
-        // Canal para micrófono remoto
         const MIC_CHANNEL = 'obr-mic';
-
-        // RTM token (debug mode sin token)
         const RTM_TOKEN = undefined;
 
         const triggerHaptic = (pattern = 15) => {
@@ -195,7 +192,6 @@
             </div>
         );
 
-        // Componente CanvasOverlay para pintar SLS, HUD, texto, audio sobre el video
         const CanvasOverlay = ({ width, height, overlayData }) => {
             const canvasRef = useRef(null);
             
@@ -209,14 +205,12 @@
                 
                 if (!overlayData) return;
                 
-                // Aplicar filtro si la cámara tiene uno activo
                 if (overlayData.filter && overlayData.filter !== 'normal') {
                     if (overlayData.filter === 'night') ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)';
                     else if (overlayData.filter === 'thermal') ctx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
                     else if (overlayData.filter === 'urbex') ctx.filter = 'invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85)';
                 }
                 
-                // Dibujar poses SLS
                 if (overlayData.poses && overlayData.poses.length > 0) {
                     overlayData.poses.forEach(pose => {
                         if (!pose.keypoints || pose.keypoints.length === 0) return;
@@ -247,7 +241,6 @@
                     });
                 }
                 
-                // Texto EVP
                 if (overlayData.evpText) {
                     ctx.filter = 'none';
                     ctx.font = "bold 18px 'Share Tech Mono'";
@@ -259,7 +252,6 @@
                     ctx.shadowBlur = 0;
                 }
                 
-                // Texto del usuario
                 if (overlayData.userText) {
                     ctx.filter = 'none';
                     ctx.font = "bold 16px 'Share Tech Mono'";
@@ -271,7 +263,6 @@
                     ctx.shadowBlur = 0;
                 }
                 
-                // Barra de energía de audio
                 if (overlayData.audioEnergy && overlayData.audioEnergy > 1) {
                     ctx.filter = 'none';
                     const barWidth = (overlayData.audioEnergy / 100) * (width * 0.6);
@@ -285,7 +276,6 @@
             return <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" style={{width:'100%',height:'100%'}} />;
         };
 
-        // Componente de video con canvas integrado para filtros y overlays
         const VideoWithCanvas = ({ stream, camFilter, muted = true, className, overlayData }) => {
             const videoRef = useRef(null);
             const containerRef = useRef(null);
@@ -465,10 +455,11 @@
             const [activeMedia, setActiveMedia] = useState(null);
             const [camFilter, setCamFilter] = useState('normal');
             const [overlayData, setOverlayData] = useState(null);
+            const [localAssetStatus, setLocalAssetStatus] = useState({});
             const rtmClientRef = useRef(null);
+            const broadcastChannelRef = useRef(null);
             const audioContainerRef = useRef(null);
-
-            // Conexión Agora para recibir video/audio
+            
             useEffect(() => {
                 const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
                 client.on('user-published', async (user, mediaType) => {
@@ -477,7 +468,6 @@
                         setStream(new MediaStream([user.videoTrack.getMediaStreamTrack()]));
                     }
                     if (mediaType === 'audio') {
-                        // Crear un elemento de audio, añadirlo al DOM e intentar reproducción
                         const audioEl = document.createElement('audio');
                         audioEl.autoplay = true;
                         audioEl.playsInline = true;
@@ -486,7 +476,6 @@
                         audioEl.style.display = 'none';
                         document.body.appendChild(audioEl);
                         audioEl.play().catch(() => {
-                            // Si el navegador bloquea el autoplay, mostrar un botón para iniciar
                             const btn = document.createElement('button');
                             btn.innerText = '🔊 Activar audio OBS';
                             btn.onclick = () => {
@@ -505,7 +494,6 @@
                 return () => client.leave();
             }, []);
 
-            // RTM para recibir overlay_data y comandos (UID único para evitar conflicto con DockMode)
             useEffect(() => {
                 let rtmClient;
                 const initRTM = async () => {
@@ -513,19 +501,46 @@
                     await rtmClient.login({ uid: 'obs_feed_' + Date.now(), token: RTM_TOKEN });
                     rtmClientRef.current = rtmClient;
 
-                    rtmClient.on('message', (message) => {
+                    const broadcastChannel = rtmClient.createChannel('obs_broadcast');
+                    broadcastChannelRef.current = broadcastChannel;
+                    broadcastChannel.on('message', (message) => {
                         if (message.messageType === 'TEXT') {
                             const data = JSON.parse(message.text);
+                            if (data.type === 'program-update') {
+                                setActiveMedia(data.activeMedia);
+                            }
+                            if (data.type === 'dock-status') {
+                                setActiveMedia(data.activeMedia);
+                                if (data.assetStatus) setLocalAssetStatus(data.assetStatus);
+                            }
                             if (data.type === 'overlay_data') {
                                 setOverlayData(data);
                                 if (data.filter) setCamFilter(data.filter);
                             }
+                            if (data.type === 'scan-state' && data.filters) {
+                                if (data.filters.noc) setCamFilter('night');
+                                else if (data.filters.neg) setCamFilter('thermal');
+                                else if (data.filters.urbx) setCamFilter('urbex');
+                                else setCamFilter('normal');
+                            }
+                        }
+                    });
+                    await broadcastChannel.join();
+
+                    rtmClient.on('message', (message) => {
+                        if (message.messageType === 'TEXT') {
+                            const data = JSON.parse(message.text);
                             if (data.type === 'program-update') setActiveMedia(data.activeMedia);
+                            if (data.type === 'overlay_data') {
+                                setOverlayData(data);
+                                if (data.filter) setCamFilter(data.filter);
+                            }
                         }
                     });
                 };
                 initRTM();
                 return () => {
+                    if (broadcastChannelRef.current) broadcastChannelRef.current.leave();
                     if (rtmClientRef.current) rtmClientRef.current.logout();
                 };
             }, []);
@@ -723,6 +738,7 @@
                 </div>
             );
         };
+
         const DockMode = ({ preferredId, initialBlobAssets }) => {
           useWakeLock(true);
           const [myId, setMyId] = useState(null);
@@ -782,7 +798,6 @@
               const id = Date.now(); 
               setNotifications(prev => [...prev, { id, msg, type }]); 
               setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000); 
-              // Enviar toast al director si está conectado
               if (rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
                   rtmClientRef.current.publish('director_*', JSON.stringify({ type: 'toast', msg, toastType: type }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
               }
@@ -878,7 +893,7 @@
              }));
           };
 
-          // Integración Agora RTC: recepción de streams de video
+          // Integración Agora RTC: recepción de streams
           useEffect(() => {
             const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
             agoraClientRef.current = client;
@@ -926,7 +941,7 @@
             };
           }, []);
 
-          // Agora RTM: registro de cámaras, recepción de comandos del director y overlays
+          // Agora RTM: comandos, registro y broadcast para OBS
           useEffect(() => {
             const initRTM = async () => {
                 const rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
@@ -942,7 +957,6 @@
                             const camName = data.name || message.publisher;
                             const agoraUid = data.agoraUid;
                             setCameras(prev => {
-                                // Si ya existe una entrada con el mismo nombre o uid de Agora, fusionar
                                 const existing = prev[camName] || (agoraUid && prev[agoraUid]);
                                 const base = existing || { tally: 'idle', hasAI: data.hasAI || true, filter: 'normal' };
                                 const newEntry = {
@@ -954,7 +968,6 @@
                                     stream: base.stream || (agoraUid && agoraUsersRef.current[agoraUid]?.videoTrack ? new MediaStream([agoraUsersRef.current[agoraUid].videoTrack]) : null)
                                 };
                                 const updated = { ...prev, [camName]: newEntry };
-                                // Eliminar entrada antigua por UID si existe
                                 if (agoraUid && updated[agoraUid]) {
                                     delete updated[agoraUid];
                                 }
@@ -966,7 +979,6 @@
                             handleDirectorCommand(data);
                         }
                         if (data.type === 'overlay_data') {
-                            // Guardar overlay para la cámara que lo envió
                             const camUid = message.publisher;
                             overlayDataRef.current[camUid] = data;
                             setCameras(prev => {
@@ -980,8 +992,10 @@
                                 });
                                 return changed ? updated : prev;
                             });
+                            // Reenviar al canal de broadcast OBS
+                            rtmClient.publish('obs_broadcast', JSON.stringify(data), { channelType: 'CHANNEL', customType: 'command' }).catch(()=>{});
                         }
-                        if (data.type === 'scan-state' && data.filters) {
+                        if (data.type === 'scan-state') {
                             const camUid = message.publisher;
                             setCameras(prev => {
                                 let changed = false;
@@ -1000,14 +1014,19 @@
                                 });
                                 return changed ? updated : prev;
                             });
+                            // Reenviar scan-state al broadcast OBS
+                            if (data.filters) {
+                                const filterData = { type: 'scan-state', filters: data.filters };
+                                rtmClient.publish('obs_broadcast', JSON.stringify(filterData), { channelType: 'CHANNEL', customType: 'command' }).catch(()=>{});
+                            }
                         }
                     }
                 });
 
-                // Enviar estado periódicamente
+                // Intervalo de estado y broadcast
                 const statusInterval = setInterval(() => {
                     if (rtmClient.isLoggedIn) {
-                        // Enviar dock-status a todos los directores conectados
+                        // Publicar a directores
                         rtmClient.publish('director_*', JSON.stringify({ 
                             type: 'dock-status', 
                             activeMedia: activeMediaRef.current, 
@@ -1016,6 +1035,17 @@
                         }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
                         rtmClient.publish('director_*', JSON.stringify({ type: 'obs-state-update', state: obsStateRef.current }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
                         rtmClient.publish('director_*', JSON.stringify({ type: 'camera-list-update', cameras: getSerializableCameras() }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+
+                        // Publicar al broadcast de OBS
+                        rtmClient.publish('obs_broadcast', JSON.stringify({ 
+                            type: 'dock-status', 
+                            activeMedia: activeMediaRef.current, 
+                            assetStatus: assetStatusRef.current
+                        }), { channelType: 'CHANNEL', customType: 'command' }).catch(()=>{});
+                        rtmClient.publish('obs_broadcast', JSON.stringify({ 
+                            type: 'program-update', 
+                            activeMedia: activeMediaRef.current 
+                        }), { channelType: 'CHANNEL', customType: 'command' }).catch(()=>{});
                     }
                 }, 1000);
 
@@ -1076,8 +1106,7 @@
           useEffect(() => {
               if (programId && cameras[programId]?.stream) {
                   if(rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
-                      // Enviar program-update a clientes OBS
-                      rtmClientRef.current.publish('obs_client_*', JSON.stringify({ type: 'program-update', activeMedia }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+                      rtmClientRef.current.publish('obs_broadcast', JSON.stringify({ type: 'program-update', activeMedia }), { channelType: 'CHANNEL', customType: 'command' }).catch(()=>{});
                   }
               }
           }, [programId, activeMedia, cameras]);
@@ -1088,7 +1117,6 @@
                   const cam = camerasRef.current[targetCamId];
 
                   if (targetCamId && cam) {
-                      // Enviar comando a la cámara por RTM
                       const camUid = cam._rtmId || targetCamId;
                       if (rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
                           rtmClientRef.current.publish(camUid, JSON.stringify({ type: 'cmd', action: cmd.action, value: cmd.value }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
@@ -1108,7 +1136,6 @@
                        const camId = cmd.value;
                        const cam = camerasRef.current[camId];
                        if (cam && cam.stream && rtmClientRef.current) {
-                            // Enviar stream vía Agora? No, solo notificar.
                             notify("Función Peek no implementada en esta versión", "warning");
                        }
                    }
@@ -1311,6 +1338,7 @@
             </div>
           );
         };
+
         const AssetLoader = ({ onReady }) => {
             const [status, setStatus] = useState({});
             const [progress, setProgress] = useState(0);
