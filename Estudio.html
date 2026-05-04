@@ -1178,7 +1178,7 @@
           };
 
           const previewCam = previewId ? cameras[previewId] : null;
-          const camList = Object.values(cameras).filter(c => c.id && c.name); // Filtra entradas válidas
+          const camList = Object.values(cameras).filter(c => c && c.id && c.name); // Filtra entradas válidas
           const isTransicionReady = assetStatus['transicion'] === 'ready';
           const isFailoverMode = activeMedia && activeMedia.startsWith('backup');
           
