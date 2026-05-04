@@ -467,7 +467,7 @@
     // CONFIGURACIÓN EXTERNA (MODIFICAR SEGÚN ENTORNO)
     // ==========================================================
     const AGORA_APP_ID      = 'f56ed1937b944e35ae6195bb0c0b2d55';
-    // ⚠️ REEMPLAZA EL TOKEN POR UNO NUEVO GENERADO EN https://dashboard.agora.io
+    // ⚠️ TOKEN ACTUALIZADO (29-05)
     const AGORA_TOKEN       = '007eJxTYLj96oFFVtaV1JvvpvEHM3x4nd/89f7k4M/94qn9tv3zuQ0VGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNKx1/ZDYEMjLcM+JgZWSAQBCfmyE/qUg3tbikNCUzn4EBAO3qI78=';
     const AGORA_CHANNEL     = 'obr-estudio';
     const CHAT_OVERLAY_URL  = 'https://socialstream.ninja/dock.html?session=89yKRznESR';   // Social Stream Ninja
@@ -3288,7 +3288,7 @@ const paranormalQuestions = [
         document.getElementById('connect-modal').classList.add('active'); 
     }
 
-    // NUEVA FUNCIÓN DE TRANSMISIÓN CON AGORA
+    // NUEVA FUNCIÓN DE TRANSMISIÓN CON AGORA (CORREGIDA)
     async function connectToStudio() {
         const name = document.getElementById('stream-name').value.trim();
         if (!name) return;
@@ -3312,6 +3312,13 @@ const paranormalQuestions = [
         
         try {
             const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+            
+            // CORRECCIÓN: asignar rol de host para poder publicar
+            client.setClientRole('host');
+            
+            // Activar proxy TCP para evitar timeouts en redes móviles restrictivas
+            client.startProxyServer();
+            
             await client.join(AGORA_APP_ID, AGORA_CHANNEL, AGORA_TOKEN, null);
             
             // Video track de la cámara (sin filtros, crudo)
