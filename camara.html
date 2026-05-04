@@ -1354,7 +1354,22 @@ const evpAdvertencias = [
 "cuidado","vete","peligro","huye","corre","no entres","sal de aquí","detente","no mires atrás","es peligroso","cuidado atrás","cállate","escóndete","aléjate","te hará daño","vete ahora","corre de aquí",
 "no avances","no sigas","no entres ahí","no abras","no mires","no regreses","huye ahora","corre ahora","aléjate ahora","vete lejos","no te acerques","no toques","no hables","no escuches"
 ];
+const evpVerbos = [
+    "ven", "mira", "escucha", "entra", "corre", "no", "sal", "toca",
+    "busca", "sigue", "habla", "espera", "ven", "no", "mira", "escucha",
+    "corre", "sal", "no", "ven", "entra", "toca", "busca", "sigue"
+];
 
+const evpSensaciones = [
+    "cerca", "detrás", "aquí", "frío", "ahora", "lejos", "arriba",
+    "abajo", "dentro", "fuera", "cerca", "detrás", "frío", "aquí",
+    "ahora", "lejos", "arriba", "abajo", "dentro", "fuera"
+];
+
+const evpPosiciones = [
+    "puerta", "silla", "esquina", "fondo", "pasillo", "ventana",
+    "pared", "techo", "suelo", "puerta", "esquina", "fondo"
+];    
 const paranormalQuestions = [
 "hay alguien aqui","puede alguien escucharnos","puedes hablarnos","quien esta aqui","como te llamas","estas aqui","estas cerca","necesitas ayuda","que te paso","vivias aqui","estas solo",
 "puedes dar una senal","puedes decir si","puedes decir no","si estas aqui di algo","quieres que nos vayamos",
@@ -1366,7 +1381,62 @@ const paranormalQuestions = [
 "quieres hablar","quieres comunicarse","quieres que te ayudemos"
 ];
     let evpHistorial = [];
-
+function generarEventoEVP(objetosDetectados = []) {
+    // Construye un EVP fragmentado tipo interferencia
+    const partes = [];
+    
+    // 1. Decidir cuántos bloques (2-5)
+    const numBloques = Math.floor(Math.random() * 4) + 2;
+    
+    for (let i = 0; i < numBloques; i++) {
+        const tipo = Math.random();
+        
+        if (tipo < 0.35) {
+            // Verbo aleatorio
+            partes.push(evpVerbos[Math.floor(Math.random() * evpVerbos.length)]);
+        } else if (tipo < 0.60) {
+            // Sensación o posición
+            const pool = Math.random() < 0.5 ? evpSensaciones : evpPosiciones;
+            partes.push(pool[Math.floor(Math.random() * pool.length)]);
+        } else if (tipo < 0.75 && objetosDetectados.length > 0) {
+            // Objeto detectado
+            const obj = objetosDetectados[Math.floor(Math.random() * objetosDetectados.length)];
+            if (obj && obj.trim()) partes.push(obj.trim().toLowerCase());
+        } else if (tipo < 0.90) {
+            // Palabra suelta clásica
+            partes.push(evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)]);
+        } else {
+            // Advertencia (eventos intensos)
+            partes.push(evpAdvertencias[Math.floor(Math.random() * evpAdvertencias.length)]);
+        }
+    }
+    
+    // 2. A veces repetir la última palabra para efecto "interferencia"
+    if (Math.random() < 0.4 && partes.length > 0) {
+        partes.push(partes[partes.length - 1]);
+    }
+    
+    // 3. Unir con puntos suspensivos simulando transmisión fragmentada
+    let evp = "";
+    for (let i = 0; i < partes.length; i++) {
+        evp += partes[i];
+        if (i < partes.length - 1) {
+            // Pausa variable: a veces más larga
+            if (Math.random() < 0.3) {
+                evp += "... ";
+            } else {
+                evp += "... ";
+            }
+        }
+    }
+    
+    // 4. A veces añadir "..." al final para sensación incompleta
+    if (Math.random() < 0.6) {
+        evp += "...";
+    }
+    
+    return evp;
+}
     function obtenerEVP() {
         const r = Math.random(); let arr = r < 0.60 ? evpPalabrasSueltas : (r < 0.85 ? evpFrasesCortas : evpAdvertencias); 
         let seleccion; let intento = 0;
@@ -2520,14 +2590,11 @@ const paranormalQuestions = [
         sendScanDataToStudio();
     }
 
-    function drawAudioVisualizer(c, w, h) {
-        if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
-        
-        // Nueva optimización: dibujar solo cada 3 frames
-        visualizerFrameCounter++;
-        if (visualizerFrameCounter % 3 !== 0) return;
-        
-        audioAnalyser.getByteTimeDomainData(audioDataArray);
+function drawAudioVisualizer(c, w, h) {
+    if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
+    
+    audioAnalyser.getByteTimeDomainData(audioDataArray);
+    // ... resto del código (sin cambios a partir de aquí)
         const bufferLength = audioAnalyser.frequencyBinCount;
         
         let minVal = 255;
@@ -2800,44 +2867,27 @@ const paranormalQuestions = [
 
             if (ttsMainGain) { const volVar = 0.75 + Math.random() * 0.5; ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05); }
 
-            let evpText; 
+                        let evpText;
             const textRoll = Math.random();
             
             if (afterQuestion) {
-                evpText = textRoll < 0.60 ? obtenerRespuestaContextual(lastSpokenText || '') : evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)];
+                // Después de una pregunta, el EVP es más reactivo pero fragmentado
+                evpText = generarEventoEVP();
             } else {
-                const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000); 
+                const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000);
                 
                 if (memoriasValidas.length > 0 && textRoll < 0.35) {
-                    const randomMemoryIndex = Math.floor(Math.random() * memoriasValidas.length);
-                    const randomMemory = memoriasValidas[randomMemoryIndex];
-                    const memoryResp = obtenerRespuestaMemoria(randomMemory.text);
-                    
-                    if (memoryResp) {
-                        evpText = memoryResp;
-                    } else {
-                        const esDeLasUltimas5 = randomMemoryIndex >= Math.max(0, memoriasValidas.length - 5);
-                        
-                        if (esDeLasUltimas5) {
-                            const mixRoll = Math.random();
-                            if (mixRoll < 0.70) evpText = evpAdvertencias[Math.floor(Math.random() * evpAdvertencias.length)];
-                            else evpText = evpFrasesAmbiguaMemoria[Math.floor(Math.random() * evpFrasesAmbiguaMemoria.length)];
-                        } else {
-                            const mixRoll = Math.random();
-                            if (mixRoll < 0.20) evpText = evpFrasesAmbiguaMemoria[Math.floor(Math.random() * evpFrasesAmbiguaMemoria.length)];
-                            else if (mixRoll < 0.45) evpText = paranormalQuestions[Math.floor(Math.random() * paranormalQuestions.length)];
-                            else if (mixRoll < 0.75) evpText = evpFrasesCortas[Math.floor(Math.random() * evpFrasesCortas.length)];
-                            else evpText = evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)];
-                        }
-                    }
+                    // Memoria de contexto: usamos palabras sueltas de la memoria
+                    const randomMemory = memoriasValidas[Math.floor(Math.random() * memoriasValidas.length)];
+                    const palabras = randomMemory.text.split(' ').filter(w => w.length > 2);
+                    const objeto = palabras.length > 0 ? [palabras[Math.floor(Math.random() * palabras.length)]] : [];
+                    evpText = generarEventoEVP(objeto);
                 } else {
-                    const reRoll = Math.random();
-                    if (reRoll < 0.50) evpText = evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)];
-                    else if (reRoll < 0.75) evpText = evpAdvertencias[Math.floor(Math.random() * evpAdvertencias.length)];
-                    else evpText = evpFrasesCortas[Math.floor(Math.random() * evpFrasesCortas.length)];
+                    // Evento espontáneo
+                    evpText = generarEventoEVP();
                 }
             }
-
+            
             if (conn && conn.open) conn.send({type:'ai-speech', text: evpText}); 
             speakSpooky(evpText); 
             cumulativeEVPEnergy = -30;
