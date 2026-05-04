@@ -1460,7 +1460,7 @@ function generarEventoEVP(objetosDetectados = []) {
     cloudTTSPlayer.playsInline = true;
     cloudTTSPlayer.preload = "auto";
     cloudTTSPlayer.muted = false;
-    cloudTTSPlayer.volume = VOLUMEN_IA_VISION;
+    cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION);
     if (typeof cloudTTSPlayer.setSinkId === 'function') cloudTTSPlayer.setSinkId("default").catch(() => {});
 
     let ttsSource      = null; 
@@ -1641,7 +1641,7 @@ function generarEventoEVP(objetosDetectados = []) {
             } catch(e) {}
         }
 
-        cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; cloudTTSPlayer.volume = VOLUMEN_IA_VISION; cloudTTSPlayer.load();
+        cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
         try { await cloudTTSPlayer.play(); } catch(err) { isTtsPlaying = false; return; }
         cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; }, { once: true });
     }
@@ -3692,7 +3692,7 @@ function drawAudioVisualizer(c, w, h) {
             const resp = await fetch(audioUrl); const rawBuf = await audioCtx.decodeAudioData(await resp.arrayBuffer());
             await _ensureContextRunning(); const fP2 = readFiltersFromDOM(); const bufSrc = await playBlobWithFilters(rawBuf, null, true, 'none');
             bufSrc.start(0); bufSrc.onended = () => { _activeBufSrc = null; if (btn) { btn.disabled = false; btn.textContent = '🔊'; } };
-        } catch(e) { cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = fP.rate; cloudTTSPlayer.volume = VOLUMEN_IA_VISION; cloudTTSPlayer.load(); cloudTTSPlayer.play().catch(()=>{}); cloudTTSPlayer.onended = () => { if (btn) { btn.disabled = false; btn.textContent = '🔊'; } }; }
+        } catch(e) { cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = fP.rate; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load(); cloudTTSPlayer.play().catch(()=>{}); cloudTTSPlayer.onended = () => { if (btn) { btn.disabled = false; btn.textContent = '🔊'; } }; }
         setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '🔊'; } }, 14000);
     };
 
