@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.1 (OVERLAY SENDER)</title>
+    <title>CAMARA OBR PRO v7.2 (AGORA UNIFICADO)</title>
     
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
@@ -18,8 +18,10 @@
     <script src="js/pose-detection.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="js/selfie_segmentation.js"></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <!-- AGORA SDKs (RTC + RTM) -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <script src="https://download.agora.io/sdk/release/AgoraRTM.js"></script>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -30,7 +32,7 @@
         if(!window.SelfieSegmentation) document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"><\/script>');
     </script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&amp;family=Orbitron:wght@500;700;900&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
@@ -263,7 +265,7 @@
         <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full">
             <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
             <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-            <p class="text-xs font-mono text-gray-500 mb-8">v7.1 (Agora + Overlay)</p>
+            <p class="text-xs font-mono text-gray-500 mb-8">v7.2 (Agora Unificado)</p>
             <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
             <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
             
@@ -288,8 +290,8 @@
 
                 <div id="mic-sender-status" class="text-gray-400 font-bold tracking-widest mb-6 font-mono text-center">ESPERANDO...</div>
                 
-                <button id="btn-start-sender" onclick="startRemoteMic()" class="w-full px-8 py-4 bg-red-900/30 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-700 hover:text-white transition-colors text-lg">CONECTAR MIC</button>
-                <button id="btn-stop-sender" onclick="stopRemoteMic()" class="w-full px-8 py-3 bg-gray-800 text-gray-400 font-bold font-orbitron rounded hover:text-white transition-colors hidden">DETENER TRANSMISIÓN</button>
+                <button id="btn-start-sender" onclick="startRemoteMicAgora()" class="w-full px-8 py-4 bg-red-900/30 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-700 hover:text-white transition-colors text-lg">CONECTAR MIC</button>
+                <button id="btn-stop-sender" onclick="stopRemoteMicAgora()" class="w-full px-8 py-3 bg-gray-800 text-gray-400 font-bold font-orbitron rounded hover:text-white transition-colors hidden">DETENER TRANSMISIÓN</button>
             </div>
 
             <button onclick="location.reload()" class="text-xs text-gray-500 underline mt-8 font-mono">Volver a Cámara</button>
@@ -444,14 +446,17 @@
     // ==========================================================
     // CONFIGURACIÓN EXTERNA
     // ==========================================================
-    const AGORA_APP_ID      = 'f56ed1937b944e35ae6195bb0c0b2d55';
-    const AGORA_TOKEN       = '007eJxTYLj96oFFVtaV1JvvpvEHM3x4nd/89f7k4M/94qn9tv3zuQ0VGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNKx1/ZDYEMjLcM+JgZWSAQBCfmyE/qUg3tbikNCUzn4EBAO3qI78=';
-    const AGORA_CHANNEL     = 'obr-estudio';
-    const CHAT_OVERLAY_URL  = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+    const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
+    const AGORA_TOKEN  = '007eJxTYLj96oFFVtaV1JvvpvEHM3x4nd/89f7k4M/94qn9tv3zuQ0VGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNKx1/ZDYEMjLcM+JgZWSAQBCfmyE/qUg3tbikNCUzn4EBAO3qI78=';
+    const AGORA_CHANNEL = 'obr-estudio';
+    const CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+
+    const RTM_TOKEN = undefined;
+    const MIC_CHANNEL = 'obr-mic';
 
     const AI_SENSITIVITY = 0.2;
-    const VOLUMEN_BARRIDO = 0.60;
-    const VOLUMEN_RESPUESTA = 0.50;
+    const VOLUMEN_BARRIDO = 0.40;
+    const VOLUMEN_RESPUESTA = 0.35;
     const VOLUMEN_EVP = 1.5;
     const VOLUMEN_IA_VISION = 1.5;
 
@@ -474,18 +479,6 @@
     window.openChatView = openChatView;
     window.closeChatView = closeChatView;
 
-    const TURN_DOMAIN = "exploracionesobr.duckdns.org";
-    const GLOBAL_PEER_CONFIG = {
-        config: {
-            iceServers: [
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: `turn:${TURN_DOMAIN}:3478`, username: 'user', credential: 'MI_SECRETO_SUPER_SEGURO' }
-            ],
-            iceTransportPolicy: 'all'
-        }
-    };
-
     if ('serviceWorker' in navigator) {
         const CACHE_NAME = 'obr-cam-v7';
         const urlsToCache = [
@@ -499,7 +492,7 @@
             'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
             'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
             'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
-            'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js',
+            'https://download.agora.io/sdk/release/AgoraRTM.js',
             'https://unpkg.com/leaflet/dist/leaflet.js',
             'https://unpkg.com/leaflet/dist/leaflet.css',
             'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
@@ -543,7 +536,8 @@ self.addEventListener('fetch', e => {
       !e.request.url.includes('unpkg.com') &&
       !e.request.url.includes('cdn.jsdelivr.net') &&
       !e.request.url.includes('cdn.tailwindcss.com') &&
-      !e.request.url.includes('tfhub.dev')) {
+      !e.request.url.includes('tfhub.dev') &&
+      !e.request.url.includes('download.agora.io')) {
     return;
   }
   
@@ -628,7 +622,10 @@ self.addEventListener('fetch', e => {
     window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
 
     let agoraClient = null;
+    let rtmClient = null;
     let overlayInterval = null;
+    let micRtcClient = null;
+
     // ---------- MOTOR DE RECONOCIMIENTO DE VOZ LOCAL ----------
     function startLocalSpeech() {
         if (!('webkitSpeechRecognition' in window)) return;
@@ -757,7 +754,7 @@ self.addEventListener('fetch', e => {
     // --- NUEVA LÓGICA AUTO-DESCONEXIÓN SEGURO AUDIO SCAN ---
     function checkAndDeactivateAudioScan() {
         const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-        const hasStudio = conn && conn.open;
+        const hasStudio = (agoraClient && agoraClient.joined) || (rtmClient && rtmClient.isLoggedIn);
         const hasLocal = isLocalMicForced && audioStream && audioStream.getAudioTracks().length > 0;
         
         if (!hasRemote && !hasStudio && !hasLocal && state.isAudioScan) {
@@ -776,7 +773,7 @@ self.addEventListener('fetch', e => {
 
     window.updateAudioScanVisibility = function() {
         const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-        const hasStudio = conn && conn.open;
+        const hasStudio = (agoraClient && agoraClient.joined) || (rtmClient && rtmClient.isLoggedIn);
         const isVisible = hasRemote || hasStudio || isLocalMicForced;
         
         const wrapper = document.getElementById('wrapper-audio-scan');
@@ -829,62 +826,20 @@ self.addEventListener('fetch', e => {
             stopLocalSpeech();
         }
     }
-
     let activeRemoteCall = null;
-    function initRemoteMicReceiver() {
-        const studioId = (state.studioId || 'local').replace(/[^a-zA-Z0-9-]/g, '-');
-        const camName = (state.cameraName || 'cam1').replace(/[^a-zA-Z0-9-]/g, '-');
-        const myId = `obr-mic-recv-${studioId}-${camName}`;
-        
-        if (remoteMicPeer) remoteMicPeer.destroy();
-        
+    async function initRemoteMicReceiverAgora() {
+        if (micRtcClient) {
+            micRtcClient.leave();
+            micRtcClient = null;
+        }
         try {
-            remoteMicPeer = new Peer(myId, GLOBAL_PEER_CONFIG);
-            
-            remoteMicPeer.on('disconnected', () => {
-                console.warn("Señalización de recepción pausada. Audio se mantiene.");
-                remoteMicPeer.reconnect();
-            });
-
-            remoteMicPeer.on('error', (err) => { 
-                console.warn("Error Receptor Mic:", err); 
-                if (err.type === 'network' || err.type === 'server-error') return; 
-                if(err && err.message && err.message.includes("Canvas")) {
-                    showToast("MODO PREVIEW BLOQUEA WEBRTC. DESCARGA EL HTML.", true);
-                }
-            });
-
-            remoteMicPeer.on('open', (id) => console.log('Receptor Micrófono Listo en canal:', id));
-            
-            remoteMicPeer.on('connection', (conn) => {
-                remoteDataConn = conn;
-                conn.on('data', (data) => {
-                    if (data.type === 'remote-speech') {
-                        if (!state.isAudioScan) return; 
-                        
-                        const txt = normalizarTexto(data.text);
-                        if (txt) {
-                            window._liveUserText = txt.toUpperCase();
-                            window._liveUserLastUpdate = Date.now();
-                        }
-                        
-                        const isMutedForTriggers = isTtsPlaying || isSpookySpeaking || window._isAnnouncement || Date.now() < (window._ignoreSpeechUntil || 0);
-
-                        if (data.isFinal && txt.trim() && !isMutedForTriggers) {
-                            procesarComandoEVP(txt);
-                        }
-                    }
-                });
-            });
-
-            remoteMicPeer.on('call', (call) => {
-                if (activeRemoteCall) {
-                    try { activeRemoteCall.close(); } catch(e){}
-                }
-                activeRemoteCall = call;
-                call.answer(); 
-                call.on('stream', (remoteStream) => {
-                    window.remoteMicStream = remoteStream;
+            micRtcClient = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+            micRtcClient.on('user-published', async (user, mediaType) => {
+                if (mediaType === 'audio') {
+                    await micRtcClient.subscribe(user, mediaType);
+                    const remoteAudioTrack = user.audioTrack;
+                    const stream = new MediaStream([remoteAudioTrack.getMediaStreamTrack()]);
+                    window.remoteMicStream = stream;
                     
                     let hiddenAudio = document.getElementById('hidden-webrtc-audio');
                     if (!hiddenAudio) {
@@ -894,43 +849,38 @@ self.addEventListener('fetch', e => {
                         hiddenAudio.playsInline = true;
                         document.body.appendChild(hiddenAudio);
                     }
-                    hiddenAudio.srcObject = remoteStream;
-                    
+                    hiddenAudio.srcObject = stream;
                     hiddenAudio.muted = false;
                     hiddenAudio.volume = 0.01;
-                    hiddenAudio.play().catch(e => console.warn("Autoplay remote audio blocked, interaction needed", e));
+                    hiddenAudio.play().catch(e => console.warn("Autoplay remote audio blocked", e));
 
-                    showToast("MICRÓFONO REMOTO ENLAZADO", false);
+                    showToast("MICRÓFONO REMOTO ENLAZADO (AGORA)", false);
                     updateAudioRouting();
                     updateAudioScanVisibility();
                     
                     if (audioCtx && audioCtx.state === 'suspended') {
                         audioCtx.resume().catch(()=>{});
                     }
-                });
-                call.on('close', () => {
-                    window.remoteMicStream = null;
-                    showToast("MICRÓFONO REMOTO DESCONECTADO", true);
-                    updateAudioRouting();
-                    updateAudioScanVisibility();
-                    checkAndDeactivateAudioScan();
-                });
+                }
             });
-            
-        } catch (e) {
-            console.warn("Excepción al iniciar Receptor Mic:", e);
+            micRtcClient.on('user-unpublished', (user) => {
+                window.remoteMicStream = null;
+                showToast("MICRÓFONO REMOTO DESCONECTADO", true);
+                updateAudioRouting();
+                updateAudioScanVisibility();
+                checkAndDeactivateAudioScan();
+            });
+            await micRtcClient.join(AGORA_APP_ID, MIC_CHANNEL, AGORA_TOKEN, null);
+        } catch(e) {
+            console.warn("Excepción al iniciar Receptor Mic Agora:", e);
         }
     }
 
-    // ── LÓGICA DEL TRANSMISOR (MIC SENDER) ──
-    let senderPeer = null;
+    let senderAgoraClient = null;
     let senderLocalStream = null;
-    let senderCurrentCall = null;
-    let senderReconnectTimer = null;
-    let senderDataConn = null;
-    let senderSpeechRec = null;
     let isSenderActive = false;
     let isConnectingSender = false;
+    let senderReconnectTimer = null;
 
     function initMicSenderMode() {
         document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
@@ -974,71 +924,10 @@ self.addEventListener('fetch', e => {
         }
     }
 
-    function startSenderSpeech() {
-        if (!('webkitSpeechRecognition' in window)) {
-            console.warn("Speech recognition no soportado en este navegador.");
-            const statusEl = document.getElementById('mic-sender-status');
-            if (statusEl) statusEl.innerText += " (SIN RECON. VOZ)";
-            return;
-        }
-        if (senderSpeechRec) return; 
-        
-        console.log("Iniciando reconocimiento de voz continuo en SENDER...");
-        senderSpeechRec = new webkitSpeechRecognition();
-        senderSpeechRec.continuous = true;
-        senderSpeechRec.interimResults = true;
-        senderSpeechRec.lang = 'es-MX';
-
-        senderSpeechRec.onresult = (event) => {
-            let finalTranscript = '';
-            let interimTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-                else interimTranscript += event.results[i][0].transcript;
-            }
-            const text = interimTranscript || finalTranscript;
-            if (text.trim() && senderDataConn && senderDataConn.open) {
-                senderDataConn.send({ type: 'remote-speech', text: text, isFinal: !!finalTranscript });
-            }
-        };
-
-        senderSpeechRec.onerror = (e) => {
-            if (e.error !== 'no-speech') console.warn("Sender Speech Error:", e.error);
-        };
-
-        senderSpeechRec.onend = () => {
-            senderSpeechRec = null;
-            if (senderLocalStream && isSenderActive) {
-                setTimeout(() => {
-                    startSenderSpeech();
-                }, 250);
-            }
-        };
-
-        try { senderSpeechRec.start(); } catch(e){}
-    }
-
-    function stopSenderSpeech() {
-        if (senderSpeechRec) {
-            senderSpeechRec.onend = null;
-            try { senderSpeechRec.stop(); } catch(e){}
-            senderSpeechRec = null;
-            console.log("Reconocimiento de voz pausado en SENDER.");
-        }
-    }
-
-    async function startRemoteMic() {
+    async function startRemoteMicAgora() {
         if (isConnectingSender) return;
         isConnectingSender = true;
         isSenderActive = true;
-        
-        const studioId = (document.getElementById('sender-studio-id').value.trim() || 'local').replace(/[^a-zA-Z0-9-]/g, '-');
-        const camName = (document.getElementById('sender-cam-name').value.trim() || 'cam1').replace(/[^a-zA-Z0-9-]/g, '-');
-        
-        localStorage.setItem('obr_studio_id', studioId);
-        localStorage.setItem('obr_camera_name', camName);
-        
-        const targetId = `obr-mic-recv-${studioId}-${camName}`;
         
         updateSenderUI('connecting');
         clearTimeout(senderReconnectTimer);
@@ -1051,67 +940,250 @@ self.addEventListener('fetch', e => {
                 });
             }
 
-            if (senderPeer) { senderPeer.destroy(); senderPeer = null; }
-            
-            try {
-                senderPeer = new Peer(null, GLOBAL_PEER_CONFIG);
-                
-                senderPeer.on('disconnected', () => {
-                    console.warn("Sin internet en el SENDER. Manteniendo conexión de audio local viva.");
-                    if (isSenderActive && !senderPeer.destroyed) senderPeer.reconnect();
-                });
-
-                senderPeer.on('open', () => {
-                    isConnectingSender = false;
-                    senderCurrentCall = senderPeer.call(targetId, senderLocalStream);
-                    senderDataConn = senderPeer.connect(targetId);
-                    
-                    senderDataConn.on('open', () => {
-                        console.log("Canal de datos abierto. Transmisión de voz continua activa.");
-                        startSenderSpeech();
-                    });
-                    
-                    senderCurrentCall.on('close', () => {
-                        updateSenderUI('error');
-                        if (isSenderActive) { clearTimeout(senderReconnectTimer); senderReconnectTimer = setTimeout(startRemoteMic, 3000); }
-                    });
-
-                    updateSenderUI('online');
-                });
-
-                senderPeer.on('error', (err) => {
-                    console.error("Peer error:", err);
-                    if (err.type === 'network' || err.type === 'server-error') return; 
-                    
-                    isConnectingSender = false;
-                    updateSenderUI('error');
-                    if (isSenderActive) { clearTimeout(senderReconnectTimer); senderReconnectTimer = setTimeout(startRemoteMic, 3000); }
-                });
-            } catch (e) {
-                isConnectingSender = false;
-                console.error("Excepción PeerJS:", e);
-                updateSenderUI('error');
+            if (senderAgoraClient) {
+                senderAgoraClient.leave();
+                senderAgoraClient = null;
             }
 
+            senderAgoraClient = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+            senderAgoraClient.on('connection-state-change', (curState) => {
+                if (curState === 'DISCONNECTED' && isSenderActive) {
+                    updateSenderUI('error');
+                    senderReconnectTimer = setTimeout(startRemoteMicAgora, 3000);
+                }
+            });
+
+            await senderAgoraClient.join(AGORA_APP_ID, MIC_CHANNEL, AGORA_TOKEN, null);
+            
+            const audioTrack = AgoraRTC.createCustomAudioTrack({
+                mediaStreamTrack: senderLocalStream.getAudioTracks()[0]
+            });
+            await senderAgoraClient.publish([audioTrack]);
+            
+            isConnectingSender = false;
+            updateSenderUI('online');
         } catch (err) {
             isConnectingSender = false;
-            console.error("Mic access denied:", err);
-            alert("No se pudo acceder al micrófono.");
+            console.error("Error Mic Sender Agora:", err);
+            alert("No se pudo acceder al micrófono o conectar.");
             updateSenderUI('error');
         }
     }
 
-    function stopRemoteMic() {
+    function stopRemoteMicAgora() {
         isSenderActive = false;
         isConnectingSender = false;
         clearTimeout(senderReconnectTimer);
-        stopSenderSpeech();
-        if (senderDataConn) { senderDataConn.close(); senderDataConn = null; }
-        if (senderCurrentCall) senderCurrentCall.close();
-        if (senderPeer) { senderPeer.destroy(); senderPeer = null; }
-        if (senderLocalStream) { senderLocalStream.getTracks().forEach(t => t.stop()); senderLocalStream = null; }
+        if (senderAgoraClient) {
+            senderAgoraClient.leave();
+            senderAgoraClient = null;
+        }
+        if (senderLocalStream) {
+            senderLocalStream.getTracks().forEach(t => t.stop());
+            senderLocalStream = null;
+        }
         updateSenderUI('offline');
         document.body.classList.remove('mic-sender-mode');
+    }
+
+    async function initRTM() {
+        if (rtmClient) {
+            await rtmClient.logout();
+            rtmClient = null;
+        }
+        try {
+            rtmClient = AgoraRTM.createInstance(AGORA_APP_ID, { logLevel: 3 });
+            const uid = 'camara_' + (state.cameraName || 'cam1');
+            await rtmClient.login({ uid, token: RTM_TOKEN });
+            
+            rtmClient.on('message', (message) => {
+                if (message.messageType === 'TEXT') {
+                    const cmd = JSON.parse(message.text);
+                    handleRTMCommand(cmd);
+                }
+            });
+        } catch(e) {
+            console.warn("Error al conectar RTM:", e);
+        }
+    }
+
+    function sendRTMCommand(targetUid, command) {
+        if (rtmClient && rtmClient.isLoggedIn) {
+            rtmClient.publish(targetUid, JSON.stringify(command), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+        }
+    }
+
+    function handleRTMCommand(cmd) {
+        if(cmd.type === 'ping' || cmd.action === 'ping') return;
+        showToast(`CMD: ${cmd.action?.toUpperCase() || cmd.type?.toUpperCase()}`);
+        if(cmd.type === 'cmd' || cmd.category === 'cam') {
+            const action = cmd.action; const value = cmd.value;
+            if(action === 'filter') { const map = { 'night':'btn-night', 'thermal':'btn-thermal', 'urbex':'btn-urbex', 'sls':'btn-sls', 'lidar':'btn-heatmap', 'normal': null }; setFilter(value, document.getElementById(map[value])); }
+            else if(action === 'flash') toggleTorch(value); else if(action === 'toggle' && value === 'pareidolia') togglePareidolia(); else if(action === 'toggle' && value === 'audioscan') toggleAudioScanner(); else if(action === 'reset') setFilter('normal', null);
+        } else if (cmd.type === 'tally') { const tallyEl = document.getElementById('tally-border'); if (cmd.state === 'program') { tallyEl.className = 'online'; } else if (cmd.state === 'preview') { tallyEl.className = 'preview'; } else { tallyEl.className = ''; } }
+    }
+
+    async function initAudioEngine() {
+        if (audioEngineInitialized && audioCtx) {
+            if (audioCtx.state === 'suspended' && !document.hidden) audioCtx.resume().catch(() => {});
+            return;
+        }
+
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!audioCtx) {
+            audioCtx = new AC({ latencyHint: 'playback' }); 
+            evpAudioCtx = audioCtx;
+        }
+
+        audioCtx.onstatechange = () => {
+            if (audioCtx.state === 'suspended' && state.isAudioScan && !document.hidden) {
+                audioCtx.resume().catch(()=>{});
+            }
+        };
+
+        if (audioCtx.state === 'suspended' && !document.hidden) await audioCtx.resume().catch(()=>{});
+
+        try {
+            mixDestination = audioCtx.createMediaStreamDestination();
+
+            micGainNode = audioCtx.createGain();
+            micGainNode.gain.value = 7.5; 
+
+            audioAnalyser = audioCtx.createAnalyser();
+            audioAnalyser.fftSize = 2048;
+            audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
+            const compressor = audioCtx.createDynamicsCompressor();
+            compressor.threshold.value = -18; compressor.knee.value = 20;
+            compressor.ratio.value = 8; compressor.attack.value = 0.002; compressor.release.value = 0.15;
+
+            micGainNode.connect(audioAnalyser);
+
+            const silentSink = audioCtx.createGain();
+            silentSink.gain.value = 0.0001; 
+            audioAnalyser.connect(silentSink);
+            silentSink.connect(audioCtx.destination);
+
+            micGainNode.connect(compressor);
+            compressor.connect(mixDestination);
+            
+            updateAudioRouting();
+
+            if (!ttsSource) {
+                initTTSPipeline();
+            } else {
+                if (mixDestination) {
+                    try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
+                    try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
+                    try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
+                }
+            }
+
+            audioEngineInitialized = true;
+        } catch(e) { console.warn("Error en initAudioEngine:", e); }
+    }
+
+    async function speakAnnouncement(text, force = false) {
+        if (!text || (!state.isAudioScan && !isPareidoliaActive && !force)) return;
+        await initAudioEngine();
+
+        const encoded = encodeURIComponent(text.substring(0, 200));
+        const url = `https://api.voicerss.org/?key=${VOICERSS_API_KEY}&hl=es-mx&v=Juana&src=${encoded}&f=48khz_16bit_stereo&c=MP3`;
+        let blobUrl = null;
+        try { const res = await fetch(url); if (res.ok) { const blob = await res.blob(); if (blob.size > 500) { _incrementVoiceRSS(); blobUrl = URL.createObjectURL(blob); } } } catch(e) {}
+        if (!blobUrl) return; 
+
+        return new Promise(resolve => {
+            window._isAnnouncement = true; isTtsPlaying = true;
+            cloudTTSPlayer.src = blobUrl; cloudTTSPlayer.playbackRate = 1.0; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
+            cloudTTSPlayer.play().catch(() => {});
+            cloudTTSPlayer.addEventListener('ended', () => { isTtsPlaying = false; window._isAnnouncement = false; window._ignoreSpeechUntil = Date.now() + 1000; try { URL.revokeObjectURL(blobUrl); } catch(e) {} resolve(); }, { once: true });
+        });
+    }
+
+    async function speakText(text) {
+        if (!text) return;
+        isTtsPlaying = true; isSpookySpeaking = false;
+        
+        clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
+        await initAudioEngine();
+
+        if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_IA_VISION, evpAudioCtx?.currentTime || 0, 0.05);
+
+        const safeText = text.replace(/[*_#]/g, '').trim(); if (!safeText) { isTtsPlaying = false; return; }
+
+        let audioUrl = null;
+        if (ttsMode !== 'elevenlabs' && voicerssRemaining > 0) { usingFallbackTTS = true; audioUrl = await getVoiceRSSAudio(safeText); }
+        if (!audioUrl) {
+            const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
+            if (canUseEL) { audioUrl = await getElevenLabsAudio(safeText, 'N2lVS1w4EtoT3dr4eOWO'); if (audioUrl) usingFallbackTTS = false; }
+        }
+        if (!audioUrl) { isTtsPlaying = false; ttsNoDisponible('VoiceRSS + EL agotados'); return; }
+        
+        updateTTSStatusUI();
+        const _isBlobIA = audioUrl.startsWith('blob:');
+
+        if (_isBlobIA) {
+            try {
+                const resp3 = await fetch(audioUrl); const rawBuf3 = await audioCtx.decodeAudioData(await resp3.arrayBuffer());
+                await _ensureContextRunning();
+                const src3 = await playBlobWithFilters(rawBuf3, 0.94 + Math.random() * 0.03, 'iavision', 'none');
+                src3.start(0);
+                src3.onended = () => { clearTimeout(_ttsWatchdog); _activeBufSrc = null; isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; try { URL.revokeObjectURL(audioUrl); } catch(e){} };
+                return;
+            } catch(e) {}
+        }
+
+        cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
+        try { await cloudTTSPlayer.play(); } catch(err) { isTtsPlaying = false; return; }
+        cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; }, { once: true });
+    }
+
+    async function speakSpooky(text) {
+        if (!text) return;
+        isTtsPlaying = true; isSpookySpeaking = true;
+
+        clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
+        const safeText = text.substring(0, 120); const randomVoice = getRandomVoice();
+        
+        let blobUrl = null;
+        if (ttsMode === 'voicerss') { usingFallbackTTS = true; blobUrl = await getVoiceRSSAudio(safeText); } 
+        else {
+            const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
+            if (canUseEL) blobUrl = await getElevenLabsAudio(safeText, randomVoice);
+            if (!blobUrl) { usingFallbackTTS = true; if (ttsMode !== 'elevenlabs') blobUrl = await getVoiceRSSAudio(safeText); } 
+            else usingFallbackTTS = false; 
+        }
+        
+        if (!blobUrl) { isTtsPlaying = false; isSpookySpeaking = false; clearTimeout(_ttsWatchdog); ttsNoDisponible('EL + VoiceRSS agotados'); return; }
+        updateTTSStatusUI(); await playResponseIntro(); await initAudioEngine();
+
+        if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
+
+        try {
+            const resp = await fetch(blobUrl); const rawBuf = await audioCtx.decodeAudioData(await resp.arrayBuffer());
+            const _dado = 1.55 + Math.random() * 0.29; 
+            const effectType = 'reverb';
+            
+            await _ensureContextRunning();
+            const src = await playBlobWithFilters(rawBuf, _dado, false, effectType);
+            src.start(0); lastSpokenText = text; clearTimeout(speechTimer); speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3500);
+            
+            src.onended = () => { 
+                clearTimeout(_ttsWatchdog); 
+                _activeBufSrc = null; 
+                lastSpokenText = ""; 
+                clearTimeout(speechTimer); 
+                isTtsPlaying = false; 
+                isSpookySpeaking = false; 
+                lastEvpTime = Date.now(); 
+                playResponseEnd(); 
+                window._ignoreSpeechUntil = Date.now() + 1000;
+                try { URL.revokeObjectURL(blobUrl); } catch(e){} 
+            };
+        } catch(err) {
+            lastSpokenText = ""; isTtsPlaying = false; isSpookySpeaking = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000;
+        }
     }
 
     const evpFrasesAmbiguaMemoria = [
@@ -1120,131 +1192,51 @@ self.addEventListener('fetch', e => {
         "silencio...", "estaba pensando..."
     ];
 
-    let elevenlabsCreditsTotal     = 10000;
-    let elevenlabsCreditsUsed      = parseInt(localStorage.getItem('obr_tts_used') || '92');
-    let elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
+    const evpVerbos = [
+        "ven", "mira", "escucha", "entra", "corre", "no", "sal", "toca",
+        "busca", "sigue", "habla", "espera", "ven", "no", "mira", "escucha",
+        "corre", "sal", "no", "ven", "entra", "toca", "busca", "sigue"
+    ];
 
-    const VOICERSS_API_KEY    = '776fa230d3574c4097aa44e4e3c3949c';
-    const VOICERSS_DAILY_MAX  = 350;
-    let voicerssUsedToday     = 0;
-    let voicerssRemaining     = VOICERSS_DAILY_MAX;
+    const evpSensaciones = [
+        "cerca", "detrás", "aquí", "frío", "ahora", "lejos", "arriba",
+        "abajo", "dentro", "fuera", "cerca", "detrás", "frío", "aquí",
+        "ahora", "lejos", "arriba", "abajo", "dentro", "fuera"
+    ];
 
-    function _initVoiceRSSCounter() {
-        const today = new Date().toDateString();
-        const saved = localStorage.getItem('obr_vrss_date');
-        if (saved === today) {
-            voicerssUsedToday = parseInt(localStorage.getItem('obr_vrss_used') || '0');
-        } else {
-            voicerssUsedToday = 0;
-            localStorage.setItem('obr_vrss_used',  '0');
-            localStorage.setItem('obr_vrss_date',  today);
+    const evpPosiciones = [
+        "puerta", "silla", "esquina", "fondo", "pasillo", "ventana",
+        "pared", "techo", "suelo", "puerta", "esquina", "fondo"
+    ];
+
+    function generarEventoEVP(objetosDetectados = []) {
+        const partes = [];
+        const numBloques = Math.floor(Math.random() * 4) + 2;
+        
+        for (let i = 0; i < numBloques; i++) {
+            const tipo = Math.random();
+            
+            if (tipo < 0.35) {
+                partes.push(evpVerbos[Math.floor(Math.random() * evpVerbos.length)]);
+            } else if (tipo < 0.60) {
+                const pool = Math.random() < 0.5 ? evpSensaciones : evpPosiciones;
+                partes.push(pool[Math.floor(Math.random() * pool.length)]);
+            } else if (tipo < 0.75 && objetosDetectados.length > 0) {
+                const obj = objetosDetectados[Math.floor(Math.random() * objetosDetectados.length)];
+                if (obj && obj.trim()) partes.push(obj.trim().toLowerCase());
+            } else if (tipo < 0.90) {
+                partes.push(evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)]);
+            } else {
+                partes.push(evpAdvertencias[Math.floor(Math.random() * evpAdvertencias.length)]);
+            }
         }
-        voicerssRemaining = Math.max(0, VOICERSS_DAILY_MAX - voicerssUsedToday);
-    }
-    _initVoiceRSSCounter();
-
-    (function _syncTTSFilterDefaults() {
-        if (localStorage.getItem('obr_tts_f_rate')  === null) localStorage.setItem('obr_tts_f_rate',  '0');
-        if (localStorage.getItem('obr_tts_f_pitch') === null) localStorage.setItem('obr_tts_f_pitch', '-530');
-    })();
-
-    function _incrementVoiceRSS() {
-        voicerssUsedToday++;
-        voicerssRemaining = Math.max(0, VOICERSS_DAILY_MAX - voicerssUsedToday);
-        localStorage.setItem('obr_vrss_used', voicerssUsedToday);
-        updateTTSStatusUI();
-    }
-
-    let usingFallbackTTS = false;
-
-    function getRandomVoice() { return Math.random() < 0.6 ? 'N2lVS1w4EtoT3dr4eOWO' : 'cjVigY5qzO86Huf0OWal'; }
-    function getRandomVoiceRSSVoice() { return Math.random() < 0.6 ? 'Jose' : 'Juana'; }
-
-    function fragmentEVPText(text) { return text; }
-
-    function checkMonthlyTTSReset() {
-        const today = new Date();
-        const currentMonth = today.getMonth() + "-" + today.getFullYear();
-        const lastResetMonth = localStorage.getItem('obr_tts_reset_month');
-        if (today.getDate() >= 15 && lastResetMonth !== currentMonth) {
-            elevenlabsCreditsUsed = 0;
-            elevenlabsCreditsRemaining = elevenlabsCreditsTotal;
-            localStorage.setItem('obr_tts_used', '0');
-            localStorage.setItem('obr_tts_reset_month', currentMonth);
+        
+        if (Math.random() < 0.4 && partes.length > 0) {
+            partes.push(partes[partes.length - 1]);
         }
+        
+        return partes.join(' ');
     }
-    checkMonthlyTTSReset();
-
-    function updateTTSStatusUI() {
-        initDOMCache();
-        const engineEl   = document.getElementById('tts-engine-status');
-        const creditsEl  = document.getElementById('tts-credits-status');
-        const usedEl     = document.getElementById('tts-used-status');
-        const fallbackEl = document.getElementById('tts-fallback-status');
-        const vrssEl     = document.getElementById('tts-vrss-status');
-
-        let motorLabel, motorClass;
-        if (ttsMode === 'voicerss') { motorLabel = 'VOICE RSS'; motorClass = 'text-blue-400'; } 
-        else if (ttsMode === 'elevenlabs') { motorLabel = 'ELEVENLABS'; motorClass = 'text-white'; } 
-        else { motorLabel = usingFallbackTTS ? 'VOICE RSS (fallback)' : 'ELEVENLABS (prioritario)'; motorClass = usingFallbackTTS ? 'text-yellow-400' : 'text-green-400'; }
-        if (engineEl)  { engineEl.innerText = motorLabel; engineEl.className = motorClass; }
-        if (creditsEl) creditsEl.innerText = elevenlabsCreditsRemaining + ' / ' + elevenlabsCreditsTotal;
-        if (usedEl)    usedEl.innerText = elevenlabsCreditsUsed;
-        if (vrssEl)    vrssEl.innerText = voicerssRemaining + ' / ' + VOICERSS_DAILY_MAX;
-        if (fallbackEl) {
-            const isFallback = ttsMode === 'voicerss' || (ttsMode === 'auto' && usingFallbackTTS);
-            fallbackEl.innerText = isFallback ? 'SI' : 'NO';
-            fallbackEl.className = isFallback ? 'text-red-500' : 'text-green-500';
-        }
-    }
-
-    let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto'; 
-    function setTTSMode(mode) {
-        ttsMode = mode; localStorage.setItem('obr_tts_mode', mode);
-        usingFallbackTTS = (mode === 'voicerss');
-
-        const btns = { auto: 'tts-btn-auto', elevenlabs: 'tts-btn-el', voicerss: 'tts-btn-vrss' };
-        Object.entries(btns).forEach(([k, id]) => {
-            const el = document.getElementById(id); if (!el) return;
-            if (k === mode) el.className = el.className.replace(/border-gray-700/g, '').replace(/text-gray-400/g, '').trim() + ' border-green-700 text-green-400 bg-green-900/20';
-            else el.className = el.className.replace(/border-green-700/g, '').replace(/text-green-400/g, '').replace(/bg-green-900\/20/g, '').trim() + ' border-gray-700 text-gray-400';
-        });
-        showToast('VOZ: ' + ({ auto: 'MODO AUTO', elevenlabs: 'ELEVENLABS', voicerss: 'VOICE RSS' }[mode] || mode.toUpperCase()));
-        updateTTSStatusUI();
-    }
-    function initTTSModeUI() { setTTSMode(ttsMode); }
-
-    function normalizarTexto(texto) {
-        if (!texto) return "";
-        return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[¿?¡!.,;:]/g, "").trim();
-    }
-
-    const state = { 
-        apiKey: localStorage.getItem("obr_ai_key") || localStorage.getItem("obr_gemini_key") || "", 
-        aiProvider: localStorage.getItem("obr_ai_provider") || "gemini",
-        aiModel: localStorage.getItem("obr_ai_model") || "gemini-2.5-flash", 
-        studioId: localStorage.getItem("obr_studio_id") || "", 
-        cameraName: localStorage.getItem("obr_camera_name") || "cam1",
-        filter: 'normal', isSLS: false, isLidar: false, isPareidolia: false, isAudioScan: false, zoom: 1 
-    };
-    
-    let AI_API_KEY = state.apiKey;
-    let CURRENT_AI_MODEL = state.aiModel;
-    let CURRENT_AI_PROVIDER = state.aiProvider;
-    let isAIProcessing = false;
-    let isPareidoliaActive = false;
-    let pareidoliaInterval = null;
-    let scanInterval = null;
-    let lastPareidoliaCall = 0; 
-    
-    let currentAiText = "";
-    let currentAiImage = null;   
-    let currentAiImgEl = null;   
-    let aiTextTimer = null;
-    let radarAngle = 0; 
-    let canvasScanBoxes = []; 
-    let aiScannerState = 0; 
-    let aiScannerTimer = 0;
 
     const DIRECTORIO_EVP = [
 {
@@ -1354,22 +1346,7 @@ const evpAdvertencias = [
 "cuidado","vete","peligro","huye","corre","no entres","sal de aquí","detente","no mires atrás","es peligroso","cuidado atrás","cállate","escóndete","aléjate","te hará daño","vete ahora","corre de aquí",
 "no avances","no sigas","no entres ahí","no abras","no mires","no regreses","huye ahora","corre ahora","aléjate ahora","vete lejos","no te acerques","no toques","no hables","no escuches"
 ];
-const evpVerbos = [
-    "ven", "mira", "escucha", "entra", "corre", "no", "sal", "toca",
-    "busca", "sigue", "habla", "espera", "ven", "no", "mira", "escucha",
-    "corre", "sal", "no", "ven", "entra", "toca", "busca", "sigue"
-];
 
-const evpSensaciones = [
-    "cerca", "detrás", "aquí", "frío", "ahora", "lejos", "arriba",
-    "abajo", "dentro", "fuera", "cerca", "detrás", "frío", "aquí",
-    "ahora", "lejos", "arriba", "abajo", "dentro", "fuera"
-];
-
-const evpPosiciones = [
-    "puerta", "silla", "esquina", "fondo", "pasillo", "ventana",
-    "pared", "techo", "suelo", "puerta", "esquina", "fondo"
-];    
 const paranormalQuestions = [
 "hay alguien aqui","puede alguien escucharnos","puedes hablarnos","quien esta aqui","como te llamas","estas aqui","estas cerca","necesitas ayuda","que te paso","vivias aqui","estas solo",
 "puedes dar una senal","puedes decir si","puedes decir no","si estas aqui di algo","quieres que nos vayamos",
@@ -1381,37 +1358,7 @@ const paranormalQuestions = [
 "quieres hablar","quieres comunicarse","quieres que te ayudemos"
 ];
     let evpHistorial = [];
-function generarEventoEVP(objetosDetectados = []) {
-    const partes = [];
-    const numBloques = Math.floor(Math.random() * 4) + 2;
-    
-    for (let i = 0; i < numBloques; i++) {
-        const tipo = Math.random();
-        
-        if (tipo < 0.35) {
-            partes.push(evpVerbos[Math.floor(Math.random() * evpVerbos.length)]);
-        } else if (tipo < 0.60) {
-            const pool = Math.random() < 0.5 ? evpSensaciones : evpPosiciones;
-            partes.push(pool[Math.floor(Math.random() * pool.length)]);
-        } else if (tipo < 0.75 && objetosDetectados.length > 0) {
-            const obj = objetosDetectados[Math.floor(Math.random() * objetosDetectados.length)];
-            if (obj && obj.trim()) partes.push(obj.trim().toLowerCase());
-        } else if (tipo < 0.90) {
-            partes.push(evpPalabrasSueltas[Math.floor(Math.random() * evpPalabrasSueltas.length)]);
-        } else {
-            partes.push(evpAdvertencias[Math.floor(Math.random() * evpAdvertencias.length)]);
-        }
-    }
-    
-    if (Math.random() < 0.4 && partes.length > 0) {
-        partes.push(partes[partes.length - 1]);
-    }
-    
-    // Unir solo con espacios, sin puntos suspensivos
-    const evp = partes.join(' ');
-    
-    return evp;
-}
+
     function obtenerEVP() {
         const r = Math.random(); let arr = r < 0.60 ? evpPalabrasSueltas : (r < 0.85 ? evpFrasesCortas : evpAdvertencias); 
         let seleccion; let intento = 0;
@@ -1467,7 +1414,8 @@ function generarEventoEVP(objetosDetectados = []) {
     let ttsMainGain    = null; 
     let bassBoost      = null; 
     let darkFilter     = null; 
-    let ttsGainNode    = null;
+    let ttsGainNode    = null; 
+
     function getTTSFilters() {
         const ls  = (k, def) => { const v = parseFloat(localStorage.getItem(k)); return isNaN(v) ? def : v; };
         const hasPitch = localStorage.getItem('obr_tts_f_pitch') !== null;
@@ -1589,125 +1537,10 @@ function generarEventoEVP(objetosDetectados = []) {
             _incrementVoiceRSS(); return URL.createObjectURL(blob);
         } catch(e) { return null; }
     }
-
-    async function speakAnnouncement(text, force = false) {
-        if (!text || (!state.isAudioScan && !isPareidoliaActive && !force)) return;
-        await initAudioEngine();
-
-        const encoded = encodeURIComponent(text.substring(0, 200));
-        const url = `https://api.voicerss.org/?key=${VOICERSS_API_KEY}&hl=es-mx&v=Juana&src=${encoded}&f=48khz_16bit_stereo&c=MP3`;
-        let blobUrl = null;
-        try { const res = await fetch(url); if (res.ok) { const blob = await res.blob(); if (blob.size > 500) { _incrementVoiceRSS(); blobUrl = URL.createObjectURL(blob); } } } catch(e) {}
-        if (!blobUrl) return; 
-
-        return new Promise(resolve => {
-            window._isAnnouncement = true; isTtsPlaying = true;
-            cloudTTSPlayer.src = blobUrl; cloudTTSPlayer.playbackRate = 1.0; cloudTTSPlayer.volume = VOLUMEN_IA_VISION; cloudTTSPlayer.load();
-            cloudTTSPlayer.play().catch(() => {});
-            cloudTTSPlayer.addEventListener('ended', () => { isTtsPlaying = false; window._isAnnouncement = false; window._ignoreSpeechUntil = Date.now() + 1000; try { URL.revokeObjectURL(blobUrl); } catch(e) {} resolve(); }, { once: true });
-        });
-    }
-
-    async function speakText(text) {
-        if (!text) return;
-        isTtsPlaying = true; isSpookySpeaking = false;
-        
-        clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
-        await initAudioEngine();
-
-        if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_IA_VISION, evpAudioCtx?.currentTime || 0, 0.05);
-
-        const safeText = text.replace(/[*_#]/g, '').trim(); if (!safeText) { isTtsPlaying = false; return; }
-
-        let audioUrl = null;
-        if (ttsMode !== 'elevenlabs' && voicerssRemaining > 0) { usingFallbackTTS = true; audioUrl = await getVoiceRSSAudio(safeText); }
-        if (!audioUrl) {
-            const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
-            if (canUseEL) { audioUrl = await getElevenLabsAudio(safeText, 'N2lVS1w4EtoT3dr4eOWO'); if (audioUrl) usingFallbackTTS = false; }
-        }
-        if (!audioUrl) { isTtsPlaying = false; ttsNoDisponible('VoiceRSS + EL agotados'); return; }
-        
-        updateTTSStatusUI();
-        const _isBlobIA = audioUrl.startsWith('blob:');
-
-        if (_isBlobIA) {
-            try {
-                const resp3 = await fetch(audioUrl); const rawBuf3 = await audioCtx.decodeAudioData(await resp3.arrayBuffer());
-                await _ensureContextRunning();
-                const src3 = await playBlobWithFilters(rawBuf3, 0.94 + Math.random() * 0.03, 'iavision', 'none');
-                src3.start(0);
-                src3.onended = () => { clearTimeout(_ttsWatchdog); _activeBufSrc = null; isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; try { URL.revokeObjectURL(audioUrl); } catch(e){} };
-                return;
-            } catch(e) {}
-        }
-
-        cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
-        try { await cloudTTSPlayer.play(); } catch(err) { isTtsPlaying = false; return; }
-        cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; }, { once: true });
-    }
-
-    let _activeBufSrc = null; 
-    let _ttsWatchdog = null; 
-    function _resetTtsFlags() {
-        isTtsPlaying = false; isSpookySpeaking = false; lastSpokenText = ""; clearTimeout(speechTimer); clearTimeout(_ttsWatchdog); _ttsWatchdog = null; lastEvpTime = Date.now() - 5000;
-        if (_activeBufSrc) { try { _activeBufSrc.stop(); } catch(e){} _activeBufSrc = null; }
-        window._ignoreSpeechUntil = Date.now() + 1000;
-    }
-
-    async function speakSpooky(text) {
-        if (!text) return;
-        isTtsPlaying = true; isSpookySpeaking = true;
-
-        clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
-        const safeText = text.substring(0, 120); const randomVoice = getRandomVoice();
-        
-        let blobUrl = null;
-        if (ttsMode === 'voicerss') { usingFallbackTTS = true; blobUrl = await getVoiceRSSAudio(safeText); } 
-        else {
-            const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
-            if (canUseEL) blobUrl = await getElevenLabsAudio(safeText, randomVoice);
-            if (!blobUrl) { usingFallbackTTS = true; if (ttsMode !== 'elevenlabs') blobUrl = await getVoiceRSSAudio(safeText); } 
-            else usingFallbackTTS = false; 
-        }
-        
-        if (!blobUrl) { isTtsPlaying = false; isSpookySpeaking = false; clearTimeout(_ttsWatchdog); ttsNoDisponible('EL + VoiceRSS agotados'); return; }
-        updateTTSStatusUI(); await playResponseIntro(); await initAudioEngine();
-
-        if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
-
-        try {
-            const resp = await fetch(blobUrl); const rawBuf = await audioCtx.decodeAudioData(await resp.arrayBuffer());
-            const _dado = 1.55 + Math.random() * 0.29; 
-            
-            // NUEVO: solo TEATRO (reverb agresiva, sin eco)
-            const effectType = 'reverb';
-            
-            await _ensureContextRunning();
-            const src = await playBlobWithFilters(rawBuf, _dado, false, effectType);
-            src.start(0); lastSpokenText = text; clearTimeout(speechTimer); speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3500);
-            
-            src.onended = () => { 
-                clearTimeout(_ttsWatchdog); 
-                _activeBufSrc = null; 
-                lastSpokenText = ""; 
-                clearTimeout(speechTimer); 
-                isTtsPlaying = false; 
-                isSpookySpeaking = false; 
-                lastEvpTime = Date.now(); 
-                playResponseEnd(); 
-                window._ignoreSpeechUntil = Date.now() + 1000;
-                try { URL.revokeObjectURL(blobUrl); } catch(e){} 
-            };
-        } catch(err) {
-            lastSpokenText = ""; isTtsPlaying = false; isSpookySpeaking = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000;
-        }
-    }
-
     let lastFrameTime = performance.now();
     const targetRenderFPS = 60; const fpsInterval = 1000 / targetRenderFPS; 
     let performanceLagging = false;
     
-    // Canvas de análisis SLS reducido a 128×96 para mayor rendimiento
     const analysisCanvas = document.createElement('canvas'); const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
     analysisCanvas.width = 128; analysisCanvas.height = 96;
     const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240; const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
@@ -1740,11 +1573,8 @@ function generarEventoEVP(objetosDetectados = []) {
     
     let aiDetector = null, segmenter = null, poses = [], lidarMask = null;
     let lidarBusy = false; let lastLidarMask = null; let scanlineCanvas = null; let lidarGeneratedFrame = -1;
-    let videoStream, peerCommand = null, peerVideoSender = null, conn = null;
+    let videoStream; // No se usa conn de PeerJS
     let frameCount = 0, lastTime = performance.now(), currentFps = 0;
-    
-    // Contador para dibujar visualizador de audio cada 3 frames
-    let visualizerFrameCounter = 0;
     
     let lastVW = 0, lastVH = 0, lastCW = 0, lastCH = 0; 
 
@@ -1786,8 +1616,6 @@ function generarEventoEVP(objetosDetectados = []) {
             currentAiImage = null; currentAiImgEl = null; 
             window._aiImageCache = null; 
         }
-        if (peerCommand && (peerCommand.disconnected || peerCommand.destroyed)) { try { peerCommand.destroy(); } catch(e){} peerCommand = null; conn = null; }
-        if (peerVideoSender && (peerVideoSender.disconnected || peerVideoSender.destroyed)) { try { peerVideoSender.destroy(); } catch(e){} peerVideoSender = null; }
     }
 
     const LOCAL_ASSETS = { intro: './INTRO_1.mp4', outro: './FIN_DIRECTO.mp4', banner: './BANNER_1.mp4' };
@@ -1962,67 +1790,6 @@ function generarEventoEVP(objetosDetectados = []) {
 
     let audioEngineInitialized = false;
 
-    async function initAudioEngine() {
-        if (audioEngineInitialized && audioCtx) {
-            if (audioCtx.state === 'suspended' && !document.hidden) audioCtx.resume().catch(() => {});
-            return;
-        }
-
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!audioCtx) {
-            audioCtx = new AC({ latencyHint: 'playback' }); 
-            evpAudioCtx = audioCtx;
-        }
-
-        audioCtx.onstatechange = () => {
-            if (audioCtx.state === 'suspended' && state.isAudioScan && !document.hidden) {
-                audioCtx.resume().catch(()=>{});
-            }
-        };
-
-        if (audioCtx.state === 'suspended' && !document.hidden) await audioCtx.resume().catch(()=>{});
-
-        try {
-            mixDestination = audioCtx.createMediaStreamDestination();
-
-            micGainNode = audioCtx.createGain();
-            micGainNode.gain.value = 7.5;  // ← Subido para mejor monitoreo local
-
-            audioAnalyser = audioCtx.createAnalyser();
-            audioAnalyser.fftSize = 2048;
-            audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
-
-            const compressor = audioCtx.createDynamicsCompressor();
-            compressor.threshold.value = -18; compressor.knee.value = 20;
-            compressor.ratio.value = 8; compressor.attack.value = 0.002; compressor.release.value = 0.15;
-
-            micGainNode.connect(audioAnalyser);
-
-            const silentSink = audioCtx.createGain();
-            silentSink.gain.value = 0.0001; 
-            audioAnalyser.connect(silentSink);
-            silentSink.connect(audioCtx.destination);
-
-            micGainNode.connect(compressor);
-            compressor.connect(mixDestination);
-            
-            updateAudioRouting();
-
-            if (!ttsSource) {
-                initTTSPipeline();
-            } else {
-                if (mixDestination) {
-                    try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
-                    try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
-                    try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
-                }
-            }
-
-            audioEngineInitialized = true;
-            console.log("[Audio] Motor de audio inicializado.");
-        } catch(e) { console.warn("Error en initAudioEngine:", e); }
-    }
-
     let miniMapInstance = null;
     let mapMarker = null;
     let mapPolyline = null;
@@ -2126,7 +1893,6 @@ function generarEventoEVP(objetosDetectados = []) {
             }
         }, 2500);
     }
-    // Continuación desde startMapWatcher...
 
     async function initApp() {
         unlockAudioContext(); 
@@ -2135,7 +1901,6 @@ function generarEventoEVP(objetosDetectados = []) {
         requestWakeLock(); 
         updateProgress(10, "INICIANDO SENSOR...");
         
-        // Cancelar el timer de carga lenta porque ya estamos cargando
         clearTimeout(loadingTimer);
         
         initMiniMap();
@@ -2186,7 +1951,8 @@ function generarEventoEVP(objetosDetectados = []) {
             if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
             setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
 
-            initRemoteMicReceiver();
+            initRTM();
+            initRemoteMicReceiverAgora();
         }, 800);
     }
 
@@ -2204,7 +1970,6 @@ function generarEventoEVP(objetosDetectados = []) {
             if (state.isLidar && segmenter) {
                 if (!lidarBusy) { lidarBusy = true; ensureImageDrawn(); try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; } }
             } else {
-                // SLS a 30 FPS (cada 33ms en lugar de 16ms)
                 if (aiDetector && state.isSLS && now - lastPoseTime > 33) {
                     lastPoseTime = now; ensureImageDrawn();
                     try {
@@ -2283,7 +2048,6 @@ function generarEventoEVP(objetosDetectados = []) {
 
         if (effectType === 'reverb') {
             if (!window._teatroImpulse) {
-                // Nuevo Teatro: respuesta al impulso más larga (3 segundos) y decaimiento pronunciado
                 const len = audioCtx.sampleRate * 3.0; 
                 const imp = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
                 for (let c = 0; c < 2; c++) {
@@ -2310,7 +2074,6 @@ function generarEventoEVP(objetosDetectados = []) {
             lastNode = mixNode;
             
         } else if (effectType === 'echo') {
-            // El eco se mantiene por si alguna vez se necesita, pero no se usará por defecto
             const delay = audioCtx.createDelay();
             delay.delayTime.value = 0.25 + Math.random() * 0.2; 
             
@@ -2346,7 +2109,7 @@ function generarEventoEVP(objetosDetectados = []) {
         _ttsBassFilter = ctx1.createBiquadFilter(); _ttsBassFilter.type = 'lowshelf';
         _ttsHighFilter = ctx1.createBiquadFilter(); _ttsHighFilter.type = 'highshelf';
         
-        ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 8.0; ttsGainNode = ttsMainGain;
+        ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
         ttsSource.connect(_ttsBassFilter); _ttsBassFilter.connect(_ttsHighFilter); _ttsHighFilter.connect(ttsMainGain); 
         
         ttsMainGain.connect(ctx1.destination);
@@ -2390,8 +2153,6 @@ function generarEventoEVP(objetosDetectados = []) {
             window._waitingFirstInteraction = false;
             window._audioScanStartTime = Date.now();
         }
-
-        if (conn && conn.open) conn.send({type: 'ai-speech', text: `[VOZ]: ${txt}`});
 
         let matchedCat = null;
         for (const cat of DIRECTORIO_EVP) {
@@ -2444,7 +2205,6 @@ function generarEventoEVP(objetosDetectados = []) {
                     respText = evpFrasesAmbiguaMemoria[Math.floor(Math.random() * evpFrasesAmbiguaMemoria.length)];
                 }
                 
-                if (conn && conn.open) conn.send({ type: 'ai-speech', text: respText});
                 speakSpooky(respText);
             }, 1500 + Math.random() * 1000); 
         }
@@ -2456,7 +2216,6 @@ function generarEventoEVP(objetosDetectados = []) {
         if (state.isAudioScan) {
             if (window._waitingAudioDeactivation) return;
             
-            // Si la IA está hablando, esperamos a que termine para desactivar (Silencioso, sin UI visual)
             if (isTtsPlaying || isSpookySpeaking) {
                 window._waitingAudioDeactivation = true;
                 
@@ -2476,7 +2235,7 @@ function generarEventoEVP(objetosDetectados = []) {
             const vrOk  = voicerssRemaining > 0;
             if (!elOk && !vrOk) { state.isAudioScan = false; ttsNoDisponible('sin créditos para activar AUDIO SCAN'); return; }
             
-            if (!window.remoteMicStream && (isLocalMicForced || (conn && conn.open))) {
+            if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
                 if (!audioStream) {
                     try {
                         audioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
@@ -2531,7 +2290,6 @@ function generarEventoEVP(objetosDetectados = []) {
                     scheduleBackgroundAIContext(true); 
                 }, 150);
             });
-            sendScanDataToStudio();
         }
     }
 
@@ -2562,14 +2320,12 @@ function generarEventoEVP(objetosDetectados = []) {
         }).catch(() => {
             window._isAnnouncement = false;
         });
-        sendScanDataToStudio();
     }
 
-function drawAudioVisualizer(c, w, h) {
-    if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
-    
-    audioAnalyser.getByteTimeDomainData(audioDataArray);
-    // ... resto del código (sin cambios a partir de aquí)
+    function drawAudioVisualizer(c, w, h) {
+        if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
+        
+        audioAnalyser.getByteTimeDomainData(audioDataArray);
         const bufferLength = audioAnalyser.frequencyBinCount;
         
         let minVal = 255;
@@ -2842,28 +2598,25 @@ function drawAudioVisualizer(c, w, h) {
 
             if (ttsMainGain) { const volVar = 0.75 + Math.random() * 0.5; ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05); }
 
-                        let evpText;
+            let evpText; 
             const textRoll = Math.random();
             
             if (afterQuestion) {
-                // Después de una pregunta, el EVP es más reactivo pero fragmentado
-                evpText = generarEventoEVP();
+                const objetos = window._aiContext?.objetos ? window._aiContext.objetos.split(',').map(o => o.trim()) : [];
+                evpText = generarEventoEVP(objetos);
             } else {
-                const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000);
+                const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000); 
                 
                 if (memoriasValidas.length > 0 && textRoll < 0.35) {
-                    // Memoria de contexto: usamos palabras sueltas de la memoria
                     const randomMemory = memoriasValidas[Math.floor(Math.random() * memoriasValidas.length)];
                     const palabras = randomMemory.text.split(' ').filter(w => w.length > 2);
                     const objeto = palabras.length > 0 ? [palabras[Math.floor(Math.random() * palabras.length)]] : [];
                     evpText = generarEventoEVP(objeto);
                 } else {
-                    // Evento espontáneo
                     evpText = generarEventoEVP();
                 }
             }
-            
-            if (conn && conn.open) conn.send({type:'ai-speech', text: evpText}); 
+
             speakSpooky(evpText); 
             cumulativeEVPEnergy = -30;
         }
@@ -3027,34 +2780,14 @@ function drawAudioVisualizer(c, w, h) {
                     }
                 } 
                 c.restore(); 
-                
                 c.strokeStyle = borderColor; c.lineWidth = 1; c.strokeRect(bx, by, panelW, imgH); 
-                
                 if (currentAiText) {
                     c.fillStyle = "rgba(0,0,0,0.85)";
                     let txtH = Math.ceil(currentAiText.length / 25) * 18 + 15;
                     c.fillRect(bx + 4, by + imgH, panelW - 4, txtH); 
-
-                    c.fillStyle = "#ffffff"; 
-                    c.font = "bold 15px 'Share Tech Mono'"; 
-                    c.shadowColor = "#ff0000"; 
-                    c.shadowBlur = 8;
-
-                    let line = ''; 
-                    let ly = by + imgH + 20; 
-                    const resWords = currentAiText.split(' ');
-                    
-                    for(let n = 0; n < resWords.length; n++) { 
-                        let testLine = line + resWords[n] + ' '; 
-                        if (c.measureText(testLine).width > (panelW - 20) && n > 0) { 
-                            c.fillText(line.toLowerCase(), bx + 12, ly); 
-                            line = resWords[n] + ' '; 
-                            ly += 18; 
-                        } else { 
-                            line = testLine; 
-                        } 
-                    } 
-                    c.fillText(line.toLowerCase(), bx + 12, ly);
+                    c.fillStyle = "#ffffff"; c.font = "bold 15px 'Share Tech Mono'"; c.shadowColor = "#ff0000"; c.shadowBlur = 8;
+                    let line = ''; let ly = by + imgH + 20; const resWords = currentAiText.split(' ');
+                    for(let n = 0; n < resWords.length; n++) { let testLine = line + resWords[n] + ' '; if (c.measureText(testLine).width > (panelW - 20) && n > 0) { c.fillText(line.toLowerCase(), bx + 12, ly); line = resWords[n] + ' '; ly += 18; } else { line = testLine; } } c.fillText(line.toLowerCase(), bx + 12, ly);
                     c.shadowBlur = 0; 
                 }
             }
@@ -3166,7 +2899,7 @@ function drawAudioVisualizer(c, w, h) {
         lastFrameTime = now; frameCount++;
         
         const vW = el.video.videoWidth, vH = el.video.videoHeight, cW = el.canvas.width, cH = el.canvas.height;
-        const isTransmitting = (agoraClient && agoraClient.joined) || (conn && conn.open); // transmitiendo por Agora o al menos hay comando
+        const isTransmitting = (agoraClient && agoraClient.joined);
         
         ctx.clearRect(0, 0, cW, cH); audioLayerCtx.clearRect(0, 0, cW, cH); updateSmoothing();
         
@@ -3202,9 +2935,6 @@ function drawAudioVisualizer(c, w, h) {
         if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) { drawAIBurnIn(audioLayerCtx, cW, cH, animState.aiScale); } 
         
         if (state.isAudioScan) { drawAudioVisualizer(audioLayerCtx, cW, cH); } 
-
-        // La transmisión de video se maneja ahora por Agora, ya no se dibuja en un canvas de streaming
-        // Se ha eliminado el bloque que generaba el canvas para PeerJS
         
         if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
     }
@@ -3230,12 +2960,11 @@ function drawAudioVisualizer(c, w, h) {
         if (currentFps < 15) performanceLagging = true; else if (currentFps >= 25) performanceLagging = false;
 
         let signal = 0; 
-        // La señal se basa en Agora y la conexión PeerJS de comandos
-        if(agoraClient && agoraClient.joined) signal += 2; // señal fuerte
-        if(conn && conn.open) signal += 1;
+        if(agoraClient && agoraClient.joined) signal += 2;
+        if(rtmClient && rtmClient.isLoggedIn) signal += 1;
         
         const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-        const hasStudio = conn && conn.open;
+        const hasStudio = (agoraClient && agoraClient.joined) || (rtmClient && rtmClient.isLoggedIn);
         
         if (hasRemote) {
             if(DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC REM: ONLINE"; DOM_CACHE.micStat.className = "text-green-500 font-bold"; }
@@ -3254,7 +2983,7 @@ function drawAudioVisualizer(c, w, h) {
         if (DOM_CACHE.fps) DOM_CACHE.fps.innerText = `${currentFps} FPS`;
         if (DOM_CACHE.sig) DOM_CACHE.sig.className = `signal-bars signal-level-${signal}`;
         
-        if(agoraClient && agoraClient.joined || (conn && conn.open)) { 
+        if(agoraClient && agoraClient.joined || (rtmClient && rtmClient.isLoggedIn)) { 
             if (DOM_CACHE.statTxt) { DOM_CACHE.statTxt.innerText = "ONLINE (AGORA)"; DOM_CACHE.statTxt.className = "text-green-500 font-bold font-mono"; }
             if (DOM_CACHE.statDot) DOM_CACHE.statDot.className = "w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_lime]"; 
             if (DOM_CACHE.tally) DOM_CACHE.tally.className = "online"; 
@@ -3271,11 +3000,9 @@ function drawAudioVisualizer(c, w, h) {
             state.studioId = hostInput;
             localStorage.setItem('obr_studio_id', state.studioId);
         }
-        if (conn && conn.open) { if(peerCommand) { peerCommand.destroy(); peerCommand = null; } if(peerVideoSender) { peerVideoSender.destroy(); peerVideoSender = null; } conn = null; showToast("ENLACE DESCONECTADO (AHORRO RED)", false); return; }
         document.getElementById('connect-modal').classList.add('active'); 
     }
 
-    // NUEVA FUNCIÓN DE TRANSMISIÓN CON AGORA (CORREGIDA)
     async function connectToStudio() {
         const name = document.getElementById('stream-name').value.trim();
         if (!name) return;
@@ -3291,7 +3018,6 @@ function drawAudioVisualizer(c, w, h) {
         
         showToast("Conectando a Agora...", false);
         
-        // Si ya hay un cliente Agora, salir primero
         if (agoraClient) {
             agoraClient.leave();
             agoraClient = null;
@@ -3299,24 +3025,16 @@ function drawAudioVisualizer(c, w, h) {
         
         try {
             const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
-            
-            // CORRECCIÓN: asignar rol de host para poder publicar
             client.setClientRole('host');
-            
-            // Activar proxy TCP para evitar timeouts en redes móviles restrictivas
             client.startProxyServer();
             
             await client.join(AGORA_APP_ID, AGORA_CHANNEL, AGORA_TOKEN, null);
-            
-            // Guardar UID asignado por Agora para evitar cámaras duplicadas
             const agoraUid = client.uid;
             
-            // Video track de la cámara (sin filtros, crudo)
             const videoTrack = AgoraRTC.createCustomVideoTrack({
                 mediaStreamTrack: videoStream.getVideoTracks()[0]
             });
             
-            // Audio mezclado (mic + TTS + barrido)
             let audioTrack = null;
             if (mixDestination && mixDestination.stream.getAudioTracks().length > 0) {
                 audioTrack = AgoraRTC.createCustomAudioTrack({
@@ -3343,12 +3061,13 @@ function drawAudioVisualizer(c, w, h) {
                 DOM_CACHE.tally.className = "online";
             }
             
-            // También iniciar la conexión de comandos vía PeerJS (si no está activa)
-            if (!conn || !conn.open) {
-                startCommandConnection(name, agoraUid);
-            } else {
-                startSendingOverlay();
+            if (!rtmClient || !rtmClient.isLoggedIn) {
+                await initRTM();
             }
+            
+            sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true, agoraUid: agoraUid });
+            
+            startSendingOverlay();
         } catch (err) {
             console.error("Error Agora:", err);
             let msg = "Error Agora: " + err.message;
@@ -3360,66 +3079,36 @@ function drawAudioVisualizer(c, w, h) {
         }
     }
 
-    function startCommandConnection(name, agoraUid) {
-        const hostInput = document.getElementById('mtx-host').value.trim();
-        if (hostInput) {
-            state.studioId = hostInput;
-            localStorage.setItem('obr_studio_id', state.studioId);
-        }
-        
-        let baseId = state.studioId.trim().replace(/\s+/g, '');
-        if (baseId.endsWith("-8889")) baseId = baseId.slice(0, -5);
-        baseId = baseId.replace(/\./g, '-');
-        const commandTarget = baseId;
-        
-        if (peerCommand) peerCommand.destroy();
-        peerCommand = new Peer(null, GLOBAL_PEER_CONFIG);
-        peerCommand.on('open', () => {
-            const connection = peerCommand.connect(commandTarget);
-            connection.on('open', () => {
-                conn = connection;
-                // Enviar registro con UID de Agora
-                conn.send({ type: 'register', name: name, hasAI: true, agoraUid: agoraUid });
-                showToast("Enlace Comandos OK", false);
-                updateAudioRouting();
-                startSendingOverlay();
-            });
-            connection.on('data', handleCommand);
-            connection.on('close', () => {
-                showToast("Estudio desconectado", true);
-                stopSendingOverlay();
-                conn = null;
-                if (peerCommand) { peerCommand.destroy(); peerCommand = null; }
-                updateAudioRouting();
-                checkAndDeactivateAudioScan();
-            });
-            connection.on('error', (e) => { console.error("Data error", e); });
-        });
-        peerCommand.on('error', (err) => {
-            showToast("Err CMD: " + err.type, true);
-            try { peerCommand.destroy(); } catch(e){}
-        });
+    function startSendingOverlay() {
+        if (overlayInterval) clearInterval(overlayInterval);
+        overlayInterval = setInterval(() => {
+            if (rtmClient && rtmClient.isLoggedIn) {
+                const overlay = {
+                    type: 'overlay_data',
+                    poses: targetPoses.map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x, y: k.y, score: k.score })) })),
+                    motionLevel: window.motionLevel,
+                    evpText: lastSpokenText,
+                    userText: window._liveUserText || '',
+                    isSLS: state.isSLS,
+                    isLidar: state.isLidar,
+                    isAudioScan: state.isAudioScan,
+                    filter: state.filter,
+                    isPareidolia: state.isPareidolia,
+                    audioEnergy: cumulativeEVPEnergy,
+                    gps: window._currentGPS
+                };
+                sendRTMCommand('estudio_principal', overlay);
+            }
+        }, 50);
     }
 
-    function handleCommand(cmd) {
-        if(cmd.type === 'ping' || cmd.action === 'ping') return;
-        if(cmd.type === 'cmd' && cmd.action === 'ping') return; 
-        showToast(`CMD: ${cmd.action?.toUpperCase() || cmd.type?.toUpperCase()}`);
-        if(cmd.type === 'cmd' || cmd.category === 'cam') {
-            const action = cmd.action; const value = cmd.value;
-            if(action === 'filter') { const map = { 'night':'btn-night', 'thermal':'btn-thermal', 'urbex':'btn-urbex', 'sls':'btn-sls', 'lidar':'btn-heatmap', 'normal': null }; setFilter(value, document.getElementById(map[value])); }
-            else if(action === 'flash') toggleTorch(value); else if(action === 'toggle' && value === 'pareidolia') togglePareidolia(); else if(action === 'toggle' && value === 'audioscan') toggleAudioScanner(); else if(action === 'reset') setFilter('normal', null);
-        } else if (cmd.type === 'tally') { const tallyEl = document.getElementById('tally-border'); if (cmd.state === 'program') { tallyEl.className = 'online'; } else if (cmd.state === 'preview') { tallyEl.className = 'preview'; } else { tallyEl.className = ''; } }
+    function stopSendingOverlay() {
+        if (overlayInterval) { clearInterval(overlayInterval); overlayInterval = null; }
     }
 
     function sendScanDataToStudio() {
         const scanData = { type: 'scan-state', filters: { noc: state.filter === 'night', neg: state.filter === 'thermal', urbx: state.filter === 'urbex', lidar: state.isLidar, sls: state.isSLS, vision: state.isPareidolia }, audio: { scanVoice: state.isAudioScan }, timestamp: Date.now(), gps: window._currentGPS || null }; 
-        if (conn && conn.open) {
-            try { conn.send(scanData); } catch(e) {}
-        }
-        if (remoteDataConn && remoteDataConn.open) {
-            try { remoteDataConn.send(scanData); } catch(e) {}
-        }
+        sendRTMCommand('estudio_principal', scanData);
     }
 
     function setFilter(f, btn) {
@@ -3469,19 +3158,14 @@ function drawAudioVisualizer(c, w, h) {
         }, 'image/jpeg', 0.8);
         const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         
-       const AI_PROMPTS = [
-"Actúa como médium digital. Primera persona. Obligatorio: menciona un objeto visible específico y su posición (ej: puerta al fondo izquierda). Describe qué ocurre ahí (interacción). Prohibido decir 'algo' o 'presencia' sin contexto. Máx 20 palabras.",
-
-"Actúa como médium digital. Primera persona. Identifico actividad en un objeto visible (silla, puerta, ventana, pasillo). Indica ubicación exacta y acción (se mueve, observa, respira). Sin generalidades. Máx 20 palabras.",
-
-"Actúa como médium digital. Primera persona. La entidad está ligada a un objeto físico visible. Nómbralo, ubícalo y describe su comportamiento. Evita frases vagas. Final inquietante. Máx 20 palabras.",
-
-"Actúa como médium digital en serie. Primera persona. La presencia se desplaza entre dos objetos visibles. Menciona ambos y sus posiciones. Describe el movimiento. Tensión creciente. Máx 20 palabras.",
-
-"Actúa como médium digital. Primera persona. Hay manifestación en un punto específico de la imagen. Nombra el objeto, su ubicación y qué hace ahí. Lenguaje concreto, no genérico. Máx 20 palabras.",
-
-"Actúa como médium digital. Primera persona. Observo un objeto visible donde ocurre algo anormal. Indica posición exacta y acción clara. Evita repetir estructuras. Final inquietante. Máx 20 palabras."
-];
+        const AI_PROMPTS = [
+            "Actúa como médium digital. Primera persona. Percibo presencias únicas. Veo, hay algo, está. Rostros en sombras. Describe distinto, aumenta tensión, final inquietante. Máx 20 palabras.",
+            "Actúa como médium digital. Primera persona. Observo detalles ocultos. Veo, hay algo, está. Detecto rostros en sombras. Evita repetir, tono siniestro, final inquietante. Máx 20 palabras.",
+            "Actúa como médium digital. Primera persona. Siento presencias. Veo, hay algo, está. Rostros en sombras. Describe sensaciones, tensión creciente, final inquietante. Máx 20 palabras.",
+            "Actúa como médium digital. Primera persona. Algo no encaja. Veo, hay algo, está. Rostros en sombras. Genera incomodidad, evita repetir, final inquietante. Máx 20 palabras.",
+            "Actúa como médium digital en serie. Primera persona. La presencia avanza. Veo, hay algo, está. Rostros en sombras. Conecta antes, aumenta peligro, final inquietante. Máx 20 palabras.",
+            "Actúa como médium digital. Primera persona. La presencia está cerca. Veo, hay algo, está. Rostros en sombras. Amenaza directa, máxima tensión, final inquietante. Máx 20 palabras."
+        ];
         const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
         
         try {
@@ -3510,7 +3194,6 @@ function drawAudioVisualizer(c, w, h) {
             
             clearTimeout(aiTextTimer);
             aiTextTimer = setTimeout(() => { if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} } currentAiText = ""; currentAiImage = null; currentAiImgEl = null; window._aiImageCache = null; if (state.isPareidolia) startScanningEffect(); }, 9000);
-            if (conn && conn.open) conn.send({ type: 'ai-speech', text: text, forcePlay: true, source: 'vision' }); 
             speakText(text);
         } catch(e) { isAIProcessing = false; currentAiText = "error de señal"; setTimeout(() => { if(currentAiText === "error de señal") { currentAiText = ""; if (state.isPareidolia) startScanningEffect(); } }, 3000); }
         isAIProcessing = false; 
@@ -3601,7 +3284,7 @@ function drawAudioVisualizer(c, w, h) {
             if(switchEl) { switchEl.style.transform = 'translateX(0px)'; switchEl.classList.replace('bg-green-500', 'bg-gray-400'); }
             showToast("MIC LOCAL DESACTIVADO", true);
             
-            if (audioStream && (!conn || !conn.open)) { 
+            if (audioStream && (!agoraClient || !agoraClient.joined)) { 
                 audioStream.getTracks().forEach(t => t.stop());
                 audioStream = null;
             }
@@ -3640,7 +3323,7 @@ function drawAudioVisualizer(c, w, h) {
         if (camN) { state.cameraName = camN; localStorage.setItem('obr_camera_name', state.cameraName); }
         
         saveTTSFilters(); 
-        initRemoteMicReceiver();
+        initRemoteMicReceiverAgora();
         showToast("Config Guardada"); 
         document.getElementById('settings-modal').classList.remove('active'); 
     }
@@ -3717,54 +3400,26 @@ function drawAudioVisualizer(c, w, h) {
     
     window.resetTTSFilters = function() { ['obr_tts_f_rate', 'obr_tts_f_pitch'].forEach(k => localStorage.removeItem(k)); loadTTSFilterPanel(); showToast('FILTROS RESETEADOS — USANDO CÓDIGO BASE'); };
 
-    // NUEVO: Funciones de envío de overlays al Estudio (intervalo de 50 ms)
-    function startSendingOverlay() {
-        if (overlayInterval) clearInterval(overlayInterval);
-        overlayInterval = setInterval(() => {
-            if (conn && conn.open) {
-                const overlay = {
-                    type: 'overlay_data',
-                    poses: targetPoses.map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x, y: k.y, score: k.score })) })),
-                    motionLevel: window.motionLevel,
-                    evpText: lastSpokenText,
-                    userText: window._liveUserText || '',
-                    isSLS: state.isSLS,
-                    isLidar: state.isLidar,
-                    isAudioScan: state.isAudioScan,
-                    filter: state.filter,
-                    isPareidolia: state.isPareidolia,
-                    audioEnergy: cumulativeEVPEnergy,
-                    gps: window._currentGPS
-                };
-                try { conn.send(overlay); } catch(e){}
-            }
-        }, 50);
-    }
-
-    function stopSendingOverlay() {
-        if (overlayInterval) { clearInterval(overlayInterval); overlayInterval = null; }
-    }
-
-    window.initApp          = initApp;
-    window.retryCam         = retryCam;
-    window.openSettings     = openSettings;
-    window.saveSettings     = saveSettings;
-    window.setFilter        = setFilter;
-    window.setTTSMode       = setTTSMode;
+    window.initApp = initApp;
+    window.retryCam = retryCam;
+    window.openSettings = openSettings;
+    window.saveSettings = saveSettings;
+    window.setFilter = setFilter;
+    window.setTTSMode = setTTSMode;
     window.togglePareidolia = togglePareidolia;
     window.toggleAudioScanner = toggleAudioScanner;
-    window.toggleCleanUI    = toggleCleanUI;
+    window.toggleCleanUI = toggleCleanUI;
     window.validateAndSaveKey = validateAndSaveKey;
-    window.openConnect      = openConnect;
-    window.connectToStudio  = connectToStudio;
+    window.openConnect = openConnect;
+    window.connectToStudio = connectToStudio;
     window.startHybridTransmission = connectToStudio;
-    window.resetZoom        = resetZoom;
-    window.playLocalMedia   = playLocalMedia;
-    window.stopLocalMedia   = stopLocalMedia;
-    window.showCamError     = showCamError;
+    window.resetZoom = resetZoom;
+    window.playLocalMedia = playLocalMedia;
+    window.stopLocalMedia = stopLocalMedia;
+    window.showCamError = showCamError;
     window.initMicSenderMode = initMicSenderMode;
-    window.startRemoteMic = startRemoteMic;
-    window.stopRemoteMic = stopRemoteMic;
+    window.startRemoteMic = startRemoteMicAgora;
+    window.stopRemoteMic = stopRemoteMicAgora;
     window.toggleLocalMic = toggleLocalMic;
 
 </script>
