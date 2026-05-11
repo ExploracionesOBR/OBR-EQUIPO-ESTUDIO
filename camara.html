@@ -3169,6 +3169,18 @@ const paranormalQuestions = [
             
             agoraClient = client;
             window.agoraClient = client;
+                        try {
+                if (!audioStream) {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } 
+                    });
+                    // Iniciar el enrutamiento de audio para que el micrófono se mezcle
+                    await initAudioEngine();
+                    updateAudioRouting();
+                }
+            } catch (micErr) {
+                console.warn("Micrófono local no disponible:", micErr);
+            }
             
             showToast("TRANSMITIENDO POR AGORA", false);
             if (DOM_CACHE) {
