@@ -3182,7 +3182,8 @@ const paranormalQuestions = [
                 await initRTM();
             }
             
-            sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true, agoraUid: agoraUid });
+            const rtmUid = 'camara_' + (state.cameraName || 'cam1');
+sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true, agoraUid: agoraUid, rtmUid: rtmUid });
             
             startSendingOverlay();
         } catch (err) {
