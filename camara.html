@@ -475,41 +475,37 @@
     window.openChatView = openChatView;
     window.closeChatView = closeChatView;
 
-    if ('serviceWorker' in navigator) {
-        const CACHE_NAME = 'obr-cam-v7';
-        const urlsToCache = [
-            './',
-            'manifest.json',
-            'obr-logo.png',
-            'js/tf.min.js',
-            'js/pose-detection.min.js',
-            'js/selfie_segmentation.js',
-            'https://cdn.tailwindcss.com',
-            'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-            'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
-            'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
-            'https://download.agora.io/sdk/release/AgoraRTM.js',
-            'https://unpkg.com/leaflet/dist/leaflet.js',
-            'https://unpkg.com/leaflet/dist/leaflet.css',
-            'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
-            'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
-            'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
-            'https://tfhub.dev/google/tfjs-model/movenet/multipose/lightning/1/model.json',
-            './barrido.mp3',
-            './respuesta.mp3',
-            './INTRO_1.mp4',
-            './FIN_DIRECTO.mp4',
-            './BANNER_1.mp4'
-        ];
-
+        if ('serviceWorker' in navigator) {
         const swCode = `
-const CACHE_NAME = '${CACHE_NAME}';
-const URLS = ${JSON.stringify(urlsToCache)};
+const CACHE_NAME = 'obr-cam-v8';
+const URLS = [
+  './',
+  'obr-logo.png',
+  'https://cdn.tailwindcss.com',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
+  'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0',
+  'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
+  'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
+  'https://cdn.agora.io/sdk/release/AgoraRTM.js',
+  'https://unpkg.com/leaflet/dist/leaflet.js',
+  'https://unpkg.com/leaflet/dist/leaflet.css',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
+  'https://tfhub.dev/google/tfjs-model/movenet/multipose/lightning/1/model.json',
+  './barrido.mp3',
+  './respuesta.mp3',
+  './INTRO_1.mp4',
+  './FIN_DIRECTO.mp4',
+  './BANNER_1.mp4'
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(URLS).catch(() => {}))
+      .then(cache => cache.addAll(URLS).catch(err => console.warn('SW cache error', err)))
       .then(() => self.skipWaiting())
   );
 });
