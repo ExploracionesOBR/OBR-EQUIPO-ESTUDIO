@@ -951,12 +951,13 @@
                             setCameras(prev => {
                                 const existing = prev[camName] || (agoraUid && prev[agoraUid]);
                                 const base = existing || { tally: 'idle', hasAI: data.hasAI || true, filter: 'normal' };
-                                const newEntry = {
+                                                            const newEntry = {
                                     ...base,
                                     id: camName,
                                     name: camName,
                                     hasAI: data.hasAI || base.hasAI,
                                     filter: base.filter || 'normal',
+                                    _rtmUid: data.rtmUid || '',   // <-- añadido
                                     stream: base.stream || (agoraUid && agoraUsersRef.current[agoraUid]?.videoTrack ? new MediaStream([agoraUsersRef.current[agoraUid].videoTrack]) : null)
                                 };
                                 const updated = { ...prev, [camName]: newEntry };
@@ -977,7 +978,7 @@
                                 let changed = false;
                                 const updated = { ...prev };
                                 Object.keys(updated).forEach(k => {
-                                    if (updated[k].id && (updated[k].id === camUid || updated[k]._rtmId === camUid)) {
+                                    if (updated[k]._rtmUid && (updated[k]._rtmUid === camUid || updated[k].id === camUid)) {
                                         updated[k] = { ...updated[k], _overlay: data };
                                         changed = true;
                                     }
@@ -996,7 +997,7 @@
                                 let changed = false;
                                 const updated = { ...prev };
                                 Object.keys(updated).forEach(k => {
-                                    if (updated[k].id && (updated[k].id === camUid || updated[k]._rtmId === camUid)) {
+                                    if (updated[k]._rtmUid && (updated[k]._rtmUid === camUid || updated[k].id === camUid)) {
                                         let f = 'normal';
                                         if (data.filters.noc) f = 'night';
                                         else if (data.filters.neg) f = 'thermal';
@@ -1126,7 +1127,7 @@
                   const cam = camerasRef.current[targetCamId];
 
                   if (targetCamId && cam) {
-                      const camUid = cam._rtmId || targetCamId;
+                      const camUid = cam._rtmUid || targetCamId;
                       if (rtmClientRef.current && rtmClientRef.current.isLoggedIn) {
                           rtmClientRef.current.publish(camUid, JSON.stringify({ type: 'cmd', action: cmd.action, value: cmd.value }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
                       }
