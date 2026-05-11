@@ -442,7 +442,7 @@
     // ==========================================================
     // CONFIGURACIÓN EXTERNA
     // ==========================================================
-    const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
+        const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
     const AGORA_TOKEN  = '007eJxTYGDwP/d/v9xe7czpnYVt32w/TP6SOdXJ5bqvnXOfxOSA+8cUGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNxcwYsxoCGRk4jtxhYIRCEJ+bIT+pSDe1uKQ0JTOfgQEAU2sh5A==';
     const AGORA_CHANNEL = 'obr-estudio';
     const CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
@@ -455,6 +455,69 @@
     const VOLUMEN_RESPUESTA = 0.35;
     const VOLUMEN_EVP = 1.5;
     const VOLUMEN_IA_VISION = 1.5;
+
+    // ============ ESTADO GLOBAL (faltaba) ============
+    const state = {
+        filter: 'normal',
+        zoom: 1,
+        isSLS: false,
+        isLidar: false,
+        isAudioScan: false,
+        isPareidolia: false,
+        cameraName: localStorage.getItem('obr_camera_name') || 'cam1',
+        studioId: localStorage.getItem('obr_studio_id') || 'local',
+        apiKey: localStorage.getItem('obr_ai_key') || '',
+        aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
+        aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
+    };
+
+    // APIs y variables TTS (faltaban)
+    let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || ''; 
+    let elevenlabsCreditsTotal = 10000;
+    let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '0');
+    let elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
+    let voicerssRemaining = 350; 
+    let voicerssUsed = 0;
+
+    let AI_API_KEY = state.apiKey;
+    let CURRENT_AI_MODEL = state.aiModel;
+    let CURRENT_AI_PROVIDER = state.aiProvider;
+
+    let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
+    let usingFallbackTTS = false;
+    let _activeBufSrc = null;
+    let _ttsWatchdog = null;
+
+    function normalizarTexto(texto) {
+        return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    }
+
+    function getRandomVoice() {
+        const voices = ['N2lVS1w4EtoT3dr4eOWO', 'jBpfuIE2acCO8z3wKNLl', 'EXAVITQu4vr4xnSDxMaL'];
+        return voices[Math.floor(Math.random() * voices.length)];
+    }
+
+    function getRandomVoiceRSSVoice() {
+        const voices = ['Juana', 'Jorge', 'Penelope', 'Miguel'];
+        return voices[Math.floor(Math.random() * voices.length)];
+    }
+
+    function _resetTtsFlags() {
+        isTtsPlaying = false;
+        isSpookySpeaking = false;
+        window._isAnnouncement = false;
+        if (_activeBufSrc) {
+            try { _activeBufSrc.stop(); } catch(e) {}
+            _activeBufSrc = null;
+        }
+        cloudTTSPlayer.pause();
+        cloudTTSPlayer.src = '';
+    }
+
+    function _incrementVoiceRSS() {
+        voicerssUsed++;
+        voicerssRemaining = Math.max(0, 350 - voicerssUsed);
+    }
 
     let loadingTimer = setTimeout(() => {
         const loader = document.getElementById('loading');
@@ -3030,8 +3093,8 @@ const paranormalQuestions = [
         
         try {
             const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
-            client.setClientRole('host');
-            client.startProxyServer();
+                       client.setClientRole('host');
+            // client.startProxyServer(); // API obsoleta eliminada
             
             await client.join(AGORA_APP_ID, AGORA_CHANNEL, AGORA_TOKEN, null);
             const agoraUid = client.uid;
