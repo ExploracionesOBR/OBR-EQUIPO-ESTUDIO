@@ -449,7 +449,7 @@
             );
         };
         
-        const ObsCleanFeed = ({ targetId, blobAssets }) => {
+               const ObsCleanFeed = ({ targetId, blobAssets }) => {
             useWakeLock(true);
             const [stream, setStream] = useState(null);
             const [activeMedia, setActiveMedia] = useState(null);
@@ -457,10 +457,10 @@
             const [overlayData, setOverlayData] = useState(null);
             const [localAssetStatus, setLocalAssetStatus] = useState({});
             const rtmClientRef = useRef(null);
-            const obsChannelRef = useRef(null);
-            const broadcastChannelRef = useRef(null);
+            const obsChannelRef = useRef(null); // canal RTM OBS
             const audioContainerRef = useRef(null);
             
+            // Conexión Agora RTC para recibir video/audio
             useEffect(() => {
                 const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
                 client.on('user-published', async (user, mediaType) => {
@@ -495,6 +495,7 @@
                 return () => client.leave();
             }, []);
 
+            // Conexión al canal RTM 'obs_broadcast' para recibir metadatos
             useEffect(() => {
                 let rtmClient;
                 const initRTM = async () => {
@@ -502,158 +503,39 @@
                     await rtmClient.login({ uid: 'obs_feed_' + Date.now(), token: RTM_TOKEN });
                     rtmClientRef.current = rtmClient;
 
-                            const broadcastChannel = rtmClient.createChannel('obs_broadcast');
-                obsChannelRef.current = broadcastChannel; // Usamos la ref del canal
-                broadcastChannel.on('message', (message) => {
-                    if (message.messageType === 'TEXT') {
-                        const data = JSON.parse(message.text);
-                        if (data.type === 'program-update') {
-                            setActiveMedia(data.activeMedia);
-                        }
-                        if (data.type === 'dock-status') {
-                            setActiveMedia(data.activeMedia);
-                            if (data.assetStatus) setLocalAssetStatus(data.assetStatus);
-                        }
-                        if (data.type === 'overlay_data') {
-                            setOverlayData(data);
-                            if (data.filter) setCamFilter(data.filter);
-                        }
-                        if (data.type === 'scan-state' && data.filters) {
-                            if (data.filters.noc) setCamFilter('night');
-                            else if (data.filters.neg) setCamFilter('thermal');
-                            else if (data.filters.urbx) setCamFilter('urbex');
-                            else setCamFilter('normal');
-                        }
-                    }
-                });
-                await broadcastChannel.join();
-
-                // Manejo de mensajes entrantes (cámaras, comandos, overlay, etc.)
-                rtmClient.on('message', (message) => {
-                    if (message.messageType === 'TEXT') {
-                        const data = JSON.parse(message.text);
-                        
-                        if (data.type === 'register') {
-                            const camName = data.name || message.publisher;
-                            const agoraUid = data.agoraUid;
-                            setCameras(prev => {
-                                const existing = prev[camName] || (agoraUid && prev[agoraUid]);
-                                const base = existing || { tally: 'idle', hasAI: data.hasAI || true, filter: 'normal' };
-                                const newEntry = {
-                                    ...base,
-                                    id: camName,
-                                    name: camName,
-                                    hasAI: data.hasAI || base.hasAI,
-                                    filter: base.filter || 'normal',
-                                    stream: base.stream || (agoraUid && agoraUsersRef.current[agoraUid]?.videoTrack ? new MediaStream([agoraUsersRef.current[agoraUid].videoTrack]) : null)
-                                };
-                                const updated = { ...prev, [camName]: newEntry };
-                                if (agoraUid && updated[agoraUid]) {
-                                    delete updated[agoraUid];
-                                }
-                                return updated;
-                            });
-                            notify(`CAMARA: ${camName}`);
-                        }
-                        if (data.type === 'director-cmd') {
-                            handleDirectorCommand(data);
-                        }
-                        if (data.type === 'overlay_data') {
-                            const camUid = message.publisher;
-                            overlayDataRef.current[camUid] = data;
-                            setCameras(prev => {
-                                let changed = false;
-                                const updated = { ...prev };
-                                Object.keys(updated).forEach(k => {
-                                    if (updated[k].id && (updated[k].id === camUid || updated[k]._rtmId === camUid)) {
-                                        updated[k] = { ...updated[k], _overlay: data };
-                                        changed = true;
-                                    }
-                                });
-                                return changed ? updated : prev;
-                            });
-                            // Reenviar al canal de broadcast OBS (usando sendMessage)
-                            if (obsChannelRef.current) {
-                                                        // Publicar al broadcast de OBS usando el canal
-                        if (obsChannelRef.current) {
-                            obsChannelRef.current.sendMessage({ text: JSON.stringify({ 
-                                type: 'dock-status', 
-                                activeMedia: activeMediaRef.current, 
-                                assetStatus: assetStatusRef.current
-                            })}).catch(()=>{});
-                            obsChannelRef.current.sendMessage({ text: JSON.stringify({ 
-                                type: 'program-update', 
-                                activeMedia: activeMediaRef.current 
-                            })}).catch(()=>{});
-                        }
+                    const broadcastChannel = rtmClient.createChannel('obs_broadcast');
+                    obsChannelRef.current = broadcastChannel;
+                    
+                    broadcastChannel.on('message', (message) => {
+                        if (message.messageType === 'TEXT') {
+                            const data = JSON.parse(message.text);
+                            if (data.type === 'program-update') {
+                                setActiveMedia(data.activeMedia);
+                            }
+                            if (data.type === 'dock-status') {
+                                setActiveMedia(data.activeMedia);
+                                if (data.assetStatus) setLocalAssetStatus(data.assetStatus);
+                            }
+                            if (data.type === 'overlay_data') {
+                                setOverlayData(data);
+                                if (data.filter) setCamFilter(data.filter);
+                            }
+                            if (data.type === 'scan-state' && data.filters) {
+                                if (data.filters.noc) setCamFilter('night');
+                                else if (data.filters.neg) setCamFilter('thermal');
+                                else if (data.filters.urbx) setCamFilter('urbex');
+                                else setCamFilter('normal');
                             }
                         }
-                        if (data.type === 'scan-state') {
-                            const camUid = message.publisher;
-                            setCameras(prev => {
-                                let changed = false;
-                                const updated = { ...prev };
-                                Object.keys(updated).forEach(k => {
-                                    if (updated[k].id && (updated[k].id === camUid || updated[k]._rtmId === camUid)) {
-                                        let f = 'normal';
-                                        if (data.filters.noc) f = 'night';
-                                        else if (data.filters.neg) f = 'thermal';
-                                        else if (data.filters.urbx) f = 'urbex';
-                                        if (updated[k].filter !== f) {
-                                            updated[k] = { ...updated[k], filter: f };
-                                            changed = true;
-                                        }
-                                    }
-                                });
-                                return changed ? updated : prev;
-                            });
-                            // Reenviar scan-state al broadcast OBS (usando sendMessage)
-                            if (data.filters) {
-                                const filterData = { type: 'scan-state', filters: data.filters };
-                                if (obsChannelRef.current) {
-                                    obsChannelRef.current.sendMessage({ text: JSON.stringify(filterData) }).catch(()=>{});
-                                }
-                            }
-                        }
-
-                // Intervalo de estado y broadcast a directores y OBS
-                const statusInterval = setInterval(() => {
-                    if (rtmClient.isLoggedIn) {
-                        // Publicar a directores
-                        rtmClient.publish('director_*', JSON.stringify({ 
-                            type: 'dock-status', 
-                            activeMedia: activeMediaRef.current, 
-                            assetStatus: assetStatusRef.current,
-                            forceCam1Audio: forceCam1AudioRef.current
-                        }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
-                        rtmClient.publish('director_*', JSON.stringify({ type: 'obs-state-update', state: obsStateRef.current }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
-                        rtmClient.publish('director_*', JSON.stringify({ type: 'camera-list-update', cameras: getSerializableCameras() }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
-
-                        // Publicar al broadcast de OBS usando el canal
-                        if (obsChannelRef.current) {
-                            obsChannelRef.current.sendMessage({ text: JSON.stringify({ 
-                                type: 'dock-status', 
-                                activeMedia: activeMediaRef.current, 
-                                assetStatus: assetStatusRef.current
-                            })}).catch(()=>{});
-                            obsChannelRef.current.sendMessage({ text: JSON.stringify({ 
-                                type: 'program-update', 
-                                activeMedia: activeMediaRef.current 
-                            })}).catch(()=>{});
-                        }
-                    }
-                }, 1000);
-
-                return () => {
-                    clearInterval(statusInterval);
-                    if (obsChannelRef.current) {
-                        obsChannelRef.current.leave(); // Importante abandonar el canal al desmontar
-                    }
-                    rtmClient.logout();
+                    });
+                    await broadcastChannel.join();
                 };
-            };
-            initRTM();
-          }, []);
+                initRTM();
+                return () => {
+                    if (obsChannelRef.current) obsChannelRef.current.leave();
+                    if (rtmClientRef.current) rtmClientRef.current.logout();
+                };
+            }, []);
 
             return (
                 <div className="w-screen h-screen bg-black overflow-hidden relative flex items-center justify-center">
@@ -667,7 +549,7 @@
                 </div>
             );
         };
-
+        
         const RemoteDirector = ({ onBack }) => {
             useWakeLock(true);
             const [dockId, setDockId] = useState('');
