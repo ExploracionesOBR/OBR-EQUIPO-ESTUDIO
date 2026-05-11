@@ -14,23 +14,19 @@
     <meta name="mobile-web-app-capable" content="yes">
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="js/tf.min.js"></script>
-    <script src="js/pose-detection.min.js"></script>
+       <!-- Librerías de IA desde CDN (sin fallbacks problemáticos) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="js/selfie_segmentation.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
     
     <!-- AGORA SDKs (RTC + RTM) -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
-    <script src="https://download.agora.io/sdk/release/AgoraRTM.js"></script>
+    <!-- SDK de Agora RTM (corregido) -->
+    <script src="https://cdn.agora.io/sdk/release/AgoraRTM.js"></script>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-    <script>
-        if(!window.tf) document.write('<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"><\/script>');
-        if(!window.poseDetection) document.write('<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"><\/script>');
-        if(!window.SelfieSegmentation) document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"><\/script>');
-    </script>
     
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -447,7 +443,7 @@
     // CONFIGURACIÓN EXTERNA
     // ==========================================================
     const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
-    const AGORA_TOKEN  = '007eJxTYLj96oFFVtaV1JvvpvEHM3x4nd/89f7k4M/94qn9tv3zuQ0VGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNKx1/ZDYEMjLcM+JgZWSAQBCfmyE/qUg3tbikNCUzn4EBAO3qI78=';
+    const AGORA_TOKEN  = '007eJxTYGDwP/d/v9xe7czpnYVt32w/TP6SOdXJ5bqvnXOfxOSA+8cUGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNxcwYsxoCGRk4jtxhYIRCEJ+bIT+pSDe1uKQ0JTOfgQEAU2sh5A==';
     const AGORA_CHANNEL = 'obr-estudio';
     const CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 
