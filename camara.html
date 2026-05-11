@@ -526,7 +526,47 @@
             location.reload();
         }
     }, 20000);
+    // Variables globales faltantes
+    let isAIProcessing = false;
+    let canvasScanBoxes = [];
+    let isPareidoliaActive = false;
+    let pareidoliaInterval = null;
+    let lastPareidoliaCall = 0;
+    let currentAiText = "";
+    let currentAiImage = null;
+    let currentAiImgEl = null;
+    let aiScannerTimer = 0;
+    let aiScannerState = 0;
+    let aiTextTimer = null;
+    let scanInterval = null;
+    let radarAngle = 0; // para el radar de visión IA
 
+    function updateTTSStatusUI() {
+        // Actualiza los indicadores en el panel de configuración
+        const engineEl = document.getElementById('tts-engine-status');
+        const creditsEl = document.getElementById('tts-credits-status');
+        const usedEl = document.getElementById('tts-used-status');
+        const fallbackEl = document.getElementById('tts-fallback-status');
+        const vrssEl = document.getElementById('tts-vrss-status');
+        if (engineEl) engineEl.textContent = ttsMode === 'elevenlabs' ? 'ELEVENLABS' : (ttsMode === 'voicerss' ? 'VOICERSS' : 'AUTO');
+        if (creditsEl) creditsEl.textContent = elevenlabsCreditsRemaining + ' / ' + elevenlabsCreditsTotal;
+        if (usedEl) usedEl.textContent = elevenlabsCreditsUsed;
+        if (fallbackEl) fallbackEl.textContent = usingFallbackTTS ? 'SI (VoiceRSS)' : 'NO';
+        if (vrssEl) vrssEl.textContent = voicerssRemaining + ' / 350';
+    }
+
+    function setTTSMode(mode) {
+        ttsMode = mode;
+        localStorage.setItem('obr_tts_mode', mode);
+        updateTTSStatusUI();
+        // Actualizar botones de UI
+        const btnAuto = document.getElementById('tts-btn-auto');
+        const btnEL = document.getElementById('tts-btn-el');
+        const btnVRSS = document.getElementById('tts-btn-vrss');
+        if (btnAuto) btnAuto.className = mode === 'auto' ? '...' : '...';
+        // (simplificado: solo actualizar estado visual)
+    }
+    
     function openChatView() {
         document.getElementById('chat-fullscreen-view').style.display = 'flex';
         document.getElementById('chat-iframe').src = CHAT_OVERLAY_URL;
