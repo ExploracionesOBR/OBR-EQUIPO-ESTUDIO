@@ -40,7 +40,13 @@
         #zoom-container { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: center center; transition: transform 0.2s ease-out; will-change: transform; backface-visibility: hidden; }
         #shared-video-element { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 1; pointer-events: none; }
         #sls-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; pointer-events: none; opacity: 1 !important; visibility: visible; display: block; }
-        #audio-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+        #audio-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 60;
+}
+/* Agrega esto justo debajo */
+#shared-video-element { display: none; }
+#audio-canvas { z-index: 70; } /* esto sobrescribirá el z-index anterior a 70 */        
         #heatmap-buffer, #lidar-buffer { display: none; }
         #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 70; }
         .interactive { pointer-events: auto; cursor: pointer; }
@@ -3027,6 +3033,16 @@ const paranormalQuestions = [
         const isTransmitting = (agoraClient && agoraClient.joined);
         
         ctx.clearRect(0, 0, cW, cH); audioLayerCtx.clearRect(0, 0, cW, cH); updateSmoothing();
+                // Dibujar el frame de cámara en el canvas de audio (fondo)
+        audioLayerCtx.filter = 'none';
+        audioLayerCtx.drawImage(el.video, 0, 0, cW, cH);
+        // Aplicar filtro visual según estado
+        if (state.filter === 'night') audioLayerCtx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)';
+        else if (state.filter === 'thermal') audioLayerCtx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
+        else if (state.filter === 'urbex') audioLayerCtx.filter = 'invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85)';
+        else audioLayerCtx.filter = 'none';
+        audioLayerCtx.drawImage(el.video, 0, 0, cW, cH); // aplicar filtro dibujando de nuevo
+        audioLayerCtx.filter = 'none';
         
         if (vW && vH) {
             if (vW !== lastVW || vH !== lastVH || cW !== lastCW || cH !== lastCH) {
@@ -3073,7 +3089,10 @@ const paranormalQuestions = [
     let watchdogZeroFps = 0;
     setInterval(() => {
         if (document.visibilityState !== 'visible' || isRestartingCamera || isAIProcessing) return;
-        if (currentFps === 0 && el.video.readyState >= 2) { watchdogZeroFps++; if (watchdogZeroFps >= 4) { restartCamera(); watchdogZeroFps = 0; } } else watchdogZeroFps = 0;
+        if (currentFps === 0 && el.video.readyState >= 2) { 
+    watchdogZeroFps++; 
+    if (watchdogZeroFps >= 8) { restartCamera(); watchdogZeroFps = 0; } 
+} else watchdogZeroFps = 0;
         if (videoStream) { const track = videoStream.getVideoTracks()[0]; if (track && track.readyState === 'ended' && !el.video.paused) restartCamera(); }
     }, 1000);
 
@@ -3156,8 +3175,9 @@ const paranormalQuestions = [
             await client.join(AGORA_APP_ID, AGORA_CHANNEL, AGORA_TOKEN, null);
             const agoraUid = client.uid;
             
+                        const canvasStream = el.audioCanvas.captureStream(30);
             const videoTrack = AgoraRTC.createCustomVideoTrack({
-                mediaStreamTrack: videoStream.getVideoTracks()[0]
+                mediaStreamTrack: canvasStream.getVideoTracks()[0]
             });
             
             let audioTrack = null;
@@ -3189,6 +3209,24 @@ const paranormalQuestions = [
             } catch (micErr) {
                 console.warn("Micrófono local no disponible:", micErr);
             }
+                        // Activar micrófono local automáticamente si no está ya capturado
+            try {
+                if (!audioStream) {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } 
+                    });
+                }
+                // Si hay un stream de audio local, crear pista de audio para Agora
+                if (audioStream && !audioTrack) {
+                    const localAudioTrack = AgoraRTC.createCustomAudioTrack({
+                        mediaStreamTrack: audioStream.getAudioTracks()[0]
+                    });
+                    await client.publish([localAudioTrack]);
+                    // Si ya estaba publicado, no duplicar
+                }
+                await initAudioEngine();
+                updateAudioRouting();
+            } catch(e) { console.warn("Micrófono local no disponible:", e); }
             
             showToast("TRANSMITIENDO POR AGORA", false);
             if (DOM_CACHE) {
