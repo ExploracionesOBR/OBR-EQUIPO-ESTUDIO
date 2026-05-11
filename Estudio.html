@@ -11,12 +11,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     
-        <link rel="manifest" href='data:application/manifest+json,{"name":"PRODOCK STUDIO","short_name":"PRODOCK","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","icons":[{"src":"./obr-logo.png","sizes":"192x192","type":"image/png"},{"src":"./obr-logo.png","sizes":"512x512","type":"image/png"}]}'>
+            <link rel="manifest" href='data:application/manifest+json,{"name":"PRODOCK STUDIO","short_name":"PRODOCK","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","icons":[{"src":"obr-logo.png","sizes":"192x192","type":"image/png"},{"src":"obr-logo.png","sizes":"512x512","type":"image/png"}]}'>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- AGORA SDKs (RTC + RTM) -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
+        <script src="https://cdn.agora.io/sdk/release/AgoraRTM.js"></script>
     <script src="https://download.agora.io/sdk/release/AgoraRTM.js"></script>
 
     <script type="importmap">
@@ -1446,4 +1447,82 @@
         createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
+    <script>
+    if ('serviceWorker' in navigator) {
+        const swCode = `
+const CACHE_NAME = 'obr-studio-v8';
+const URLS = [
+  './',
+  './obr-logo.png',
+  'https://cdn.tailwindcss.com',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
+  'https://cdn.agora.io/sdk/release/AgoraRTM.js',
+  'https://unpkg.com/@babel/standalone@7.23.5/babel.min.js',
+  'https://esm.sh/react@18.2.0',
+  'https://esm.sh/react-dom@18.2.0/client',
+  'https://esm.sh/react-dom@18.2.0',
+  'https://esm.sh/lucide-react@0.263.1',
+  './INTRO_1.mp4',
+  './FIN_DIRECTO.mp4',
+  './BANNER_1.mp4',
+  './VIDEO-ESPERA.mp4',
+  './transicion.mp4',
+  './BACKUP_1.mp4',
+  './BACKUP_2.mp4'
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(URLS).catch(err => console.warn('SW cache error', err)))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  if (!e.request.url.startsWith(self.location.origin) && 
+      !e.request.url.includes('cdn.agora.io') &&
+      !e.request.url.includes('fonts.googleapis.com') &&
+      !e.request.url.includes('cdnjs.cloudflare.com') &&
+      !e.request.url.includes('unpkg.com') &&
+      !e.request.url.includes('esm.sh') &&
+      !e.request.url.includes('cdn.tailwindcss.com') &&
+      !e.request.url.includes('download.agora.io')) {
+    return;
+  }
+  
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      const netFetch = fetch(e.request).then(netResp => {
+        if (netResp && netResp.status === 200) {
+          const clone = netResp.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        }
+        return netResp;
+      }).catch(() => {
+        if (e.request.mode === 'navigate') return caches.match('./');
+        return new Response('', {status: 408});
+      });
+      return cached || netFetch;
+    })
+  );
+});`;
+        try {
+            const blob = new Blob([swCode], {type:'application/javascript'});
+            const url  = URL.createObjectURL(blob);
+            navigator.serviceWorker.register(url, {scope:'/'}).catch(()=>{});
+        } catch(e) {}
+    }
+</script>
 </html>
