@@ -1088,7 +1088,7 @@
                         if (data.type === 'director-cmd') {
                             handleDirectorCommand(data);
                         }
-                        if (data.type === 'overlay_data') {
+                                                if (data.type === 'overlay_data') {
                             const camUid = message.publisher;
                             overlayDataRef.current[camUid] = data;
                             setCameras(prev => {
@@ -1103,12 +1103,11 @@
                                 return changed ? updated : prev;
                             });
                             // Reenviar al canal de broadcast OBS
-                                                    if (obsChannelRef.current) {
-                            obsChannelRef.current.sendMessage({ text: JSON.stringify( ... ) }).catch(()=>{});
-                        } else {
-                            console.warn('Canal obs_broadcast no disponible');
+                            if (obsChannelRef.current) {
+                                obsChannelRef.current.sendMessage({ text: JSON.stringify(data) }).catch(()=>{});
+                            }
                         }
-                        }
+                        
                         if (data.type === 'scan-state') {
                             const camUid = message.publisher;
                             setCameras(prev => {
