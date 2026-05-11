@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obr-pro-cache-v1';
+const CACHE_NAME = 'obr-pro-cache-v2';
 
 // Estos archivos se guardarán en el "disco duro" del celular la primera vez que entres
 const ASSETS_TO_CACHE = [
