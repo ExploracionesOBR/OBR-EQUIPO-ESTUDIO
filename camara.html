@@ -1106,6 +1106,14 @@ self.addEventListener('fetch', e => {
                     handleRTMCommand(cmd);
                 }
             });
+
+            // Reconexión automática en caso de desconexión RTM
+            rtmClient.on('connectionStateChanged', (newState) => {
+                if (newState === 'DISCONNECTED') {
+                    console.warn('RTM desconectado, reintentando en 3s...');
+                    setTimeout(() => initRTM(), 3000);
+                }
+            });
         } catch(e) {
             console.warn("Error al conectar RTM:", e);
         }
