@@ -199,82 +199,147 @@
             const canvasRef = useRef(null);
             
             useEffect(() => {
-                const canvas = canvasRef.current;
-                if (!canvas || !width || !height) return;
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, width, height);
-                
-                if (!overlayData) return;
-                
-                if (overlayData.filter && overlayData.filter !== 'normal') {
-                    if (overlayData.filter === 'night') ctx.filter = 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)';
-                    else if (overlayData.filter === 'thermal') ctx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
-                    else if (overlayData.filter === 'urbex') ctx.filter = 'invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85)';
-                }
-                
-                if (overlayData.poses && overlayData.poses.length > 0) {
-                    overlayData.poses.forEach(pose => {
-                        if (!pose.keypoints || pose.keypoints.length === 0) return;
-                        const k = pose.keypoints;
-                        const mapX = (x) => x * width;
-                        const mapY = (y) => y * height;
-                        
-                        const bones = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
-                        ctx.strokeStyle = "#ff00ff";
-                        ctx.lineWidth = 3;
-                        ctx.beginPath();
-                        bones.forEach(([a, b]) => {
-                            const p1 = k[a], p2 = k[b];
-                            if (!p1 || !p2 || p1.score < 0.1 || p2.score < 0.1) return;
-                            ctx.moveTo(mapX(p1.x), mapY(p1.y));
-                            ctx.lineTo(mapX(p2.x), mapY(p2.y));
-                        });
-                        ctx.stroke();
-                        
-                        [0,5,6,7,8,9,10,11,12,13,14,15,16].forEach(i => {
-                            const p = k[i];
-                            if (!p || p.score < 0.1) return;
-                            ctx.beginPath();
-                            ctx.arc(mapX(p.x), mapY(p.y), 3, 0, Math.PI*2);
-                            ctx.fillStyle = "#ff3333";
-                            ctx.fill();
-                        });
-                    });
-                }
-                
-                if (overlayData.evpText) {
-                    ctx.filter = 'none';
-                    ctx.font = "bold 18px 'Share Tech Mono'";
-                    ctx.fillStyle = "rgba(255,255,255,0.85)";
-                    ctx.shadowColor = "#ab0202";
-                    ctx.shadowBlur = 10;
-                    ctx.textAlign = "center";
-                    ctx.fillText(overlayData.evpText.toUpperCase(), width/2, height - 40);
-                    ctx.shadowBlur = 0;
-                }
-                
-                if (overlayData.userText) {
-                    ctx.filter = 'none';
-                    ctx.font = "bold 16px 'Share Tech Mono'";
-                    ctx.fillStyle = "rgba(255,255,255,0.85)";
-                    ctx.shadowColor = "#00d4ff";
-                    ctx.shadowBlur = 10;
-                    ctx.textAlign = "center";
-                    ctx.fillText(overlayData.userText.toUpperCase(), width/2, height - 80);
-                    ctx.shadowBlur = 0;
-                }
-                
-                if (overlayData.audioEnergy && overlayData.audioEnergy > 1) {
-                    ctx.filter = 'none';
-                    const barWidth = (overlayData.audioEnergy / 100) * (width * 0.6);
-                    ctx.fillStyle = "rgba(0,255,255,0.7)";
-                    ctx.fillRect(width*0.2, height - 10, barWidth, 4);
-                }
-                
-                ctx.filter = 'none';
-            }, [overlayData, width, height]);
+    const canvas = canvasRef.current;
+    if (!canvas || !width || !height) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+    
+    if (!overlayData) return;
+
+    // ============ HUD: reloj ============
+    if (overlayData.hudTime) {
+        ctx.save();
+        ctx.font = 'bold 20px "Share Tech Mono", monospace';
+        ctx.fillStyle = '#ff3333';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.fillText(overlayData.hudTime, 110, 42);
+        ctx.restore();
+    }
+
+    // ============ HUD: título "EXPLORACIONES OBR" ============
+    ctx.save();
+    ctx.font = 'bold 16px "Orbitron", sans-serif';
+    ctx.fillStyle = 'white';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 4;
+    ctx.fillText('EXPLORACIONES OBR', 110, 22);
+    ctx.restore();
+
+    // ============ Mini mapa GPS ============
+    if (overlayData.gps) {
+        const { lat, lon } = overlayData.gps;
+        const mapX = width - 160, mapY = height - 160;
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,30,0.8)';
+        ctx.strokeStyle = '#0f0';
+        ctx.lineWidth = 2;
+        // Fondo del mini mapa
+        ctx.beginPath();
+        ctx.roundRect(mapX, mapY, 150, 150, 8);
+        ctx.fill();
+        ctx.stroke();
+        // Coordenadas
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#0f0';
+        ctx.fillText(`${lat.toFixed(4)}`, mapX + 10, mapY + 20);
+        ctx.fillText(`${lon.toFixed(4)}`, mapX + 10, mapY + 35);
+        // Punto central (rojo)
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(mapX + 75, mapY + 75, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // ============ Audio Wave ============
+    if (overlayData.audioBins && overlayData.audioBins.length > 0) {
+        ctx.save();
+        const bins = overlayData.audioBins;
+        const startX = width * 0.02;
+        const endX = width * 0.98;
+        const sliceW = (endX - startX) / bins.length;
+        const bottomY = height * 0.85;
+        ctx.strokeStyle = 'rgba(0,255,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = '#0ff';
+        ctx.beginPath();
+        for (let i = 0; i < bins.length; i++) {
+            const y = bottomY - (bins[i] * height * 0.3);
+            const x = startX + i * sliceW;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // ============ Textos EVP y usuario ============
+    if (overlayData.evpText) {
+        ctx.save();
+        ctx.font = "bold 24px 'Share Tech Mono', monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.shadowColor = "#ab0202";
+        ctx.shadowBlur = 10;
+        ctx.textAlign = "center";
+        ctx.fillText(overlayData.evpText.toUpperCase(), width / 2, height - 60);
+        ctx.restore();
+    }
+
+    if (overlayData.userText) {
+        ctx.save();
+        ctx.font = "bold 20px 'Share Tech Mono', monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.shadowColor = "#00d4ff";
+        ctx.shadowBlur = 10;
+        ctx.textAlign = "center";
+        ctx.fillText(overlayData.userText.toUpperCase(), width / 2, height - 100);
+        ctx.restore();
+    }
+
+    // ============ Audio Energy bar ============
+    if (overlayData.audioEnergy && overlayData.audioEnergy > 1) {
+        ctx.save();
+        const barW = (overlayData.audioEnergy / 100) * (width * 0.6);
+        ctx.fillStyle = "rgba(0,255,255,0.7)";
+        ctx.fillRect(width * 0.2, height - 10, barW, 4);
+        ctx.restore();
+    }
+
+    // ============ Poses (SLS) ============
+    if (overlayData.poses && overlayData.poses.length > 0) {
+        overlayData.poses.forEach(pose => {
+            if (!pose.keypoints || pose.keypoints.length === 0) return;
+            const k = pose.keypoints;
+            const mapX = (x) => x * width;
+            const mapY = (y) => y * height;
+            
+            const bones = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+            ctx.strokeStyle = "#ff00ff";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            bones.forEach(([a, b]) => {
+                const p1 = k[a], p2 = k[b];
+                if (!p1 || !p2 || p1.score < 0.1 || p2.score < 0.1) return;
+                ctx.moveTo(mapX(p1.x), mapY(p1.y));
+                ctx.lineTo(mapX(p2.x), mapY(p2.y));
+            });
+            ctx.stroke();
+            
+            [0,5,6,7,8,9,10,11,12,13,14,15,16].forEach(i => {
+                const p = k[i];
+                if (!p || p.score < 0.1) return;
+                ctx.beginPath();
+                ctx.arc(mapX(p.x), mapY(p.y), 3, 0, Math.PI*2);
+                ctx.fillStyle = "#ff3333";
+                ctx.fill();
+            });
+        });
+    }
+}, [overlayData, width, height]);
             
             return <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" style={{width:'100%',height:'100%'}} />;
         };
@@ -302,7 +367,7 @@
             
             return (
                 <div ref={containerRef} className={`relative ${className}`}>
-                    <video ref={videoRef} autoPlay playsInline muted={muted} className={`absolute inset-0 w-full h-full object-cover ${camFilter === 'night' ? 'filter-night-vision' : camFilter === 'thermal' ? 'filter-thermal' : camFilter === 'urbex' ? 'filter-urbex' : ''}`} />
+                   <video ref={videoRef} autoPlay playsInline muted={muted} className={`absolute inset-0 w-full h-full object-cover ${camFilter === 'night' ? 'filter-night-vision' : camFilter === 'thermal' ? 'filter-thermal' : camFilter === 'urbex' ? 'filter-urbex' : ''}`} />
                     <CanvasOverlay width={dims.w} height={dims.h} overlayData={overlayData} />
                 </div>
             );
