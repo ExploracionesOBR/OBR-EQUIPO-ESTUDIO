@@ -589,8 +589,10 @@ function setTTSMode(mode) {
     window.closeChatView = closeChatView;
 
         if ('serviceWorker' in navigator) {
-        const swCode = `
-const CACHE_NAME = 'obr-cam-v8';
+    const swCode = `
+const CACHE_NAME = 'obr-cam-v9-offline';
+
+// Recursos que deben estar disponibles sin conexión
 const URLS = [
   './',
   'obr-logo.png',
@@ -615,6 +617,7 @@ const URLS = [
   './BANNER_1.mp4'
 ];
 
+// Instalación: precachear todos los recursos
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
@@ -623,6 +626,7 @@ self.addEventListener('install', e => {
   );
 });
 
+// Activación: limpiar cachés viejas
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => {
@@ -633,41 +637,61 @@ self.addEventListener('activate', e => {
   );
 });
 
+// Estrategia: Cache First (sin esperar a la red)
 self.addEventListener('fetch', e => {
-  if (!e.request.url.startsWith(self.location.origin) && 
-      !e.request.url.includes('cdn.agora.io') &&
-      !e.request.url.includes('fonts.googleapis.com') &&
-      !e.request.url.includes('cdnjs.cloudflare.com') &&
-      !e.request.url.includes('unpkg.com') &&
-      !e.request.url.includes('cdn.jsdelivr.net') &&
-      !e.request.url.includes('cdn.tailwindcss.com') &&
-      !e.request.url.includes('tfhub.dev') &&
-      !e.request.url.includes('download.agora.io')) {
-    return;
-  }
-  
+  // Solo interceptamos peticiones GET
+  if (e.request.method !== 'GET') return;
+
+  // Solo cacheamos recursos de nuestro origen o CDNs conocidos
+  const url = e.request.url;
+  const allowedCDNs = [
+    'cdn.tailwindcss.com',
+    'cdnjs.cloudflare.com',
+    'fonts.googleapis.com',
+    'fonts.gstatic.com',
+    'cdn.jsdelivr.net',
+    'unpkg.com',
+    'cdn.agora.io',
+    'tfhub.dev',
+    'download.agora.io'
+  ];
+  const isLocal = url.startsWith(self.location.origin);
+  const isCDN = allowedCDNs.some(cdn => url.includes(cdn));
+  if (!isLocal && !isCDN) return;
+
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const netFetch = fetch(e.request).then(netResp => {
+      if (cached) {
+        // Devuelve de caché inmediatamente
+        return cached;
+      }
+      // Si no está en caché, va a red (solo en primera visita)
+      return fetch(e.request).then(netResp => {
+        // Guardamos una copia en caché para la próxima
         if (netResp && netResp.status === 200) {
           const clone = netResp.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
         }
         return netResp;
       }).catch(() => {
-        if (e.request.mode === 'navigate') return caches.match('./');
+        // Si falla la red y no estaba en caché, devolvemos un error controlado
+        if (e.request.mode === 'navigate') {
+          return caches.match('./');
+        }
         return new Response('', {status: 408});
       });
-      return cached || netFetch;
     })
   );
 });`;
-        try {
-            const blob = new Blob([swCode], {type:'application/javascript'});
-            const url  = URL.createObjectURL(blob);
-            navigator.serviceWorker.register(url, {scope:'/'}).catch(()=>{});
-        } catch(e) {}
+
+    try {
+        const blob = new Blob([swCode], {type:'application/javascript'});
+        const url = URL.createObjectURL(blob);
+        navigator.serviceWorker.register(url, {scope:'/'}).catch(err => console.warn('SW register error', err));
+    } catch(e) {
+        console.warn('SW blob error', e);
     }
+}
 
     let sharedMicMode = true;
     let isLocalMicForced = false;
