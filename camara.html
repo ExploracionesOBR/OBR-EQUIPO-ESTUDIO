@@ -380,10 +380,10 @@
                         <h3 class="text-[11px] font-bold text-green-400 mb-3 border-b border-green-900/60 pb-2 uppercase tracking-wider text-center">TTS ENGINE</h3>
                         <div class="flex flex-col gap-2 mb-2 flex-1 mt-1">
                             <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Motor:</span> <span id="tts-engine-status" class="text-green-400">ELEVENLABS</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Créditos:</span> <span id="tts-credits-status" class="text-green-500">0 / 10000</span></div>
+                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Créditos:</span> <span id="tts-credits-status" class="text-green-500">1000 / 10000</span></div>
                             <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Usados:</span> <span id="tts-used-status" class="text-yellow-500">0</span></div>
                             <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Fallback:</span> <span id="tts-fallback-status" class="text-green-500">NO</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>VoiceRSS:</span> <span id="tts-vrss-status" class="text-blue-400">0 / 350</span></div>
+                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>VoiceRSS:</span> <span id="tts-vrss-status" class="text-blue-400">350 / 350</span></div>
                         </div>
                         <div class="border-t border-green-900/40 pt-3 mt-auto">
                             <div class="flex justify-between gap-1.5">
@@ -1688,6 +1688,7 @@ const paranormalQuestions = [
     let videoStream; // No se usa conn de PeerJS
     let streamCanvas = null;
     let streamCtx = null;
+    let streamVideoTrack = null;
     let frameCount = 0, lastTime = performance.now(), currentFps = 0;
     
     let lastVW = 0, lastVH = 0, lastCW = 0, lastCH = 0; 
