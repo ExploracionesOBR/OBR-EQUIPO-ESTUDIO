@@ -2449,6 +2449,9 @@ const paranormalQuestions = [
 
     function drawAudioVisualizer(c, w, h) {
         if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
+        const now = performance.now();
+if (now - (window._lastAudioDraw || 0) < 66) return;
+window._lastAudioDraw = now;
         
         audioAnalyser.getByteTimeDomainData(audioDataArray);
         const bufferLength = audioAnalyser.frequencyBinCount;
@@ -2606,7 +2609,18 @@ const paranormalQuestions = [
             
             c.restore();
         }
-
+    function getAudioBins() {
+        if (!audioAnalyser || !audioDataArray) return [];
+        audioAnalyser.getByteTimeDomainData(audioDataArray);
+        const bins = [];
+        const step = Math.floor(audioAnalyser.frequencyBinCount / 128);
+        for (let i = 0; i < 128; i++) {
+            const val = audioDataArray[i * step] / 255;
+            bins.push(Math.round(val * 100) / 100);
+        }
+        return bins;
+    }
+        
         if (lastSpokenText) {
             const label = lastSpokenText.toUpperCase();
             const evpY = bottomY - 28 * screenScale; 
@@ -3232,8 +3246,22 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                     isAudioScan: state.isAudioScan,
                     filter: state.filter,
                     isPareidolia: state.isPareidolia,
+                    const overlay = {
+                    type: 'overlay_data',
+                    poses: targetPoses.map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x, y: k.y, score: k.score })) })),
+                    motionLevel: window.motionLevel,
+                    evpText: lastSpokenText,
+                    userText: window._liveUserText || '',
+                    isSLS: state.isSLS,
+                    isLidar: state.isLidar,
+                    isAudioScan: state.isAudioScan,
+                    filter: state.filter,
+                    isPareidolia: state.isPareidolia,
                     audioEnergy: cumulativeEVPEnergy,
-                    gps: window._currentGPS
+                    audioBins: getAudioBins(),   // ← nuevo
+                    gps: window._currentGPS,
+                    hudTime: DOM_CACHE?.clock?.innerText || ''
+                };
                 };
                 sendRTMCommand('estudio_principal', overlay);
             }
