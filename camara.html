@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
     <meta name="theme-color" content="#000000">
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="data:application/manifest+json,{}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
@@ -540,6 +540,7 @@
     let aiTextTimer = null;
     let scanInterval = null;
     let radarAngle = 0; // para el radar de visión IA
+    let streamVideoTrack = null;
 
     function updateTTSStatusUI() {
     const engineEl = document.getElementById('tts-engine-status');
@@ -1688,7 +1689,6 @@ const paranormalQuestions = [
     let videoStream; // No se usa conn de PeerJS
     let streamCanvas = null;
     let streamCtx = null;
-    let streamVideoTrack = null;
     let frameCount = 0, lastTime = performance.now(), currentFps = 0;
     
     let lastVW = 0, lastVH = 0, lastCW = 0, lastCH = 0; 
@@ -2061,13 +2061,7 @@ const paranormalQuestions = [
     
     updateProgress(30, "PRECARGANDO MEDIOS LOCALES..."); await preloadLocalAssets();
     updateProgress(50, "CALIBRANDO MOTORES IA...");
-    
-    // Inicializar canvas de transmisión (oculto)
-    streamCanvas = document.getElementById('stream-canvas');
-    streamCanvas.width = el.canvas.width;
-    streamCanvas.height = el.canvas.height;
-    streamCtx = streamCanvas.getContext('2d', { alpha: false });
-    
+        
     setTimeout(async () => {
         try {
             if(window.tf) { try { await tf.setBackend('webgl'); } catch(e) { await tf.setBackend('cpu'); } }
