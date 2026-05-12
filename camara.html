@@ -1686,6 +1686,8 @@ const paranormalQuestions = [
     let aiDetector = null, segmenter = null, poses = [], lidarMask = null;
     let lidarBusy = false; let lastLidarMask = null; let scanlineCanvas = null; let lidarGeneratedFrame = -1;
     let videoStream; // No se usa conn de PeerJS
+    let streamCanvas = null;
+    let streamCtx = null;
     let frameCount = 0, lastTime = performance.now(), currentFps = 0;
     
     let lastVW = 0, lastVH = 0, lastCW = 0, lastCH = 0; 
@@ -2452,12 +2454,11 @@ const paranormalQuestions = [
             window._isAnnouncement = false;
         });
     }
-
     function drawAudioVisualizer(c, w, h) {
         if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
         const now = performance.now();
-if (now - (window._lastAudioDraw || 0) < 66) return;
-window._lastAudioDraw = now;
+        if (now - (window._lastAudioDraw || 0) < 66) return;
+        window._lastAudioDraw = now;
         
         audioAnalyser.getByteTimeDomainData(audioDataArray);
         const bufferLength = audioAnalyser.frequencyBinCount;
@@ -2516,10 +2517,10 @@ window._lastAudioDraw = now;
         cumulativeEVPEnergy *= 0.93; cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
 
         const visualBins = 128, step = Math.floor(bufferLength / visualBins), displayWidth = Math.min(w * 0.92, 1400);
-        const startX = (w - displayWidth) / 2, sliceW = displayWidth / visualBins, now = performance.now();
+        const startX = (w - displayWidth) / 2, sliceW = displayWidth / visualBins, nowAnim = performance.now();
 
         if (isSpookySpeaking || isTtsPlaying) {
-            const env = (Math.sin(now * 0.005) + 1) * 0.5, env2 = (Math.sin(now * 0.0031) + 1) * 0.5, combined = env * 0.6 + env2 * 0.4;
+            const env = (Math.sin(nowAnim * 0.005) + 1) * 0.5, env2 = (Math.sin(nowAnim * 0.0031) + 1) * 0.5, combined = env * 0.6 + env2 * 0.4;
             for (let i = 0; i < visualBins; i++) {
                 simulatedPikes[i] *= 0.80; const specShape = Math.sin((i / visualBins) * Math.PI);
                 if (Math.random() < 0.03) simulatedPikes[i] = (combined * 0.18 + 0.06) * specShape * (0.7 + Math.random() * 0.6);
@@ -2615,18 +2616,7 @@ window._lastAudioDraw = now;
             
             c.restore();
         }
-    function getAudioBins() {
-        if (!audioAnalyser || !audioDataArray) return [];
-        audioAnalyser.getByteTimeDomainData(audioDataArray);
-        const bins = [];
-        const step = Math.floor(audioAnalyser.frequencyBinCount / 128);
-        for (let i = 0; i < 128; i++) {
-            const val = audioDataArray[i * step] / 255;
-            bins.push(Math.round(val * 100) / 100);
-        }
-        return bins;
-    }
-        
+
         if (lastSpokenText) {
             const label = lastSpokenText.toUpperCase();
             const evpY = bottomY - 28 * screenScale; 
@@ -2765,6 +2755,17 @@ window._lastAudioDraw = now;
             speakSpooky(evpText); 
             cumulativeEVPEnergy = -30;
         }
+    }
+        function getAudioBins() {
+        if (!audioAnalyser || !audioDataArray) return [];
+        audioAnalyser.getByteTimeDomainData(audioDataArray);
+        const bins = [];
+        const step = Math.floor(audioAnalyser.frequencyBinCount / 128);
+        for (let i = 0; i < 128; i++) {
+            const val = audioDataArray[i * step] / 255;
+            bins.push(Math.round(val * 100) / 100);
+        }
+        return bins;
     }
 
     function onLidarResults(results) { if(results && results.segmentationMask) lidarMask = results.segmentationMask; }
@@ -3093,7 +3094,7 @@ window._lastAudioDraw = now;
     let watchdogZeroFps = 0;
     setInterval(() => {
         if (document.visibilityState !== 'visible' || isRestartingCamera || isAIProcessing) return;
-        if (currentFps === 0 && el.video.readyState >= 2) { watchdogZeroFps++; if (watchdogZeroFps >= 4) { restartCamera(); watchdogZeroFps = 0; } } else watchdogZeroFps = 0;
+        if (currentFps === 0 && el.video.readyState >= 2 && !streamVideoTrack) { watchdogZeroFps++; if (watchdogZeroFps >= 8) { restartCamera(); watchdogZeroFps = 0; } } else watchdogZeroFps = 0;
         if (videoStream) { const track = videoStream.getVideoTracks()[0]; if (track && track.readyState === 'ended' && !el.video.paused) restartCamera(); }
     }, 1000);
 
@@ -3237,7 +3238,7 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         }
     }
 
-    function startSendingOverlay() {
+       function startSendingOverlay() {
         if (overlayInterval) clearInterval(overlayInterval);
         overlayInterval = setInterval(() => {
             if (rtmClient && rtmClient.isLoggedIn) {
@@ -3252,22 +3253,10 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                     isAudioScan: state.isAudioScan,
                     filter: state.filter,
                     isPareidolia: state.isPareidolia,
-                    const overlay = {
-                    type: 'overlay_data',
-                    poses: targetPoses.map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x, y: k.y, score: k.score })) })),
-                    motionLevel: window.motionLevel,
-                    evpText: lastSpokenText,
-                    userText: window._liveUserText || '',
-                    isSLS: state.isSLS,
-                    isLidar: state.isLidar,
-                    isAudioScan: state.isAudioScan,
-                    filter: state.filter,
-                    isPareidolia: state.isPareidolia,
                     audioEnergy: cumulativeEVPEnergy,
-                    audioBins: getAudioBins(),   // ← nuevo
+                    audioBins: getAudioBins(),
                     gps: window._currentGPS,
                     hudTime: DOM_CACHE?.clock?.innerText || ''
-                };
                 };
                 sendRTMCommand('estudio_principal', overlay);
             }
