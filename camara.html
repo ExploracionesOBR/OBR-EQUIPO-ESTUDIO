@@ -2007,80 +2007,86 @@ const paranormalQuestions = [
     }
 
     async function initApp() {
-        unlockAudioContext(); 
-        document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
-        document.getElementById('cam-error-panel').style.display = 'none'; 
-        requestWakeLock(); 
-        updateProgress(10, "INICIANDO SENSOR...");
-        
-        clearTimeout(loadingTimer);
-        
-        initMiniMap();
+    unlockAudioContext(); 
+    document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
+    document.getElementById('cam-error-panel').style.display = 'none'; 
+    requestWakeLock(); 
+    updateProgress(10, "INICIANDO SENSOR...");
+    
+    clearTimeout(loadingTimer);
+    
+    initMiniMap();
 
-        const constraintSets = [
-            { audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
-            { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
-            { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60, max: 60 } } },
-            { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 60 } } }
-        ];
+    const constraintSets = [
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60, max: 60 } } },
+        { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 60 } } }
+    ];
 
-        let stream = null; let lastError = null;
-        for (let i = 0; i < constraintSets.length; i++) {
-            try {
-                updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 4K..." : i === 1 ? "INICIANDO SENSOR 1080p..." : i === 2 ? "INTENTANDO 720p..." : "MODO BÁSICO...");
-                stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
-                break;
-            } catch(e) {
-                lastError = e;
-                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
-            }
+    let stream = null; let lastError = null;
+    for (let i = 0; i < constraintSets.length; i++) {
+        try {
+            updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 4K..." : i === 1 ? "INICIANDO SENSOR 1080p..." : i === 2 ? "INTENTANDO 720p..." : "MODO BÁSICO...");
+            stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
+            break;
+        } catch(e) {
+            lastError = e;
+            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
         }
-
-        if (!stream) {
-            const e = lastError; localStorage.removeItem("camPermission");
-            document.querySelectorAll('.load-btn').forEach(b => {
-                b.style.display = 'block';
-                if(b.id === 'main-cam-btn') { b.innerText = "INICIAR CÁMARA"; b.style.borderColor = ""; b.style.color = ""; }
-            });
-            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-                showCamError('PERMISO DENEGADO', 'El navegador bloqueó el acceso a la cámara. Revisa los permisos.', null);
-            } else if (e.name === 'NotFoundError') {
-                showCamError('CÁMARA NO DISPONIBLE', 'No se encontró ninguna cámara en este dispositivo. Si tu dispositivo tiene cámara, reinicia la app.', null);
-            } else {
-                showCamError('ERROR DE CÁMARA', `${e.name}: ${e.message}`, null);
-            }
-            return;
-        }
-
-        localStorage.setItem("camPermission", "granted"); try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
-        videoStream = new MediaStream(stream.getVideoTracks()); 
-        el.video.srcObject = videoStream; el.video.play().then(() => { fixCanvasSize(); }).catch(()=>{});
-        
-        updateProgress(30, "PRECARGANDO MEDIOS LOCALES..."); await preloadLocalAssets();
-        updateProgress(50, "CALIBRANDO MOTORES IA...");
-        
-        setTimeout(async () => {
-            try {
-                if(window.tf) { try { await tf.setBackend('webgl'); } catch(e) { await tf.setBackend('cpu'); } }
-                if(window.poseDetection) aiDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true });
-                if(window.SelfieSegmentation) { segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); segmenter.setOptions({ modelSelection: 1 }); segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); }
-
-                const vRatio = el.video.videoHeight / el.video.videoWidth; analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
-                analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
-                if(segmenter) await segmenter.send({image: analysisCanvas}); if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
-            } catch(e) {}
-            
-            updateProgress(100, "SISTEMAS LISTOS"); document.getElementById('loading').style.display = 'none'; resize(); window.addEventListener('resize', resize);
-            
-            initDOMCache();
-            if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
-            setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
-
-            initRTM();
-            initRemoteMicReceiverAgora();
-        }, 800);
     }
 
+    if (!stream) {
+        const e = lastError; localStorage.removeItem("camPermission");
+        document.querySelectorAll('.load-btn').forEach(b => {
+            b.style.display = 'block';
+            if(b.id === 'main-cam-btn') { b.innerText = "INICIAR CÁMARA"; b.style.borderColor = ""; b.style.color = ""; }
+        });
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+            showCamError('PERMISO DENEGADO', 'El navegador bloqueó el acceso a la cámara. Revisa los permisos.', null);
+        } else if (e.name === 'NotFoundError') {
+            showCamError('CÁMARA NO DISPONIBLE', 'No se encontró ninguna cámara en este dispositivo. Si tu dispositivo tiene cámara, reinicia la app.', null);
+        } else {
+            showCamError('ERROR DE CÁMARA', `${e.name}: ${e.message}`, null);
+        }
+        return;
+    }
+
+    localStorage.setItem("camPermission", "granted"); try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
+    videoStream = new MediaStream(stream.getVideoTracks()); 
+    el.video.srcObject = videoStream; el.video.play().then(() => { fixCanvasSize(); }).catch(()=>{});
+    
+    updateProgress(30, "PRECARGANDO MEDIOS LOCALES..."); await preloadLocalAssets();
+    updateProgress(50, "CALIBRANDO MOTORES IA...");
+    
+    // Inicializar canvas de transmisión (oculto)
+    streamCanvas = document.getElementById('stream-canvas');
+    streamCanvas.width = el.canvas.width;
+    streamCanvas.height = el.canvas.height;
+    streamCtx = streamCanvas.getContext('2d', { alpha: false });
+    
+    setTimeout(async () => {
+        try {
+            if(window.tf) { try { await tf.setBackend('webgl'); } catch(e) { await tf.setBackend('cpu'); } }
+            if(window.poseDetection) aiDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true });
+            if(window.SelfieSegmentation) { segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); segmenter.setOptions({ modelSelection: 1 }); segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); }
+
+            const vRatio = el.video.videoHeight / el.video.videoWidth; analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+            analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+            if(segmenter) await segmenter.send({image: analysisCanvas}); if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
+        } catch(e) {}
+        
+        updateProgress(100, "SISTEMAS LISTOS"); document.getElementById('loading').style.display = 'none'; resize(); window.addEventListener('resize', resize);
+        
+        initDOMCache();
+        if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
+        setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
+
+        initRTM();
+        initRemoteMicReceiverAgora();
+    }, 800);
+}
+    
     async function detectionLoop() {
         if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
             if (targetPoses.length) { targetPoses = []; lidarMask = null; currentPose = null; prevPose = null; smoothedPoses = []; }
