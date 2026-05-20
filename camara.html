@@ -653,6 +653,26 @@ function setTTSMode(mode) {
     updateTTSStatusUI();
     initTTSModeUI();
 }
+    function loadTTSKeysIntoUI() {
+    const elInput = document.getElementById('tts-el-key');
+    const vrssInput = document.getElementById('tts-vrss-key');
+    if (elInput) elInput.value = ELEVENLABS_API_KEY;
+    if (vrssInput) vrssInput.value = VOICERSS_API_KEY;
+}
+
+function saveTTSKeysFromUI() {
+    const elInput = document.getElementById('tts-el-key');
+    const vrssInput = document.getElementById('tts-vrss-key');
+    if (elInput) {
+        ELEVENLABS_API_KEY = elInput.value.trim();
+        localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
+    }
+    if (vrssInput) {
+        VOICERSS_API_KEY = vrssInput.value.trim();
+        localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
+    }
+}
+    
 // ================== INICIO SELECTOR DE PROVEEDOR IA ==================
 function setAIProvider(mode) {
     aiProviderMode = mode;
@@ -3677,17 +3697,17 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         if (rawIp) { state.studioId = rawIp; localStorage.setItem('obr_studio_id', state.studioId); } 
         const camN = document.getElementById('stream-name').value.trim();
         if (camN) { state.cameraName = camN; localStorage.setItem('obr_camera_name', state.cameraName); }
-        
+        saveTTSKeysFromUI();  // ← guardar claves TTS
         saveTTSFilters(); 
         initRemoteMicReceiverAgora();
         showToast("Config Guardada"); 
         document.getElementById('settings-modal').classList.remove('active'); 
     }
     function openSettings() { 
-    loadTTSKeysIntoUI && loadTTSKeysIntoUI();
+    loadTTSKeysIntoUI();  // ya no fallará porque la función existe
     updateTTSStatusUI(); 
     initTTSModeUI(); 
-    updateAIProviderUI(); // ← refrescar selector IA
+    updateAIProviderUI();
     loadTTSFilterPanel(); 
     document.getElementById('settings-modal').classList.add('active'); 
 }
