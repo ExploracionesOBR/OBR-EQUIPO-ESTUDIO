@@ -533,19 +533,41 @@ if (config.ai) {
 
     // APIs y variables TTS (faltaban)
     let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || ''; 
-    let elevenlabsCreditsTotal = 10000;
-    let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '0');
-    let elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
-    let voicerssRemaining = 350; 
-    let voicerssUsed = 0;
+        let elevenlabsCreditsTotal     = 10000;
+    let elevenlabsCreditsUsed      = parseInt(localStorage.getItem('obr_tts_used') || '92');
+    let elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
 
-    let AI_API_KEY = state.apiKey;
-    let CURRENT_AI_MODEL = state.aiModel;
-    let CURRENT_AI_PROVIDER = state.aiProvider;
+    const VOICERSS_API_KEY    = '776fa230d3574c4097aa44e4e3c3949c';
+    const VOICERSS_DAILY_MAX  = 350;
+    let voicerssUsedToday     = 0;
+    let voicerssRemaining     = VOICERSS_DAILY_MAX;
 
-    let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
-    // Modo de selección del proveedor de IA (auto, gemini, groq)
-let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
+    function _initVoiceRSSCounter() {
+        const today = new Date().toDateString();
+        const saved = localStorage.getItem('obr_vrss_date');
+        if (saved === today) {
+            voicerssUsedToday = parseInt(localStorage.getItem('obr_vrss_used') || '0');
+        } else {
+            voicerssUsedToday = 0;
+            localStorage.setItem('obr_vrss_used',  '0');
+            localStorage.setItem('obr_vrss_date',  today);
+        }
+        voicerssRemaining = Math.max(0, VOICERSS_DAILY_MAX - voicerssUsedToday);
+    }
+    _initVoiceRSSCounter();
+
+    (function _syncTTSFilterDefaults() {
+        if (localStorage.getItem('obr_tts_f_rate')  === null) localStorage.setItem('obr_tts_f_rate',  '0');
+        if (localStorage.getItem('obr_tts_f_pitch') === null) localStorage.setItem('obr_tts_f_pitch', '-530');
+    })();
+
+    function _incrementVoiceRSS() {
+        voicerssUsedToday++;
+        voicerssRemaining = Math.max(0, VOICERSS_DAILY_MAX - voicerssUsedToday);
+        localStorage.setItem('obr_vrss_used', voicerssUsedToday);
+        updateTTSStatusUI();
+    }
+
     let usingFallbackTTS = false;
     let _activeBufSrc = null;
     let _ttsWatchdog = null;
