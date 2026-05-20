@@ -66,7 +66,7 @@
         .scan-box { position: absolute; border: 2px solid rgba(255, 0, 0, 0.9); box-shadow: 0 0 15px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(255, 0, 0, 0.3); background: rgba(255, 0, 0, 0.1); opacity: 0; animation: targetScan 0.6s ease-out forwards; }
         @keyframes targetScan { 0% { transform: scale(1.3); opacity: 0; border-color: white; } 10% { opacity: 1; border-color: red; } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.8); opacity: 0; } }
 
-        #toast-container { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 200; pointer-events: none; width: 80%; align-items: center; }
+        #toast-container { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 400 !important; pointer-events: none; width: 80%; align-items: center; }
         .toast { background: rgba(0, 30, 0, 0.9); border: 1px solid #00ff00; color: #00ff00; padding: 10px 20px; border-radius: 4px; font-family: 'Share Tech Mono'; font-size: 14px; text-shadow: 0 0 5px #00ff00; box-shadow: 0 4px 15px rgba(0,0,0,0.8); animation: slideDown 0.3s ease-out; pointer-events: auto; text-align: center; }
         .toast.error { border-color: red; color: red; background: rgba(30, 0, 0, 0.9); text-shadow: 0 0 5px red; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
@@ -364,12 +364,7 @@
                         </div>
                     </div>
 <div class="bg-black/50 p-4 rounded border border-orange-500 shadow-[0_0_15px_rgba(255,165,0,0.1)] flex flex-col">
-    <h3 class="text-[11px] font-bold text-orange-400 mb-3 border-b border-orange-900/60 pb-2 uppercase tracking-wider text-center">IA ANALYZER</h3>
-    <div class="flex justify-center gap-2 mb-4 mt-1">
-        <button onclick="window.open('https://aistudio.google.com/api-keys','_blank')" class="bg-blue-900/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="Google AI Studio">GEM</button>
-        <button onclick="window.open('https://console.groq.com/keys','_blank')" class="bg-orange-900/30 text-orange-400 hover:bg-orange-600 hover:text-white border border-orange-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="Groq Console">GROQ</button>
-    </div>
-    
+    <h3 class="text-[11px] font-bold text-orange-400 mb-3 border-b border-orange-900/60 pb-2 uppercase tracking-wider text-center">IA ANALYZER</h3>    
     <!-- Selector de proveedor IA -->
     <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1 mb-2 block text-center">Proveedor IA</label>
     <div class="flex justify-between gap-1.5 mb-3">
@@ -468,33 +463,23 @@ async function loadConfig() {
         }
         
         // IA
-        if (config.ai) {
-            if (aiProviderMode === 'auto') {
-                const selectedProvider = config.ai.provider || 'gemini';
-                if (selectedProvider === 'groq' && config.ai.groq?.apiKey) {
-                    AI_API_KEY = config.ai.groq.apiKey;
-                    CURRENT_AI_PROVIDER = 'groq';
-                    CURRENT_AI_MODEL = config.ai.groq.model || CURRENT_AI_MODEL;
-                } else if (config.ai.gemini?.apiKey) {
-                    AI_API_KEY = config.ai.gemini.apiKey;
-                    CURRENT_AI_PROVIDER = 'gemini';
-                    CURRENT_AI_MODEL = config.ai.gemini.model || CURRENT_AI_MODEL;
-                }
-            } else {
-                if (aiProviderMode === 'gemini' && config.ai.gemini?.apiKey) {
-                    AI_API_KEY = config.ai.gemini.apiKey;
-                    CURRENT_AI_PROVIDER = 'gemini';
-                    CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
-                } else if (aiProviderMode === 'groq' && config.ai.groq?.apiKey) {
-                    AI_API_KEY = config.ai.groq.apiKey;
-                    CURRENT_AI_PROVIDER = 'groq';
-                    CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
-                }
-            }
-            state.apiKey = AI_API_KEY;
-            state.aiProvider = CURRENT_AI_PROVIDER;
-            state.aiModel = CURRENT_AI_MODEL;
-        }
+if (config.ai) {
+    // Si hay clave de Gemini y (estamos en auto o el proveedor es gemini), usar Gemini
+    if (config.ai.gemini?.apiKey && (aiProviderMode === 'auto' || aiProviderMode === 'gemini')) {
+        AI_API_KEY = config.ai.gemini.apiKey;
+        CURRENT_AI_PROVIDER = 'gemini';
+        CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
+    }
+    // Si no, intentar con Groq
+    else if (config.ai.groq?.apiKey && (aiProviderMode === 'auto' || aiProviderMode === 'groq')) {
+        AI_API_KEY = config.ai.groq.apiKey;
+        CURRENT_AI_PROVIDER = 'groq';
+        CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+    }
+    state.apiKey = AI_API_KEY;
+    state.aiProvider = CURRENT_AI_PROVIDER;
+    state.aiModel = CURRENT_AI_MODEL;
+}
         
         // TTS
         if (config.tts) {
@@ -711,44 +696,56 @@ function updateAIProviderUI() {
 async function testAIPing() {
     if (aiProviderMode !== 'auto') return;
     const btn = document.getElementById('btn-ping-ai');
-    if (btn) { btn.disabled = true; btn.textContent = 'PROBANDO...'; }
-    
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'MIDIENDO…';
+
     if (!window._config) await loadConfig();
-    
+
     let bestProvider = 'gemini';
     let bestTime = Infinity;
-    
+
+    // Probar Gemini
     if (window._config?.ai?.gemini?.apiKey) {
         const start = performance.now();
         try {
-            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${window._config.ai.gemini.apiKey}`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
-            });
-            if (resp.ok) bestTime = performance.now() - start;
-        } catch(e) {}
+            const resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${window._config.ai.gemini.apiKey}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }) }
+            );
+            if (resp.ok) {
+                const elapsed = performance.now() - start;
+                if (elapsed < bestTime) bestTime = elapsed;
+            }
+        } catch(e) { console.warn('Gemini ping falló', e); }
     }
-    
+
+    // Probar Groq
     if (window._config?.ai?.groq?.apiKey) {
         const start = performance.now();
         try {
             const resp = await fetch('https://api.groq.com/openai/v1/models', {
                 headers: { 'Authorization': `Bearer ${window._config.ai.groq.apiKey}` }
             });
-            const elapsed = performance.now() - start;
-            if (resp.ok && elapsed < bestTime) {
-                bestTime = elapsed;
-                bestProvider = 'groq';
+            if (resp.ok) {
+                const elapsed = performance.now() - start;
+                if (elapsed < bestTime) {
+                    bestTime = elapsed;
+                    bestProvider = 'groq';
+                }
             }
-        } catch(e) {}
+        } catch(e) { console.warn('Groq ping falló', e); }
     }
-    
+
     if (bestTime === Infinity) {
         showToast('Ninguna API respondió. Revisa las claves en config.json', true);
-        if (btn) { btn.disabled = false; btn.textContent = 'PROBAR PING AHORA'; }
+        btn.disabled = false;
+        btn.textContent = 'PROBAR PING AHORA';
         return;
     }
-    
+
+    // Aplicar el mejor
     if (bestProvider === 'gemini') {
         AI_API_KEY = window._config.ai.gemini.apiKey;
         CURRENT_AI_PROVIDER = 'gemini';
@@ -758,13 +755,13 @@ async function testAIPing() {
         CURRENT_AI_PROVIDER = 'groq';
         CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
     }
-    
     state.apiKey = AI_API_KEY;
     state.aiProvider = CURRENT_AI_PROVIDER;
     state.aiModel = CURRENT_AI_MODEL;
     updateAIProviderUI();
     showToast(`IA seleccionada: ${bestProvider.toUpperCase()} (${bestTime.toFixed(0)}ms)`, false);
-    if (btn) { btn.disabled = false; btn.textContent = 'PROBAR PING AHORA'; }
+    btn.disabled = false;
+    btn.textContent = 'PROBAR PING AHORA';
 }
 // ================== FIN SELECTOR DE PROVEEDOR IA ==================    
     function openChatView() {
@@ -1417,7 +1414,7 @@ self.addEventListener('fetch', e => {
         const encoded = encodeURIComponent(text.substring(0, 200));
         const url = `https://api.voicerss.org/?key=${VOICERSS_API_KEY}&hl=es-mx&v=Juana&src=${encoded}&f=48khz_16bit_stereo&c=MP3`;
         let blobUrl = null;
-        try { const res = await fetch(url); if (res.ok) { const blob = await res.blob(); if (blob.size > 500) { _incrementVoiceRSS(); blobUrl = URL.createObjectURL(blob); } } } catch(e) {}
+        try { const res = await fetch(url); if (res.ok) { const blob = await res.blob(); if (blob.size > 500) { blobUrl = URL.createObjectURL(blob); } } } catch(e) {}
         if (!blobUrl) return; 
 
         return new Promise(resolve => {
@@ -3578,7 +3575,23 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
 
     function togglePareidolia(btnElement) {
-        if(!AI_API_KEY) { showToast("SIN API KEY — CONFIGURA EN ⚙ AJUSTES", true); return; }
+        function togglePareidolia(btnElement) {
+    if(!AI_API_KEY) {
+        // Intentar cargar una clave desde config.json si no hay ninguna
+        if (window._config?.ai?.gemini?.apiKey) {
+            AI_API_KEY = window._config.ai.gemini.apiKey;
+            CURRENT_AI_PROVIDER = 'gemini';
+            CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
+        } else if (window._config?.ai?.groq?.apiKey) {
+            AI_API_KEY = window._config.ai.groq.apiKey;
+            CURRENT_AI_PROVIDER = 'groq';
+            CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+        } else {
+            showToast("SIN API KEY — CONFIGURA EN ⚙ AJUSTES", true);
+            return;
+        }
+    }
+    // ... resto del código
         const btn = btnElement || document.getElementById('btn-ia');
         
         if (isPareidoliaActive) {
