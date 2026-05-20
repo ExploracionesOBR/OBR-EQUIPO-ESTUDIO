@@ -363,19 +363,24 @@
                             <p class="text-[8px] text-gray-600 font-mono uppercase leading-tight text-center mt-2">IP SE CONVIERTE A ID AUTO</p>
                         </div>
                     </div>
-
-                    <div class="bg-black/50 p-4 rounded border border-orange-500 shadow-[0_0_15px_rgba(255,165,0,0.1)] flex flex-col">
-                        <h3 class="text-[11px] font-bold text-orange-400 mb-3 border-b border-orange-900/60 pb-2 uppercase tracking-wider text-center">IA ANALYZER</h3>
-                        <div class="flex justify-center gap-2 mb-4 mt-1">
-                            <button onclick="window.open('https://aistudio.google.com/api-keys','_blank')" class="bg-blue-900/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="Google AI Studio">GEM</button>
-                            <button onclick="window.open('https://console.groq.com/keys','_blank')" class="bg-orange-900/30 text-orange-400 hover:bg-orange-600 hover:text-white border border-orange-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="Groq Console">GROQ</button>
-                            <button onclick="window.open('https://elevenlabs.io','_blank')" class="bg-indigo-900/30 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="ElevenLabs">ELEVEN</button>
-                        </div>
-                        <input type="password" id="api-key-internal" placeholder="GEMINI, GROQ O ELEVENLABS KEY" class="w-full bg-black border border-gray-700 p-2.5 text-white text-[11px] rounded outline-none focus:border-orange-500 mb-3 text-center">
-                        <button id="btn-validate-api" onclick="validateAndSaveKey()" class="w-full border border-green-800 text-green-500 hover:bg-green-900/30 py-2 rounded text-[10px] font-bold mt-auto">VALIDAR KEY</button>
-                        <div id="api-status-msg" class="text-[9px] font-mono mt-1 text-center text-yellow-500 h-3"></div>
-                    </div>
-
+<div class="bg-black/50 p-4 rounded border border-orange-500 shadow-[0_0_15px_rgba(255,165,0,0.1)] flex flex-col">
+    <h3 class="text-[11px] font-bold text-orange-400 mb-3 border-b border-orange-900/60 pb-2 uppercase tracking-wider text-center">IA ANALYZER</h3>
+    <div class="flex justify-center gap-2 mb-4 mt-1">
+        <button onclick="window.open('https://aistudio.google.com/api-keys','_blank')" class="bg-blue-900/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="Google AI Studio">GEM</button>
+        <button onclick="window.open('https://console.groq.com/keys','_blank')" class="bg-orange-900/30 text-orange-400 hover:bg-orange-600 hover:text-white border border-orange-800 text-[9px] px-3 py-1.5 rounded transition-colors font-bold" title="Groq Console">GROQ</button>
+    </div>
+    
+    <!-- Selector de proveedor IA -->
+    <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1 mb-2 block text-center">Proveedor IA</label>
+    <div class="flex justify-between gap-1.5 mb-3">
+        <button onclick="setAIProvider('auto')" id="ai-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">AUTO</button>
+        <button onclick="setAIProvider('gemini')" id="ai-btn-gem" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">GEMINI</button>
+        <button onclick="setAIProvider('groq')" id="ai-btn-groq" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">GROQ</button>
+    </div>
+    
+    <div id="ai-provider-status" class="text-[10px] font-mono text-center text-orange-400 h-4 mb-2"></div>
+    <button id="btn-ping-ai" onclick="testAIPing()" class="w-full border border-yellow-800 text-yellow-500 hover:bg-yellow-900/30 py-1.5 rounded text-[10px] font-bold hidden">PROBAR PING AHORA</button>
+</div>
                     <div class="bg-black/50 p-4 rounded border border-green-500 shadow-[0_0_15px_rgba(0,255,0,0.1)] flex flex-col">
                         <h3 class="text-[11px] font-bold text-green-400 mb-3 border-b border-green-900/60 pb-2 uppercase tracking-wider text-center">TTS ENGINE</h3>
                         <div class="flex flex-col gap-2 mb-2 flex-1 mt-1">
@@ -442,10 +447,80 @@
     // ==========================================================
     // CONFIGURACIÓN EXTERNA
     // ==========================================================
-        const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
-    const AGORA_TOKEN  = '007eJxTYGDwP/d/v9xe7czpnYVt32w/TP6SOdXJ5bqvnXOfxOSA+8cUGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNxcwYsxoCGRk4jtxhYIRCEJ+bIT+pSDe1uKQ0JTOfgQEAU2sh5A==';
-    const AGORA_CHANNEL = 'obr-estudio';
-    const CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+let AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
+let AGORA_TOKEN  = '';
+let AGORA_CHANNEL = 'obr-estudio';
+let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+
+// ================== INICIO FUNCIÓN loadConfig ==================
+async function loadConfig() {
+    try {
+        const resp = await fetch('./config.json');
+        if (!resp.ok) throw new Error('No se pudo cargar config.json');
+        const config = await resp.json();
+        
+        // Agora
+        if (config.agora) {
+            if (config.agora.appId) AGORA_APP_ID = config.agora.appId;
+            if (config.agora.token) AGORA_TOKEN = config.agora.token;
+            if (config.agora.channel) AGORA_CHANNEL = config.agora.channel;
+            MIC_CHANNEL = config.agora.micChannel || 'obr-mic';
+        }
+        
+        // IA
+        if (config.ai) {
+            if (aiProviderMode === 'auto') {
+                const selectedProvider = config.ai.provider || 'gemini';
+                if (selectedProvider === 'groq' && config.ai.groq?.apiKey) {
+                    AI_API_KEY = config.ai.groq.apiKey;
+                    CURRENT_AI_PROVIDER = 'groq';
+                    CURRENT_AI_MODEL = config.ai.groq.model || CURRENT_AI_MODEL;
+                } else if (config.ai.gemini?.apiKey) {
+                    AI_API_KEY = config.ai.gemini.apiKey;
+                    CURRENT_AI_PROVIDER = 'gemini';
+                    CURRENT_AI_MODEL = config.ai.gemini.model || CURRENT_AI_MODEL;
+                }
+            } else {
+                if (aiProviderMode === 'gemini' && config.ai.gemini?.apiKey) {
+                    AI_API_KEY = config.ai.gemini.apiKey;
+                    CURRENT_AI_PROVIDER = 'gemini';
+                    CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
+                } else if (aiProviderMode === 'groq' && config.ai.groq?.apiKey) {
+                    AI_API_KEY = config.ai.groq.apiKey;
+                    CURRENT_AI_PROVIDER = 'groq';
+                    CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+                }
+            }
+            state.apiKey = AI_API_KEY;
+            state.aiProvider = CURRENT_AI_PROVIDER;
+            state.aiModel = CURRENT_AI_MODEL;
+        }
+        
+        // TTS
+        if (config.tts) {
+            if (config.tts.elevenlabsKey) {
+                ELEVENLABS_API_KEY = config.tts.elevenlabsKey;
+                localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
+            }
+            if (config.tts.voicerssKey) {
+                VOICERSS_API_KEY = config.tts.voicerssKey;
+                localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
+            }
+        }
+        
+        // Chat
+        if (config.chat && config.chat.overlayUrl) {
+            CHAT_OVERLAY_URL = config.chat.overlayUrl;
+        }
+        
+        window._config = config;
+        return true;
+    } catch (e) {
+        console.warn('Usando configuración por defecto:', e);
+        return false;
+    }
+}
+// ================== FIN FUNCIÓN loadConfig ==================
 
     const RTM_TOKEN = undefined;
     const MIC_CHANNEL = 'obr-mic';
@@ -484,6 +559,8 @@
     let CURRENT_AI_PROVIDER = state.aiProvider;
 
     let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
+    // Modo de selección del proveedor de IA (auto, gemini, groq)
+let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
     let usingFallbackTTS = false;
     let _activeBufSrc = null;
     let _ttsWatchdog = null;
@@ -576,7 +653,100 @@ function setTTSMode(mode) {
     updateTTSStatusUI();
     initTTSModeUI();
 }
+// ================== INICIO SELECTOR DE PROVEEDOR IA ==================
+function setAIProvider(mode) {
+    aiProviderMode = mode;
+    localStorage.setItem('obr_ai_provider_mode', mode);
+    updateAIProviderUI();
+    if (mode === 'gemini' || mode === 'groq') {
+        CURRENT_AI_PROVIDER = mode;
+    }
+}
+
+function updateAIProviderUI() {
+    const btnAuto = document.getElementById('ai-btn-auto');
+    const btnGem = document.getElementById('ai-btn-gem');
+    const btnGroq = document.getElementById('ai-btn-groq');
+    const pingBtn = document.getElementById('btn-ping-ai');
+    const statusEl = document.getElementById('ai-provider-status');
     
+    if (btnAuto) btnAuto.className = aiProviderMode === 'auto' ?
+        'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20' :
+        'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
+    if (btnGem) btnGem.className = aiProviderMode === 'gemini' ?
+        'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20' :
+        'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
+    if (btnGroq) btnGroq.className = aiProviderMode === 'groq' ?
+        'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20' :
+        'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
+    
+    if (pingBtn) pingBtn.style.display = aiProviderMode === 'auto' ? 'block' : 'none';
+    if (statusEl) {
+        statusEl.textContent = aiProviderMode === 'auto' 
+            ? (CURRENT_AI_PROVIDER ? `AUTO (actual: ${CURRENT_AI_PROVIDER.toUpperCase()})` : 'AUTO (sin probar)')
+            : `MODO: ${aiProviderMode.toUpperCase()}`;
+    }
+}
+
+async function testAIPing() {
+    if (aiProviderMode !== 'auto') return;
+    const btn = document.getElementById('btn-ping-ai');
+    if (btn) { btn.disabled = true; btn.textContent = 'PROBANDO...'; }
+    
+    if (!window._config) await loadConfig();
+    
+    let bestProvider = 'gemini';
+    let bestTime = Infinity;
+    
+    if (window._config?.ai?.gemini?.apiKey) {
+        const start = performance.now();
+        try {
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${window._config.ai.gemini.apiKey}`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
+            });
+            if (resp.ok) bestTime = performance.now() - start;
+        } catch(e) {}
+    }
+    
+    if (window._config?.ai?.groq?.apiKey) {
+        const start = performance.now();
+        try {
+            const resp = await fetch('https://api.groq.com/openai/v1/models', {
+                headers: { 'Authorization': `Bearer ${window._config.ai.groq.apiKey}` }
+            });
+            const elapsed = performance.now() - start;
+            if (resp.ok && elapsed < bestTime) {
+                bestTime = elapsed;
+                bestProvider = 'groq';
+            }
+        } catch(e) {}
+    }
+    
+    if (bestTime === Infinity) {
+        showToast('Ninguna API respondió. Revisa las claves en config.json', true);
+        if (btn) { btn.disabled = false; btn.textContent = 'PROBAR PING AHORA'; }
+        return;
+    }
+    
+    if (bestProvider === 'gemini') {
+        AI_API_KEY = window._config.ai.gemini.apiKey;
+        CURRENT_AI_PROVIDER = 'gemini';
+        CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
+    } else {
+        AI_API_KEY = window._config.ai.groq.apiKey;
+        CURRENT_AI_PROVIDER = 'groq';
+        CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+    }
+    
+    state.apiKey = AI_API_KEY;
+    state.aiProvider = CURRENT_AI_PROVIDER;
+    state.aiModel = CURRENT_AI_MODEL;
+    updateAIProviderUI();
+    showToast(`IA seleccionada: ${bestProvider.toUpperCase()} (${bestTime.toFixed(0)}ms)`, false);
+    if (btn) { btn.disabled = false; btn.textContent = 'PROBAR PING AHORA'; }
+}
+// ================== FIN SELECTOR DE PROVEEDOR IA ==================    
     function openChatView() {
         document.getElementById('chat-fullscreen-view').style.display = 'flex';
         document.getElementById('chat-iframe').src = CHAT_OVERLAY_URL;
@@ -1889,14 +2059,20 @@ const paranormalQuestions = [
         }
     }
 
-    window.onload = () => { 
-        document.getElementById('api-key-internal').value = state.apiKey; 
-        document.getElementById('mtx-host').value = state.studioId; 
-        document.getElementById('stream-name').value = state.cameraName;
-        const btn = document.getElementById('main-cam-btn');
-        const hasPerm = localStorage.getItem("camPermission") === "granted" || sessionStorage.getItem("camPermission") === "granted";
-        if (btn && hasPerm) { btn.innerText = "▶ REANUDAR CÁMARA"; btn.style.borderColor = "#00ff41"; btn.style.color = "#00ff41"; }
-    };
+window.addEventListener('load', async () => {
+    await loadConfig();
+    const apiKeyInput = document.getElementById('api-key-internal');
+    if (apiKeyInput) apiKeyInput.value = state.apiKey;
+    document.getElementById('mtx-host').value = state.studioId;
+    document.getElementById('stream-name').value = state.cameraName;
+    const btn = document.getElementById('main-cam-btn');
+    const hasPerm = localStorage.getItem("camPermission") === "granted" || sessionStorage.getItem("camPermission") === "granted";
+    if (btn && hasPerm) {
+        btn.innerText = "▶ REANUDAR CÁMARA";
+        btn.style.borderColor = "#00ff41";
+        btn.style.color = "#00ff41";
+    }
+});
 
     function showCamError(title, msg, steps) {
         const panel = document.getElementById('cam-error-panel'); 
@@ -3507,7 +3683,14 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         showToast("Config Guardada"); 
         document.getElementById('settings-modal').classList.remove('active'); 
     }
-    function openSettings() { updateTTSStatusUI(); initTTSModeUI(); loadTTSFilterPanel(); document.getElementById('settings-modal').classList.add('active'); }
+    function openSettings() { 
+    loadTTSKeysIntoUI && loadTTSKeysIntoUI();
+    updateTTSStatusUI(); 
+    initTTSModeUI(); 
+    updateAIProviderUI(); // ← refrescar selector IA
+    loadTTSFilterPanel(); 
+    document.getElementById('settings-modal').classList.add('active'); 
+}
     
     let menuTimeout; const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
     document.getElementById('touch-surface').addEventListener('click', showMenus);
@@ -3601,6 +3784,9 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     window.startRemoteMic = startRemoteMicAgora;
     window.stopRemoteMic = stopRemoteMicAgora;
     window.toggleLocalMic = toggleLocalMic;
+    window.setAIProvider = setAIProvider;
+    window.testAIPing = testAIPing;
+    window.updateAIProviderUI = updateAIProviderUI;
 
 </script>
 </body>
