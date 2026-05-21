@@ -511,30 +511,6 @@ async function loadConfig() {
     }
 }
     
-        // TTS
-        if (config.tts) {
-            if (config.tts.elevenlabsKey) {
-                ELEVENLABS_API_KEY = config.tts.elevenlabsKey;
-                localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
-            }
-            if (config.tts.voicerssKey) {
-                VOICERSS_API_KEY = config.tts.voicerssKey;
-                localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
-            }
-        }
-        
-        // Chat
-        if (config.chat && config.chat.overlayUrl) {
-            CHAT_OVERLAY_URL = config.chat.overlayUrl;
-        }
-        
-        window._config = config;
-        return true;
-    } catch (e) {
-        console.warn('Usando configuración por defecto:', e);
-        return false;
-    }
-}
 // ================== FIN FUNCIÓN loadConfig ==================
 
     const RTM_TOKEN = undefined;
