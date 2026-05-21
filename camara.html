@@ -532,13 +532,13 @@ if (config.ai) {
     };
 
     // APIs y variables TTS (faltaban)
-    let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || ''; 
-        let elevenlabsCreditsTotal     = 10000;
+       const VOICERSS_DAILY_MAX  = 350;
+    let elevenlabsCreditsTotal     = 10000;
     let elevenlabsCreditsUsed      = parseInt(localStorage.getItem('obr_tts_used') || '92');
     let elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
 
-    const VOICERSS_API_KEY    = '776fa230d3574c4097aa44e4e3c3949c';
-    const VOICERSS_DAILY_MAX  = 350;
+    // Única declaración de VoiceRSS API key
+    const VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '776fa230d3574c4097aa44e4e3c3949c';
     let voicerssUsedToday     = 0;
     let voicerssRemaining     = VOICERSS_DAILY_MAX;
 
@@ -556,11 +556,6 @@ if (config.ai) {
     }
     _initVoiceRSSCounter();
 
-    (function _syncTTSFilterDefaults() {
-        if (localStorage.getItem('obr_tts_f_rate')  === null) localStorage.setItem('obr_tts_f_rate',  '0');
-        if (localStorage.getItem('obr_tts_f_pitch') === null) localStorage.setItem('obr_tts_f_pitch', '-530');
-    })();
-
     function _incrementVoiceRSS() {
         voicerssUsedToday++;
         voicerssRemaining = Math.max(0, VOICERSS_DAILY_MAX - voicerssUsedToday);
@@ -571,7 +566,7 @@ if (config.ai) {
     let usingFallbackTTS = false;
     let _activeBufSrc = null;
     let _ttsWatchdog = null;
-
+    
     function normalizarTexto(texto) {
         return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     }
@@ -596,11 +591,6 @@ if (config.ai) {
         }
         cloudTTSPlayer.pause();
         cloudTTSPlayer.src = '';
-    }
-
-    function _incrementVoiceRSS() {
-        voicerssUsed++;
-        voicerssRemaining = Math.max(0, 350 - voicerssUsed);
     }
 
     let loadingTimer = setTimeout(() => {
@@ -3596,8 +3586,7 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
 
     function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
 
-    function togglePareidolia(btnElement) {
-        function togglePareidolia(btnElement) {
+  function togglePareidolia(btnElement) {
     if(!AI_API_KEY) {
         // Intentar cargar una clave desde config.json si no hay ninguna
         if (window._config?.ai?.gemini?.apiKey) {
