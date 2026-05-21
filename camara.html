@@ -619,6 +619,7 @@ let CURRENT_AI_PROVIDER = state.aiProvider;
     let radarAngle = 0; // para el radar de visión IA
     let streamVideoTrack = null;
     let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
+    let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
 
     function updateTTSStatusUI() {
     const engineEl = document.getElementById('tts-engine-status');
