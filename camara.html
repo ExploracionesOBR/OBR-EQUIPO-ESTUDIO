@@ -2766,13 +2766,13 @@ if (track) {
         c.save();
         for (let i = 0; i < numBars; i++) {
             const idx = Math.floor(i * bufferLength / numBars);
-            const val = (audioDataArray[idx] / 255) * 2 - 1; // -1..1
+            const val = (audioDataArray[idx] / 255) * 2 - 1;
+            const height = Math.min(Math.abs(val) * maxHeight * 1.5, maxHeight * 0.7);
             const x = startX + i * barWidth;
             const y = bottomY - height;
 
             // Barra blanca semi‑transparente
-            c.fillStyle = 'rgba(255, 255, 255, 0.55)';   // más opaco
-            const height = Math.min(Math.abs(val) * maxHeight * 1.5, maxHeight * 0.7);  // nunca pasa del 70% de la altura máxima
+            c.fillStyle = 'rgba(255, 255, 255, 0.55)';
             c.fillRect(x + 1, y, barWidth - 2, height);
 
             // Rayado diagonal
@@ -2781,11 +2781,10 @@ if (track) {
             c.beginPath();
             for (let dy = 0; dy < height; dy += 4) {
                 c.moveTo(x, y + dy);
-                c.lineTo(x + barWidth, y + dy - barWidth);   // 45°
+                c.lineTo(x + barWidth, y + dy - barWidth);
             }
             c.stroke();
         }
-        c.restore();
 
                 // ── Detección de EVP (Spirit Box estilo Ghostube) ──
         const now_evp = Date.now();
@@ -2825,6 +2824,7 @@ if (track) {
             }
             speakSpooky(evpText);
             cumulativeEVPEnergy = -10;  // reset más suave
+        }
         }
     
         function drawAudioTexts(c, w, h) {
