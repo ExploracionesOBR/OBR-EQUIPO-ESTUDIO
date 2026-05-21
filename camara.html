@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.2 (AGORA UNIFICADO)</title>
+    <title>CAMARA OBR PRO v7.5 (AGORA UNIFICADO)</title>
     
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
     <meta name="theme-color" content="#000000">
-    <link rel="manifest" href="data:application/manifest+json,{}">
+    <link rel="manifest" href="data:application/manifest+json,%7B%7D">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
@@ -530,6 +530,9 @@ if (config.ai) {
         aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
         aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
     };
+    let AI_API_KEY = state.apiKey;
+let CURRENT_AI_MODEL = state.aiModel;
+let CURRENT_AI_PROVIDER = state.aiProvider;
 
     // APIs y variables TTS (faltaban)
        const VOICERSS_DAILY_MAX  = 350;
@@ -615,6 +618,7 @@ if (config.ai) {
     let scanInterval = null;
     let radarAngle = 0; // para el radar de visión IA
     let streamVideoTrack = null;
+    let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
 
     function updateTTSStatusUI() {
     const engineEl = document.getElementById('tts-engine-status');
