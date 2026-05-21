@@ -546,8 +546,6 @@ let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
     let elevenlabsCreditsUsed      = parseInt(localStorage.getItem('obr_tts_used') || '92');
     let elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
 
-    // Única declaración de VoiceRSS API key
-    const VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '776fa230d3574c4097aa44e4e3c3949c';
     let voicerssUsedToday     = 0;
     let voicerssRemaining     = VOICERSS_DAILY_MAX;
 
