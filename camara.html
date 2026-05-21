@@ -2094,6 +2094,10 @@ const paranormalQuestions = [
             
             el.video.srcObject = videoStream; 
             await el.video.play();
+                        try {
+                const vt = videoStream.getVideoTracks()[0];
+                if (vt) await vt.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: 1.0 }] });
+            } catch(e) {}
             initDOMCache();
             if (DOM_CACHE && DOM_CACHE.recInd) { DOM_CACHE.recInd.style.display = 'flex'; void DOM_CACHE.recInd.offsetWidth; DOM_CACHE.recInd.style.opacity = '1'; setTimeout(() => { DOM_CACHE.recInd.style.opacity = '0'; setTimeout(() => { if(DOM_CACHE.recInd.style.opacity === '0') DOM_CACHE.recInd.style.display = 'none'; }, 500); }, 2500); }
             
@@ -2304,6 +2308,13 @@ window.addEventListener('load', async () => {
 
     localStorage.setItem("camPermission", "granted"); try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
     videoStream = new MediaStream(stream.getVideoTracks()); 
+        // Fijar enfoque para evitar respiración
+const track = videoStream.getVideoTracks()[0];
+if (track) {
+    try {
+        await track.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: 1.0 }] });
+    } catch(e) { /* no soportado */ }
+}
     el.video.srcObject = videoStream; el.video.play().then(() => { fixCanvasSize(); }).catch(()=>{});
     
     updateProgress(30, "PRECARGANDO MEDIOS LOCALES..."); await preloadLocalAssets();
@@ -2323,7 +2334,7 @@ window.addEventListener('load', async () => {
         updateProgress(100, "SISTEMAS LISTOS"); document.getElementById('loading').style.display = 'none'; resize(); window.addEventListener('resize', resize);
         
         initDOMCache();
-        if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
+        requestAnimationFrame(renderLoop);
         setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
 
         initRTM();
@@ -2696,145 +2707,125 @@ window.addEventListener('load', async () => {
             window._isAnnouncement = false;
         });
     }
-      function drawAudioVisualizer(c, w, h) {
-    if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
-    const now = performance.now();
-    if (now - (window._lastAudioDraw || 0) < 66) return;
-    window._lastAudioDraw = now;
+        function drawAudioVisualizer(c, w, h) {
+        if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
+        const now = performance.now();
+        if (now - (window._lastAudioDraw || 0) < 66) return; // ~15 fps para no saturar
+        window._lastAudioDraw = now;
 
-    audioAnalyser.getByteTimeDomainData(audioDataArray);
-    const bufferLength = audioAnalyser.frequencyBinCount;
+        audioAnalyser.getByteTimeDomainData(audioDataArray);
+        const bufferLength = audioAnalyser.frequencyBinCount;
 
-    let minVal = 255, maxVal = 0, rmsSum = 0, isBufferFrozen = true, currentMaxVolume = 0;
+        // ── Análisis de señal ──
+        let minVal = 255, maxVal = 0, rmsSum = 0, isBufferFrozen = true, currentMaxVolume = 0;
+        if (!window._lastAudioBuffer) {
+            window._lastAudioBuffer = new Uint8Array(bufferLength);
+            isBufferFrozen = false;
+        }
+        for (let i = 0; i < bufferLength; i++) {
+            const val = audioDataArray[i];
+            if (val < minVal) minVal = val;
+            if (val > maxVal) maxVal = val;
+            if (isBufferFrozen && val !== window._lastAudioBuffer[i]) isBufferFrozen = false;
+            const v = Math.abs((val / 128.0) - 1);
+            if (v > currentMaxVolume) currentMaxVolume = v;
+            rmsSum += v * v;
+        }
+        window._lastAudioBuffer.set(audioDataArray);
 
-    if (!window._lastAudioBuffer) {
-        window._lastAudioBuffer = new Uint8Array(bufferLength);
-        isBufferFrozen = false;
-    }
+        const rmsLevel = Math.sqrt(rmsSum / bufferLength);
+        const amplitude = maxVal - minVal;
+        const isHardwareDead = isBufferFrozen || amplitude <= 1;
 
-    for (let i = 0; i < bufferLength; i++) {
-        const val = audioDataArray[i];
-        if (val < minVal) minVal = val;
-        if (val > maxVal) maxVal = val;
-        if (isBufferFrozen && val !== window._lastAudioBuffer[i]) isBufferFrozen = false;
-        const v = Math.abs((val / 128.0) - 1);
-        if (v > currentMaxVolume) currentMaxVolume = v;
-        rmsSum += v * v;
-    }
-    window._lastAudioBuffer.set(audioDataArray);
-
-    const rmsLevel = Math.sqrt(rmsSum / bufferLength);
-    const amplitude = maxVal - minVal;
-    const isHardwareDead = isBufferFrozen || amplitude <= 1;
-
-    if (!isHardwareDead) {
-        lastValidAudioTime = Date.now();
-    } else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
-        if (Date.now() - lastValidAudioTime > 2500) {
+        if (!isHardwareDead) {
             lastValidAudioTime = Date.now();
-            lastReconnectTime = 0;
-            reconnectAudioNode();
-        }
-    }
-
-    const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window._liveUserLastUpdate < 1500);
-
-    ambientNoiseLevel = ambientNoiseLevel * 0.985 + rmsLevel * 0.015;
-    const dynamicThreshold = ambientNoiseLevel * 2.2 + 0.015;
-
-    if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && rmsLevel > dynamicThreshold) {
-        cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
-    }
-    cumulativeEVPEnergy *= 0.93;
-    cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
-
-    // ---------- DIBUJO OPTIMIZADO ----------
-    const visualBins = 64;                            // menos bins = menos carga
-    const step = Math.floor(bufferLength / visualBins);
-    const displayWidth = Math.min(w * 0.6, 900);     // 60% del ancho, máximo 900px
-    const startX = (w - displayWidth) / 2;
-    const sliceW = displayWidth / visualBins;
-    const bottomY = h * 0.88;                        // un poco más abajo
-    const waveHeight = h * 0.12;                     // altura proporcional
-    const sensitivity = 2.0;
-
-    c.save();
-    c.beginPath();
-    c.strokeStyle = 'rgba(0, 255, 255, 0.9)';
-    c.shadowColor = '#0ff';
-    c.shadowBlur = 12;
-    c.lineWidth = 3;
-    c.lineJoin = 'round';
-
-    let x = startX;
-    for (let i = 0; i < visualBins; i++) {
-        let v = (audioDataArray[i * step] / 128.0) - 1;
-        if (isSpookySpeaking || isTtsPlaying) {
-            // aún podemos simular algo sutil sin recargar
-            v = v * 0.6 + (Math.random() - 0.5) * 0.4;
-        }
-        const y = bottomY - (v * waveHeight * sensitivity);
-        if (i === 0) c.moveTo(x, y);
-        else c.lineTo(x, y);
-        x += sliceW;
-    }
-    c.stroke();
-    c.restore();
-
-    // ---------- DETECCIÓN DE DISPARO EVP ----------
-    const now_evp = Date.now();
-    const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
-    const isSilent = micActive && currentMaxVolume < (dynamicThreshold * 1.5) && !isUserTalkingNow;
-    const hasEnergy = cumulativeEVPEnergy > 12;
-    const hasSpike = micActive && rmsLevel > (dynamicThreshold * 2.2) && !isUserTalkingNow;
-    const afterQuestion = (now_evp - lastQuestionTime) < 8000;
-    const timeSinceLastEvp = now_evp - lastEvpTime;
-    const forceTriggerTime = 40000 + Math.random() * 20000;
-    const isForced = (timeSinceLastEvp > forceTriggerTime);
-
-    let currentGap = window._evpNextGap || 8000;
-    if (hasSpike && currentGap > 1500) currentGap = 1500;
-    if (hasEnergy && currentGap > 3000) currentGap = 3000;
-
-    const triggerProb = afterQuestion ? 0.20 : (hasSpike ? 0.15 : (hasEnergy ? 0.35 : 0.65));
-    const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement &&
-        (isForced || ((isSilent || hasEnergy || hasSpike) && timeSinceLastEvp > currentGap && Math.random() > triggerProb));
-
-    if (shouldTrigger) {
-        lastEvpTime = Date.now() + 99999;
-        if (afterQuestion || window._waitingFirstInteraction) {
-            window._evpNextGap = afterQuestion ? (2000 + Math.random() * 2000) : (20000 + Math.random() * 20000);
-        } else {
-            const dado = Math.random();
-            window._evpNextGap = dado < 0.25 ? 1500 + Math.random() * 1500 :
-                                 dado < 0.55 ? 4000 + Math.random() * 4000 :
-                                 dado < 0.80 ? 10000 + Math.random() * 8000 :
-                                               20000 + Math.random() * 15000;
-        }
-        if (ttsMainGain) {
-            const volVar = 0.75 + Math.random() * 0.5;
-            ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
-        }
-        let evpText;
-        if (afterQuestion) {
-            const objetos = window._aiContext?.objetos ? window._aiContext.objetos.split(',').map(o => o.trim()) : [];
-            evpText = generarEventoEVP(objetos);
-        } else {
-            const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000);
-            const textRoll = Math.random();
-            if (memoriasValidas.length > 0 && textRoll < 0.35) {
-                const randomMemory = memoriasValidas[Math.floor(Math.random() * memoriasValidas.length)];
-                const palabras = randomMemory.text.split(' ').filter(w => w.length > 2);
-                const objeto = palabras.length > 0 ? [palabras[Math.floor(Math.random() * palabras.length)]] : [];
-                evpText = generarEventoEVP(objeto);
-            } else {
-                evpText = generarEventoEVP();
+        } else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
+            if (Date.now() - lastValidAudioTime > 2500) {
+                lastValidAudioTime = Date.now(); lastReconnectTime = 0; reconnectAudioNode();
             }
         }
-        speakSpooky(evpText);
-        cumulativeEVPEnergy = -30;
+
+        const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window._liveUserLastUpdate < 1500);
+        ambientNoiseLevel = ambientNoiseLevel * 0.985 + rmsLevel * 0.015;
+        const dynamicThreshold = ambientNoiseLevel * 2.2 + 0.015;
+
+        if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && rmsLevel > dynamicThreshold) {
+            cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
+        }
+        cumulativeEVPEnergy *= 0.93;
+        cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
+
+        // ── Dibujo de barras con rayado ──
+        const numBars = 64;
+        const totalWidth = Math.min(w * 0.6, 900);   // ancho total del gráfico
+        const barWidth = totalWidth / numBars;
+        const startX = (w - totalWidth) / 2;
+        const bottomY = h * 0.88;
+        const maxHeight = h * 0.15;
+
+        c.save();
+        for (let i = 0; i < numBars; i++) {
+            const idx = Math.floor(i * bufferLength / numBars);
+            const val = (audioDataArray[idx] / 255) * 2 - 1; // -1..1
+            const height = Math.abs(val) * maxHeight * 1.5;
+            const x = startX + i * barWidth;
+            const y = bottomY - height;
+
+            // Barra blanca semi‑transparente
+            c.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            c.fillRect(x + 1, y, barWidth - 2, height);
+
+            // Rayado diagonal
+            c.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            c.lineWidth = 0.5;
+            c.beginPath();
+            for (let dy = 0; dy < height; dy += 4) {
+                c.moveTo(x, y + dy);
+                c.lineTo(x + barWidth, y + dy - barWidth);   // 45°
+            }
+            c.stroke();
+        }
+        c.restore();
+
+        // ── Detección de EVP (Spirit Box real) ──
+        const now_evp = Date.now();
+        const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
+        const hasEnergy = cumulativeEVPEnergy > 30;
+        const afterQuestion = (now_evp - lastQuestionTime) < 8000;
+        const timeSinceLastEvp = now_evp - lastEvpTime;
+
+        // Solo habla si hay pregunta reciente + energía, o energía muy alta
+        const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement &&
+            ( (afterQuestion && timeSinceLastEvp > 2500 && cumulativeEVPEnergy > 15) ||
+              (hasEnergy && timeSinceLastEvp > 5000) );
+
+        if (shouldTrigger) {
+            lastEvpTime = Date.now() + 99999;
+            window._evpNextGap = afterQuestion ? 2000 + Math.random() * 2000 : 20000 + Math.random() * 20000;
+            if (ttsMainGain) {
+                const volVar = 0.75 + Math.random() * 0.5;
+                ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
+            }
+            let evpText;
+            if (afterQuestion) {
+                const objetos = window._aiContext?.objetos ? window._aiContext.objetos.split(',').map(o => o.trim()) : [];
+                evpText = generarEventoEVP(objetos);
+            } else {
+                const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000);
+                if (memoriasValidas.length > 0 && Math.random() < 0.35) {
+                    const randomMemory = memoriasValidas[Math.floor(Math.random() * memoriasValidas.length)];
+                    const palabras = randomMemory.text.split(' ').filter(w => w.length > 2);
+                    const objeto = palabras.length > 0 ? [palabras[Math.floor(Math.random() * palabras.length)]] : [];
+                    evpText = generarEventoEVP(objeto);
+                } else {
+                    evpText = generarEventoEVP();
+                }
+            }
+            speakSpooky(evpText);
+            cumulativeEVPEnergy = -30;
+        }
     }
-}
+    
         function drawAudioTexts(c, w, h) {
         if (!state.isAudioScan) return;
 
