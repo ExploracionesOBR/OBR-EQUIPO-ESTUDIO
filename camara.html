@@ -472,9 +472,44 @@ async function loadConfig() {
             if (config.agora.appId) AGORA_APP_ID = config.agora.appId;
             if (config.agora.token) AGORA_TOKEN = config.agora.token;
             if (config.agora.channel) AGORA_CHANNEL = config.agora.channel;
-            MIC_CHANNEL = config.agora.micChannel || 'obr-mic';
         }
-        
+
+        // IA: siempre cargar Gemini y Groq disponibles
+        if (config.ai?.gemini?.apiKey) {
+            AI_API_KEY = config.ai.gemini.apiKey;
+            CURRENT_AI_PROVIDER = 'gemini';
+            CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
+        } else if (config.ai?.groq?.apiKey) {
+            AI_API_KEY = config.ai.groq.apiKey;
+            CURRENT_AI_PROVIDER = 'groq';
+            CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+        }
+        // Si no hay ninguna, AI_API_KEY se queda con el valor por defecto (vacío o de state)
+
+        // TTS
+        if (config.tts?.elevenlabsKey) {
+            ELEVENLABS_API_KEY = config.tts.elevenlabsKey;
+            localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
+        }
+        if (config.tts?.voicerssKey) {
+            VOICERSS_API_KEY = config.tts.voicerssKey;
+            localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
+        }
+
+        // Chat
+        if (config.chat?.overlayUrl) {
+            CHAT_OVERLAY_URL = config.chat.overlayUrl;
+        }
+
+        window._config = config;
+        console.log('✅ Configuración cargada correctamente', config);
+        return true;
+    } catch (e) {
+        console.warn('⚠️ Usando configuración por defecto:', e);
+        return false;
+    }
+}
+    
         // IA
 if (config.ai) {
     // Si hay clave de Gemini y (estamos en auto o el proveedor es gemini), usar Gemini
@@ -543,7 +578,7 @@ if (config.ai) {
         aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
         aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
     };
-    let AI_API_KEY = state.apiKey;
+    let AI_API_KEY = '';   // o = localStorage.getItem('obr_ai_key') || '';
 let CURRENT_AI_MODEL = state.aiModel;
 let CURRENT_AI_PROVIDER = state.aiProvider;
 
