@@ -15,7 +15,7 @@
   "ai": {
     "provider": "gemini",
     "gemini": {
-      "apiKey": "AIzaSyBLbGKeWURe962d6zY2KS_iFmx_j0Un-04",
+      "apiKey": "AIzaSyDi_WOD-TlauGldFhSlxhuvE2zZNRlFtWc",
       "model": "gemini-2.0-flash"
     },
     "groq": {
