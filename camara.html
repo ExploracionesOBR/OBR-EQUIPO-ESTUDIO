@@ -475,7 +475,7 @@ async function loadConfig() {
         }
 
         // IA: siempre cargar Gemini y Groq disponibles
-        if (config.ai?.gemini?.apiKey) {
+            if (config.ai?.gemini?.apiKey) {
             AI_API_KEY = config.ai.gemini.apiKey;
             CURRENT_AI_PROVIDER = 'gemini';
             CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
@@ -484,6 +484,7 @@ async function loadConfig() {
             CURRENT_AI_PROVIDER = 'groq';
             CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
         }
+        state.apiKey = AI_API_KEY;   // ← añadir esta línea
         // Si no hay ninguna, AI_API_KEY se queda con el valor por defecto (vacío o de state)
 
         // TTS
@@ -510,25 +511,6 @@ async function loadConfig() {
     }
 }
     
-        // IA
-if (config.ai) {
-    // Si hay clave de Gemini y (estamos en auto o el proveedor es gemini), usar Gemini
-    if (config.ai.gemini?.apiKey && (aiProviderMode === 'auto' || aiProviderMode === 'gemini')) {
-        AI_API_KEY = config.ai.gemini.apiKey;
-        CURRENT_AI_PROVIDER = 'gemini';
-        CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
-    }
-    // Si no, intentar con Groq
-    else if (config.ai.groq?.apiKey && (aiProviderMode === 'auto' || aiProviderMode === 'groq')) {
-        AI_API_KEY = config.ai.groq.apiKey;
-        CURRENT_AI_PROVIDER = 'groq';
-        CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
-    }
-    state.apiKey = AI_API_KEY;
-    state.aiProvider = CURRENT_AI_PROVIDER;
-    state.aiModel = CURRENT_AI_MODEL;
-}
-        
         // TTS
         if (config.tts) {
             if (config.tts.elevenlabsKey) {
@@ -578,9 +560,9 @@ if (config.ai) {
         aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
         aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
     };
-    let AI_API_KEY = '';   // o = localStorage.getItem('obr_ai_key') || '';
-let CURRENT_AI_MODEL = state.aiModel;
-let CURRENT_AI_PROVIDER = state.aiProvider;
+ let AI_API_KEY = '';
+let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || '';
+let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
 
     // APIs y variables TTS (faltaban)
        const VOICERSS_DAILY_MAX  = 350;
