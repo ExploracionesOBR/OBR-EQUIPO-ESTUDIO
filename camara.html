@@ -2767,7 +2767,6 @@ if (track) {
         for (let i = 0; i < numBars; i++) {
             const idx = Math.floor(i * bufferLength / numBars);
             const val = (audioDataArray[idx] / 255) * 2 - 1; // -1..1
-            const height = Math.abs(val) * maxHeight * 1.5;
             const x = startX + i * barWidth;
             const y = bottomY - height;
 
