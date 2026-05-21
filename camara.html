@@ -2772,7 +2772,8 @@ if (track) {
             const y = bottomY - height;
 
             // Barra blanca semi‑transparente
-            c.fillStyle = 'rgba(255, 255, 255, 0.25)';
+            c.fillStyle = 'rgba(255, 255, 255, 0.55)';   // más opaco
+            const height = Math.min(Math.abs(val) * maxHeight * 1.5, maxHeight * 0.7);  // nunca pasa del 70% de la altura máxima
             c.fillRect(x + 1, y, barWidth - 2, height);
 
             // Rayado diagonal
@@ -2787,21 +2788,23 @@ if (track) {
         }
         c.restore();
 
-        // ── Detección de EVP (Spirit Box real) ──
+                // ── Detección de EVP (Spirit Box estilo Ghostube) ──
         const now_evp = Date.now();
         const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
-        const hasEnergy = cumulativeEVPEnergy > 30;
-        const afterQuestion = (now_evp - lastQuestionTime) < 8000;
+        const hasEnergy = cumulativeEVPEnergy > 8;
+        const hasSpike = cumulativeEVPEnergy > 18;
+        const afterQuestion = (now_evp - lastQuestionTime) < 10000;
         const timeSinceLastEvp = now_evp - lastEvpTime;
 
-        // Solo habla si hay pregunta reciente + energía, o energía muy alta
         const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement &&
-            ( (afterQuestion && timeSinceLastEvp > 2500 && cumulativeEVPEnergy > 15) ||
-              (hasEnergy && timeSinceLastEvp > 5000) );
+            ( (afterQuestion && timeSinceLastEvp > 2000 && cumulativeEVPEnergy > 6) ||
+              (hasEnergy && timeSinceLastEvp > 6000) ||
+              (hasSpike && timeSinceLastEvp > 4000 && Math.random() < 0.08) ||
+              (cumulativeEVPEnergy > 12 && timeSinceLastEvp > 5000 && Math.random() < 0.03) );
 
         if (shouldTrigger) {
             lastEvpTime = Date.now() + 99999;
-            window._evpNextGap = afterQuestion ? 2000 + Math.random() * 2000 : 20000 + Math.random() * 20000;
+            window._evpNextGap = afterQuestion ? 1500 + Math.random() * 1500 : 4000 + Math.random() * 4000;
             if (ttsMainGain) {
                 const volVar = 0.75 + Math.random() * 0.5;
                 ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
@@ -2822,9 +2825,8 @@ if (track) {
                 }
             }
             speakSpooky(evpText);
-            cumulativeEVPEnergy = -30;
+            cumulativeEVPEnergy = -10;  // reset más suave
         }
-    }
     
         function drawAudioTexts(c, w, h) {
         if (!state.isAudioScan) return;
