@@ -313,6 +313,16 @@
             <div id="cam-error-steps" style="color:#aaa; font-family:'Share Tech Mono',monospace; font-size:0.65rem; text-align:left; line-height:1.8; margin-bottom:14px; padding:8px; background:rgba(0,0,0,0.4); border-radius:4px; display:none;"></div>
             <button onclick="retryCam()" style="width:100%; padding:10px; background:rgba(255,51,51,0.15); border:1px solid #ff3333; color:#ff3333; font-family:'Orbitron',sans-serif; font-size:0.7rem; font-weight:bold; border-radius:4px; cursor:pointer; letter-spacing:1px;">↺ REINTENTAR</button>
         </div>
+    <button id="btn-open-keys" style="position:absolute; bottom:20px; right:20px; background:rgba(0,0,0,0.7); border:1px solid #ff3333; color:#ff3333; width:44px; height:44px; border-radius:50%; font-size:20px; cursor:pointer; z-index:400;" title="Configurar claves">🔐</button>
+<div id="keys-modal" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
+    <div style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
+        <h3 style="color:#ff3333; margin-bottom:10px; font-family:Orbitron;">🔑 CLAVES UNIFICADAS</h3>
+        <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
+        <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
+        <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
+        <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
+    </div>
+</div>
     </div>
 
     <div id="connect-modal" class="modal-bg">
@@ -460,59 +470,6 @@ let AGORA_TOKEN  = '';
 let AGORA_CHANNEL = 'obr-estudio';
 let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 
-// ================== INICIO FUNCIÓN loadConfig ==================
-async function loadConfig() {
-    try {
-        const resp = await fetch('./config.json');
-        if (!resp.ok) throw new Error('No se pudo cargar config.json');
-        const config = await resp.json();
-        
-        // Agora
-        if (config.agora) {
-            if (config.agora.appId) AGORA_APP_ID = config.agora.appId;
-            if (config.agora.token) AGORA_TOKEN = config.agora.token;
-            if (config.agora.channel) AGORA_CHANNEL = config.agora.channel;
-        }
-
-        // IA: siempre cargar Gemini y Groq disponibles
-            if (config.ai?.gemini?.apiKey) {
-            AI_API_KEY = config.ai.gemini.apiKey;
-            CURRENT_AI_PROVIDER = 'gemini';
-            CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
-        } else if (config.ai?.groq?.apiKey) {
-            AI_API_KEY = config.ai.groq.apiKey;
-            CURRENT_AI_PROVIDER = 'groq';
-            CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
-        }
-        state.apiKey = AI_API_KEY;   // ← añadir esta línea
-        // Si no hay ninguna, AI_API_KEY se queda con el valor por defecto (vacío o de state)
-
-        // TTS
-        if (config.tts?.elevenlabsKey) {
-            ELEVENLABS_API_KEY = config.tts.elevenlabsKey;
-            localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
-        }
-        if (config.tts?.voicerssKey) {
-            VOICERSS_API_KEY = config.tts.voicerssKey;
-            localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
-        }
-
-        // Chat
-        if (config.chat?.overlayUrl) {
-            CHAT_OVERLAY_URL = config.chat.overlayUrl;
-        }
-
-        window._config = config;
-        console.log('✅ Configuración cargada correctamente', config);
-        return true;
-      } catch (e) {
-        console.warn('⚠️ Usando configuración por defecto:', e);
-        window._config = {}; // ← añadir esto
-        return false;
-    }
-}    
-// ================== FIN FUNCIÓN loadConfig ==================
-
     const RTM_TOKEN = undefined;
     const MIC_CHANNEL = 'obr-mic';
 
@@ -626,6 +583,26 @@ let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
     let streamVideoTrack = null;
     let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
     let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
+    // ── Manejo de la cadena unificada de claves (3 campos) ──
+function parseAndStoreKeys(chain) {
+    const parts = chain.split('|');
+    if (parts.length < 3) return false;
+    const [geminiKey, groqKey, chatUrl] = parts.map(p => p.trim());
+    let count = 0;
+    if (geminiKey) { localStorage.setItem('obr_ai_key', geminiKey); count++; }
+    if (groqKey)   { localStorage.setItem('obr_groq_key', groqKey); count++; }
+    if (chatUrl)   { localStorage.setItem('obr_chat_url', chatUrl); count++; }
+    return count;
+}
+
+function loadKeysFromStorage() {
+    const gemini = localStorage.getItem('obr_ai_key') || '';
+    const groq = localStorage.getItem('obr_groq_key') || '';
+    const chat = localStorage.getItem('obr_chat_url') || CHAT_OVERLAY_URL;
+    AI_API_KEY = gemini || groq;
+    CHAT_OVERLAY_URL = chat;
+    state.apiKey = AI_API_KEY;
+}
 
     function updateTTSStatusUI() {
     const engineEl = document.getElementById('tts-engine-status');
@@ -661,32 +638,13 @@ function setTTSMode(mode) {
     updateTTSStatusUI();
     initTTSModeUI();
 }
-    function loadTTSKeysIntoUI() {
-    const elInput = document.getElementById('tts-el-key');
-    const vrssInput = document.getElementById('tts-vrss-key');
-    if (elInput) elInput.value = ELEVENLABS_API_KEY;
-    if (vrssInput) vrssInput.value = VOICERSS_API_KEY;
-}
-
-function saveTTSKeysFromUI() {
-    const elInput = document.getElementById('tts-el-key');
-    const vrssInput = document.getElementById('tts-vrss-key');
-    if (elInput) {
-        ELEVENLABS_API_KEY = elInput.value.trim();
-        localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
-    }
-    if (vrssInput) {
-        VOICERSS_API_KEY = vrssInput.value.trim();
-        localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
-    }
-}
 
 async function pingProvider(provider) {
-    if (!window._config) await loadConfig();
     const key = provider === 'gemini' 
-        ? window._config?.ai?.gemini?.apiKey 
-        : window._config?.ai?.groq?.apiKey;
+        ? localStorage.getItem('obr_ai_key')
+        : localStorage.getItem('obr_groq_key');
     if (!key) return { success: false, time: -1, model: null };
+    // ... el resto del código sigue igual
 
     const start = performance.now();
     try {
@@ -750,12 +708,12 @@ function setAIProvider(mode) {
             aiProviderMode = mode;
             localStorage.setItem('obr_ai_provider_mode', mode);
             CURRENT_AI_PROVIDER = mode;
-                        if (mode === 'gemini') {
-                AI_API_KEY = window._config?.ai?.gemini?.apiKey || AI_API_KEY;
-                CURRENT_AI_MODEL = result.model || window._config?.ai?.gemini?.model || 'gemini-2.0-flash';
+                                   if (mode === 'gemini') {
+                AI_API_KEY = localStorage.getItem('obr_ai_key') || AI_API_KEY;
+                CURRENT_AI_MODEL = result.model || 'gemini-2.0-flash';
             } else {
-                AI_API_KEY = window._config?.ai?.groq?.apiKey || AI_API_KEY;
-                CURRENT_AI_MODEL = result.model || window._config?.ai?.groq?.model || 'llama-3.2-11b-vision-preview';
+                AI_API_KEY = localStorage.getItem('obr_groq_key') || AI_API_KEY;
+                CURRENT_AI_MODEL = result.model || 'llama-3.2-11b-vision-preview';
             }
             state.apiKey = AI_API_KEY;
             state.aiProvider = CURRENT_AI_PROVIDER;
@@ -856,13 +814,12 @@ async function testAIPing() {
         return;
     }
 
-    // Aplicar la mejor
-            if (bestProvider === 'gemini') {
-        AI_API_KEY = window._config.ai.gemini.apiKey;
-        CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
+      if (bestProvider === 'gemini') {
+        AI_API_KEY = localStorage.getItem('obr_ai_key');
+        CURRENT_AI_MODEL = 'gemini-2.0-flash';
     } else {
-        AI_API_KEY = window._config.ai.groq.apiKey;
-        CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+        AI_API_KEY = localStorage.getItem('obr_groq_key');
+        CURRENT_AI_MODEL = 'llama-3.2-11b-vision-preview';
     }
     state.apiKey = AI_API_KEY;
     state.aiProvider = CURRENT_AI_PROVIDER;
@@ -2185,22 +2142,7 @@ const paranormalQuestions = [
         }
     }
 
-window.addEventListener('load', async () => {
-    await loadConfig();
-    const apiKeyInput = document.getElementById('api-key-internal');
-    if (apiKeyInput) apiKeyInput.value = state.apiKey;
-    document.getElementById('mtx-host').value = state.studioId;
-    document.getElementById('stream-name').value = state.cameraName;
-    const btn = document.getElementById('main-cam-btn');
-    const hasPerm = localStorage.getItem("camPermission") === "granted" || sessionStorage.getItem("camPermission") === "granted";
-    if (btn && hasPerm) {
-        btn.innerText = "▶ REANUDAR CÁMARA";
-        btn.style.borderColor = "#00ff41";
-        btn.style.color = "#00ff41";
-    }
-});
-
-    function showCamError(title, msg, steps) {
+   function showCamError(title, msg, steps) {
         const panel = document.getElementById('cam-error-panel'); 
         document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none'); 
         if (!panel) { alert(msg); return; }
@@ -3620,18 +3562,17 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
 
   function togglePareidolia(btnElement) {
-    if(!AI_API_KEY) {
-        // Intentar cargar una clave desde config.json si no hay ninguna
-        if (window._config?.ai?.gemini?.apiKey) {
-            AI_API_KEY = window._config.ai.gemini.apiKey;
+        if(!AI_API_KEY) {
+        if (localStorage.getItem('obr_ai_key')) {
+            AI_API_KEY = localStorage.getItem('obr_ai_key');
             CURRENT_AI_PROVIDER = 'gemini';
-            CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
-        } else if (window._config?.ai?.groq?.apiKey) {
-            AI_API_KEY = window._config.ai.groq.apiKey;
+            CURRENT_AI_MODEL = 'gemini-2.0-flash';
+        } else if (localStorage.getItem('obr_groq_key')) {
+            AI_API_KEY = localStorage.getItem('obr_groq_key');
             CURRENT_AI_PROVIDER = 'groq';
-            CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+            CURRENT_AI_MODEL = 'llama-3.2-11b-vision-preview';
         } else {
-            showToast("SIN API KEY — CONFIGURA EN ⚙ AJUSTES", true);
+            showToast("SIN API KEY — CONFIGURA EN 🔐 AL INICIO", true);
             return;
         }
     }
@@ -3747,27 +3688,6 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         if(workingModel) { status.innerText = `✅ ACTIVA (${provider.toUpperCase()} - ${workingModel.split('-')[0]})`; status.style.color = "#00ff41"; AI_API_KEY = k; CURRENT_AI_MODEL = workingModel; CURRENT_AI_PROVIDER = provider; state.apiKey = k; state.aiModel = workingModel; state.aiProvider = provider; localStorage.setItem('obr_ai_key', k); localStorage.setItem('obr_ai_model', workingModel); localStorage.setItem('obr_ai_provider', provider); } 
         else { status.innerText = "❌ ERROR: LLAVE INVÁLIDA O RED"; status.style.color = "red"; }
         input.disabled = false; btn.disabled = false;
-    }
-
-    function saveSettings() { 
-        const rawIp = document.getElementById('mtx-host').value.trim(); 
-        if (rawIp) { state.studioId = rawIp; localStorage.setItem('obr_studio_id', state.studioId); } 
-        const camN = document.getElementById('stream-name').value.trim();
-        if (camN) { state.cameraName = camN; localStorage.setItem('obr_camera_name', state.cameraName); }
-        saveTTSKeysFromUI();  // ← guardar claves TTS
-        saveTTSFilters(); 
-        initRemoteMicReceiverAgora();
-        showToast("Config Guardada"); 
-        document.getElementById('settings-modal').classList.remove('active'); 
-    }
-    function openSettings() { 
-    loadTTSKeysIntoUI();  // ya no fallará porque la función existe
-    updateTTSStatusUI(); 
-    initTTSModeUI(); 
-    updateAIProviderUI();
-    loadTTSFilterPanel(); 
-    document.getElementById('settings-modal').classList.add('active'); 
-}
     
     let menuTimeout; const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
     document.getElementById('touch-surface').addEventListener('click', showMenus);
@@ -3839,15 +3759,56 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     };
     
     window.resetTTSFilters = function() { ['obr_tts_f_rate', 'obr_tts_f_pitch'].forEach(k => localStorage.removeItem(k)); loadTTSFilterPanel(); showToast('FILTROS RESETEADOS — USANDO CÓDIGO BASE'); };
-    // Ejecutar loadConfig apenas el DOM esté listo
-if (document.readyState === 'complete') {
-    loadConfig();
-} else {
-    window.addEventListener('load', async () => {
-        await loadConfig();
-    });
-}
+// El evento load ahora se encarga de cargar las claves y el modal 🔐
+window.addEventListener('load', async () => {
+    loadKeysFromStorage();
 
+    const apiKeyInput = document.getElementById('api-key-internal');
+    if (apiKeyInput) apiKeyInput.value = state.apiKey;
+    document.getElementById('mtx-host').value = state.studioId;
+    document.getElementById('stream-name').value = state.cameraName;
+    const btn = document.getElementById('main-cam-btn');
+    const hasPerm = localStorage.getItem("camPermission") === "granted" || sessionStorage.getItem("camPermission") === "granted";
+    if (btn && hasPerm) {
+        btn.innerText = "▶ REANUDAR CÁMARA";
+        btn.style.borderColor = "#00ff41";
+        btn.style.color = "#00ff41";
+    }
+
+    // ── Modal 🔐 ──
+    const btnOpen = document.getElementById('btn-open-keys');
+    const modal = document.getElementById('keys-modal');
+    const input = document.getElementById('keys-input');
+    const status = document.getElementById('keys-status');
+    const btnSave = document.getElementById('btn-save-keys');
+    const btnClose = document.getElementById('btn-close-keys');
+
+    btnOpen.addEventListener('click', () => {
+        modal.style.display = 'flex';
+        const current = [
+            localStorage.getItem('obr_ai_key') || '',
+            localStorage.getItem('obr_groq_key') || '',
+            localStorage.getItem('obr_chat_url') || ''
+        ].join('|');
+        input.value = current;
+        status.textContent = 'Pega la cadena de 3 campos';
+    });
+
+    btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
+
+    btnSave.addEventListener('click', () => {
+        const chain = input.value.trim();
+        if (!chain) { status.textContent = '❌ Cadena vacía'; return; }
+        const count = parseAndStoreKeys(chain);
+        if (count > 0) {
+            loadKeysFromStorage();
+            status.textContent = `✅ ${count} de 3 claves guardadas.`;
+            setTimeout(() => { modal.style.display = 'none'; }, 1500);
+        } else {
+            status.textContent = '❌ Formato incorrecto (se necesitan 3 campos separados por |)';
+        }
+    });
+});
     window.initApp = initApp;
     window.retryCam = retryCam;
     window.openSettings = openSettings;
