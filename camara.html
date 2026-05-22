@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.6 (AGORA UNIFICADO)</title>
+    <title>CAMARA OBR PRO v7.5 (AGORA UNIFICADO)</title>
     
     <link rel="icon" type="image/png" href="obr-logo.png">
     <link rel="apple-touch-icon" href="obr-logo.png">
@@ -313,17 +313,6 @@
             <div id="cam-error-steps" style="color:#aaa; font-family:'Share Tech Mono',monospace; font-size:0.65rem; text-align:left; line-height:1.8; margin-bottom:14px; padding:8px; background:rgba(0,0,0,0.4); border-radius:4px; display:none;"></div>
             <button onclick="retryCam()" style="width:100%; padding:10px; background:rgba(255,51,51,0.15); border:1px solid #ff3333; color:#ff3333; font-family:'Orbitron',sans-serif; font-size:0.7rem; font-weight:bold; border-radius:4px; cursor:pointer; letter-spacing:1px;">↺ REINTENTAR</button>
         </div>
-            <button id="btn-open-keys" style="position:absolute; bottom:20px; right:20px; background:rgba(0,0,0,0.7); border:1px solid #ff3333; color:#ff3333; width:44px; height:44px; border-radius:50%; font-size:20px; cursor:pointer; z-index:400;" title="Configurar claves">🔐</button>
-        <div id="keys-modal" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
-            <div style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
-                <h3 style="color:#ff3333; margin-bottom:10px; font-family:Orbitron;">🔑 CLAVES UNIFICADAS</h3>
-                <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
-                <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
-                <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
-                <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
-            </div>
-        </div>
-    
     </div>
 
     <div id="connect-modal" class="modal-bg">
@@ -471,6 +460,57 @@ let AGORA_TOKEN  = '';
 let AGORA_CHANNEL = 'obr-estudio';
 let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 
+// ================== INICIO FUNCIÓN loadConfig ==================
+async function loadConfig() {
+    try {
+        const resp = await fetch('./config.json');
+        if (!resp.ok) throw new Error('No se pudo cargar config.json');
+        const config = await resp.json();
+        
+        // Agora
+        if (config.agora) {
+            if (config.agora.appId) AGORA_APP_ID = config.agora.appId;
+            if (config.agora.token) AGORA_TOKEN = config.agora.token;
+            if (config.agora.channel) AGORA_CHANNEL = config.agora.channel;
+        }
+
+        // IA: siempre cargar Gemini y Groq disponibles
+            if (config.ai?.gemini?.apiKey) {
+            AI_API_KEY = config.ai.gemini.apiKey;
+            CURRENT_AI_PROVIDER = 'gemini';
+            CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
+        } else if (config.ai?.groq?.apiKey) {
+            AI_API_KEY = config.ai.groq.apiKey;
+            CURRENT_AI_PROVIDER = 'groq';
+            CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+        }
+        state.apiKey = AI_API_KEY;   // ← añadir esta línea
+        // Si no hay ninguna, AI_API_KEY se queda con el valor por defecto (vacío o de state)
+
+        // TTS
+        if (config.tts?.elevenlabsKey) {
+            ELEVENLABS_API_KEY = config.tts.elevenlabsKey;
+            localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
+        }
+        if (config.tts?.voicerssKey) {
+            VOICERSS_API_KEY = config.tts.voicerssKey;
+            localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
+        }
+
+        // Chat
+        if (config.chat?.overlayUrl) {
+            CHAT_OVERLAY_URL = config.chat.overlayUrl;
+        }
+
+        window._config = config;
+        console.log('✅ Configuración cargada correctamente', config);
+        return true;
+      } catch (e) {
+        console.warn('⚠️ Usando configuración por defecto:', e);
+        window._config = {}; // ← añadir esto
+        return false;
+    }
+}    
 // ================== FIN FUNCIÓN loadConfig ==================
 
     const RTM_TOKEN = undefined;
@@ -497,37 +537,9 @@ let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR'
         aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
     };
  let AI_API_KEY = '';
-const ELEVENLABS_API_KEY = "2a935dade01a7875bbed42178ff211a046babbdd6412a3c98bcf5dfae7813c11";
-const VOICERSS_API_KEY   = "776fa230d3574c4097aa44e4e3c3949c";
-// ── Manejo de la cadena unificada de claves ──
-function parseAndStoreKeys(chain) {
-    const parts = chain.split('|');
-    if (parts.length < 3) return false;
-    const [geminiKey, groqKey, chatUrl] = parts.map(p => p.trim());
-    let count = 0;
-    if (geminiKey) { localStorage.setItem('obr_ai_key', geminiKey); count++; }
-    if (groqKey)   { localStorage.setItem('obr_groq_key', groqKey); count++; }
-    if (chatUrl)   { localStorage.setItem('obr_chat_url', chatUrl); count++; }
-    return count; // devuelve cuántas claves se guardaron correctamente
-}
+let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || '';
+let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
 
-function loadKeysFromStorage() {
-    const gemini = localStorage.getItem('obr_ai_key') || '';
-    const groq = localStorage.getItem('obr_groq_key') || '';
-    const chat = localStorage.getItem('obr_chat_url') || CHAT_OVERLAY_URL;
-    AI_API_KEY = gemini || groq;
-    CHAT_OVERLAY_URL = chat;
-    state.apiKey = AI_API_KEY;
-    window._config = {
-        ai: {
-            gemini: { apiKey: gemini, model: 'gemini-2.0-flash' },
-            groq:   { apiKey: groq, model: 'llama-3.2-11b-vision-preview' }
-        },
-        // Las claves TTS ya están en las constantes ELEVENLABS_API_KEY y VOICERSS_API_KEY
-        chat: { overlayUrl: chat }
-    };
-}
-    
     // APIs y variables TTS (faltaban)
        const VOICERSS_DAILY_MAX  = 350;
     let elevenlabsCreditsTotal     = 10000;
@@ -670,7 +682,7 @@ function saveTTSKeysFromUI() {
 }
 
 async function pingProvider(provider) {
-    if (!window._config) loadKeysFromStorage();
+    if (!window._config) await loadConfig();
     const key = provider === 'gemini' 
         ? window._config?.ai?.gemini?.apiKey 
         : window._config?.ai?.groq?.apiKey;
@@ -2174,10 +2186,7 @@ const paranormalQuestions = [
     }
 
 window.addEventListener('load', async () => {
-    // Cargar claves almacenadas (si las hay)
-    loadKeysFromStorage();
-    
-    // Actualizar campos de UI si existen
+    await loadConfig();
     const apiKeyInput = document.getElementById('api-key-internal');
     if (apiKeyInput) apiKeyInput.value = state.apiKey;
     document.getElementById('mtx-host').value = state.studioId;
@@ -2188,42 +2197,6 @@ window.addEventListener('load', async () => {
         btn.innerText = "▶ REANUDAR CÁMARA";
         btn.style.borderColor = "#00ff41";
         btn.style.color = "#00ff41";
-    }
-
-    // ── Lógica del botón 🔐 ──
-    const btnOpen = document.getElementById('btn-open-keys');
-    const modal = document.getElementById('keys-modal');
-    const input = document.getElementById('keys-input');
-    const status = document.getElementById('keys-status');
-    const btnSave = document.getElementById('btn-save-keys');
-    const btnClose = document.getElementById('btn-close-keys');
-
-    btnOpen.addEventListener('click', () => {
-        modal.style.display = 'flex';
-        // Rellenar el input con las claves actuales (si existen)
-        const current = [
-            localStorage.getItem('obr_ai_key') || '',
-            localStorage.getItem('obr_groq_key') || '',
-            localStorage.getItem('obr_el_key') || '',
-            localStorage.getItem('obr_voicerss_key') || '',
-            localStorage.getItem('obr_chat_url') || ''
-        ].join('|');
-        input.value = current;
-        status.textContent = 'Pega la cadena completa';
-    });
-
-    btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
-
-btnSave.addEventListener('click', () => {
-    const chain = input.value.trim();
-    if (!chain) { status.textContent = '❌ Cadena vacía'; return; }
-    const count = parseAndStoreKeys(chain);
-    if (count > 0) {
-        loadKeysFromStorage();
-        status.textContent = `✅ ${count} de 3 claves guardadas.`;
-        setTimeout(() => { modal.style.display = 'none'; }, 1500);
-    } else {
-        status.textContent = '❌ Formato incorrecto (se necesitan 3 campos separados por |)';
     }
 });
 
@@ -3871,6 +3844,7 @@ if (document.readyState === 'complete') {
     loadConfig();
 } else {
     window.addEventListener('load', async () => {
+        await loadConfig();
     });
 }
 
