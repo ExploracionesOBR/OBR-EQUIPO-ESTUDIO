@@ -3781,14 +3781,12 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         if (rawIp) { state.studioId = rawIp; localStorage.setItem('obr_studio_id', state.studioId); } 
         const camN = document.getElementById('stream-name').value.trim();
         if (camN) { state.cameraName = camN; localStorage.setItem('obr_camera_name', state.cameraName); }
-        saveTTSKeysFromUI();  // ← guardar claves TTS
         saveTTSFilters(); 
         initRemoteMicReceiverAgora();
         showToast("Config Guardada"); 
         document.getElementById('settings-modal').classList.remove('active'); 
     }
     function openSettings() { 
-    loadTTSKeysIntoUI();  // ya no fallará porque la función existe
     updateTTSStatusUI(); 
     initTTSModeUI(); 
     updateAIProviderUI();
@@ -3865,14 +3863,11 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         }, 150);
     };
     
-    window.resetTTSFilters = function() { ['obr_tts_f_rate', 'obr_tts_f_pitch'].forEach(k => localStorage.removeItem(k)); loadTTSFilterPanel(); showToast('FILTROS RESETEADOS — USANDO CÓDIGO BASE'); };
-    // Ejecutar loadConfig apenas el DOM esté listo
-if (document.readyState === 'complete') {
-    loadConfig();
-} else {
-    window.addEventListener('load', async () => {
+        window.resetTTSFilters = function() { ['obr_tts_f_rate', 'obr_tts_f_pitch'].forEach(k => localStorage.removeItem(k)); loadTTSFilterPanel(); showToast('FILTROS RESETEADOS — USANDO CÓDIGO BASE'); };
+
+    // ── Cerrar el event listener de carga ──
     });
-}
+    // ── Fin del event listener ──
 
     window.initApp = initApp;
     window.retryCam = retryCam;
