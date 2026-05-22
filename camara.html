@@ -717,75 +717,103 @@ function updateAIProviderUI() {
 
 async function testAIPing() {
     if (aiProviderMode !== 'auto') return;
+
     const btn = document.getElementById('btn-ping-ai');
     if (!btn) return;
+
+    // Evitar saturar las APIs (mínimo 5 segundos entre pings)
+    if (window._lastPing && Date.now() - window._lastPing < 5000) {
+        showToast('⏳ Espera 5 segundos entre pruebas', true);
+        return;
+    }
+    window._lastPing = Date.now();
+
     btn.disabled = true;
     btn.textContent = 'MIDIENDO…';
 
+    // Asegurarnos de que tenemos la configuración cargada
     if (!window._config) await loadConfig();
 
-    let bestProvider = 'gemini';
+    let bestProvider = null;
     let bestTime = Infinity;
 
-    // Probar Gemini
-    if (window._config?.ai?.gemini?.apiKey) {
+    // --- Probar Gemini ---
+    const geminiKey = window._config?.ai?.gemini?.apiKey;
+    if (geminiKey) {
         const start = performance.now();
         try {
             const resp = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${window._config.ai.gemini.apiKey}`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }) }
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
+                }
             );
             if (resp.ok) {
-                const elapsed = performance.now() - start;
-                if (elapsed < bestTime) bestTime = elapsed;
+                bestTime = performance.now() - start;
+                bestProvider = 'gemini';
+            } else {
+                console.warn('Gemini responded with status', resp.status);
             }
-        } catch(e) { console.warn('Gemini ping falló', e); }
+        } catch (e) {
+            console.warn('Gemini ping error:', e);
+        }
     }
 
-    // Probar Groq
-    if (window._config?.ai?.groq?.apiKey) {
+    // --- Probar Groq ---
+    const groqKey = window._config?.ai?.groq?.apiKey;
+    if (groqKey) {
         const start = performance.now();
         try {
             const resp = await fetch('https://api.groq.com/openai/v1/models', {
-                headers: { 'Authorization': `Bearer ${window._config.ai.groq.apiKey}` }
+                headers: { 'Authorization': `Bearer ${groqKey}` }
             });
             if (resp.ok) {
                 const elapsed = performance.now() - start;
+                // Si Groq es más rápido que Gemini (o Gemini falló), la elegimos
                 if (elapsed < bestTime) {
                     bestTime = elapsed;
                     bestProvider = 'groq';
                 }
+            } else {
+                console.warn('Groq responded with status', resp.status);
             }
-        } catch(e) { console.warn('Groq ping falló', e); }
+        } catch (e) {
+            console.warn('Groq ping error:', e);
+        }
     }
 
-    if (bestTime === Infinity) {
-        showToast('Ninguna API respondió. Revisa las claves en config.json', true);
-        btn.disabled = false;
+    btn.disabled = false;
+
+    if (!bestProvider) {
+        showToast('❌ Ninguna API respondió. Revisa las claves en config.json', true);
         btn.textContent = 'PROBAR PING AHORA';
         return;
     }
 
-    // Aplicar el mejor
+    // Aplicar la mejor
     if (bestProvider === 'gemini') {
-        AI_API_KEY = window._config.ai.gemini.apiKey;
+        AI_API_KEY = geminiKey;
         CURRENT_AI_PROVIDER = 'gemini';
         CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
     } else {
-        AI_API_KEY = window._config.ai.groq.apiKey;
+        AI_API_KEY = groqKey;
         CURRENT_AI_PROVIDER = 'groq';
         CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
     }
+
     state.apiKey = AI_API_KEY;
     state.aiProvider = CURRENT_AI_PROVIDER;
     state.aiModel = CURRENT_AI_MODEL;
     updateAIProviderUI();
-    showToast(`IA seleccionada: ${bestProvider.toUpperCase()} (${bestTime.toFixed(0)}ms)`, false);
-    btn.disabled = false;
+    
+    // Mostrar el resultado con el tiempo
+    const tiempo = bestTime.toFixed(0);
+    showToast(`✅ ${bestProvider.toUpperCase()} seleccionada (${tiempo}ms)`, false);
     btn.textContent = 'PROBAR PING AHORA';
 }
-// ================== FIN SELECTOR DE PROVEEDOR IA ==================    
+    // ================== FIN SELECTOR DE PROVEEDOR IA ==================    
     function openChatView() {
         document.getElementById('chat-fullscreen-view').style.display = 'flex';
         document.getElementById('chat-iframe').src = CHAT_OVERLAY_URL;
