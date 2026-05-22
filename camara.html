@@ -679,18 +679,75 @@ function saveTTSKeysFromUI() {
         localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
     }
 }
+
+ async function pingProvider(provider) {
+    if (!window._config) await loadConfig();
+    const key = provider === 'gemini' 
+        ? window._config?.ai?.gemini?.apiKey 
+        : window._config?.ai?.groq?.apiKey;
+    if (!key) return false;
+
+    try {
+        if (provider === 'gemini') {
+            const resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }) }
+            );
+            return resp.ok;
+        } else {
+            const resp = await fetch('https://api.groq.com/openai/v1/models', {
+                headers: { 'Authorization': `Bearer ${key}` }
+            });
+            return resp.ok;
+        }
+    } catch (e) {
+        return false;
+    }
+}   
     
 // ================== INICIO SELECTOR DE PROVEEDOR IA ==================
 function setAIProvider(mode) {
-    aiProviderMode = mode;
-    localStorage.setItem('obr_ai_provider_mode', mode);
-    updateAIProviderUI();
+    // Si ya está en ese modo, no hacer nada
+    if (aiProviderMode === mode) return;
+
+    // Si es un modo fijo (gemini/groq), verificar que la API funcione
     if (mode === 'gemini' || mode === 'groq') {
-        CURRENT_AI_PROVIDER = mode;
+        pingProvider(mode).then(ok => {
+            if (!ok) {
+                showToast(`⚠️ ${mode.toUpperCase()} no responde. Verifica la clave o la red.`, true);
+                // Volver al modo anterior (o a auto si se desea)
+                updateAIProviderUI();
+                return;
+            }
+            // Conexión exitosa: aplicar el nuevo modo
+            aiProviderMode = mode;
+            localStorage.setItem('obr_ai_provider_mode', mode);
+            CURRENT_AI_PROVIDER = mode;
+            // Actualizar la clave y modelo según el proveedor
+            if (mode === 'gemini') {
+                AI_API_KEY = window._config?.ai?.gemini?.apiKey || AI_API_KEY;
+                CURRENT_AI_MODEL = window._config?.ai?.gemini?.model || 'gemini-2.0-flash';
+            } else {
+                AI_API_KEY = window._config?.ai?.groq?.apiKey || AI_API_KEY;
+                CURRENT_AI_MODEL = window._config?.ai?.groq?.model || 'llama-3.2-11b-vision-preview';
+            }
+            state.apiKey = AI_API_KEY;
+            state.aiProvider = CURRENT_AI_PROVIDER;
+            state.aiModel = CURRENT_AI_MODEL;
+            showToast(`✅ Conectado a ${mode.toUpperCase()}`, false);
+            updateAIProviderUI();
+        });
+    } else {
+        // Modo AUTO: simplemente guardar
+        aiProviderMode = mode;
+        localStorage.setItem('obr_ai_provider_mode', mode);
+        updateAIProviderUI();
     }
 }
-
 function updateAIProviderUI() {
+    const statusEl = document.getElementById('ai-provider-status');
+if (statusEl) statusEl.textContent = aiProviderMode === 'auto' ? 'AUTO (usar ping)' : `Verificando ${aiProviderMode}...`;
     const btnAuto = document.getElementById('ai-btn-auto');
     const btnGem = document.getElementById('ai-btn-gem');
     const btnGroq = document.getElementById('ai-btn-groq');
