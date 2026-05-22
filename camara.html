@@ -3754,6 +3754,14 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     };
     
     window.resetTTSFilters = function() { ['obr_tts_f_rate', 'obr_tts_f_pitch'].forEach(k => localStorage.removeItem(k)); loadTTSFilterPanel(); showToast('FILTROS RESETEADOS — USANDO CÓDIGO BASE'); };
+    // Ejecutar loadConfig apenas el DOM esté listo
+if (document.readyState === 'complete') {
+    loadConfig();
+} else {
+    window.addEventListener('load', async () => {
+        await loadConfig();
+    });
+}
 
     window.initApp = initApp;
     window.retryCam = retryCam;
