@@ -709,12 +709,16 @@ async function pingProvider(provider) {
                 if (retryResp.ok) return { success: true, time: performance.now() - start, model: 'gemini-2.0-flash' };
             }
             return { success: false, time: -1, model: null };
-        } else {
-            // Groq: obtener lista de modelos primero
-            const modelsResp = await fetch('https://api.groq.com/openai/v1/models', {
+                } else {
+            // Groq: solo listar modelos (rápido y no interfiere)
+            const resp = await fetch('https://api.groq.com/openai/v1/models', {
                 headers: { 'Authorization': `Bearer ${key}` }
             });
-            if (!modelsResp.ok) return { success: false, time: -1, model: null };
+            if (resp.ok) {
+                return { success: true, time: performance.now() - start, model: null }; // model: null para no sobrescribir
+            }
+            return { success: false, time: -1, model: null };
+        }
             
             const data = await modelsResp.json();
             const modelList = data.data.map(m => m.id);
@@ -873,12 +877,12 @@ async function testAIPing() {
     }
 
     // Aplicar la mejor
-        if (bestProvider === 'gemini') {
+            if (bestProvider === 'gemini') {
         AI_API_KEY = window._config.ai.gemini.apiKey;
-        CURRENT_AI_MODEL = geminiResult.model || window._config.ai.gemini.model || 'gemini-2.0-flash';
+        CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
     } else {
         AI_API_KEY = window._config.ai.groq.apiKey;
-        CURRENT_AI_MODEL = groqResult.model || window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+        CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
     }
     state.apiKey = AI_API_KEY;
     state.aiProvider = CURRENT_AI_PROVIDER;
