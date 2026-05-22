@@ -505,8 +505,9 @@ async function loadConfig() {
         window._config = config;
         console.log('✅ Configuración cargada correctamente', config);
         return true;
-    } catch (e) {
+      } catch (e) {
         console.warn('⚠️ Usando configuración por defecto:', e);
+        window._config = {}; // ← añadir esto
         return false;
     }
 }
