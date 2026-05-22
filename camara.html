@@ -510,8 +510,7 @@ async function loadConfig() {
         window._config = {}; // ← añadir esto
         return false;
     }
-}
-    
+}    
 // ================== FIN FUNCIÓN loadConfig ==================
 
     const RTM_TOKEN = undefined;
@@ -614,6 +613,8 @@ let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
     let isPareidoliaActive = false;
     let pareidoliaInterval = null;
     let lastPareidoliaCall = 0;
+    let lastGeminiPingTime = null;   // ms o null si nunca se probó
+    let lastGroqPingTime  = null;
     let currentAiText = "";
     let currentAiImage = null;
     let currentAiImgEl = null;
@@ -680,51 +681,71 @@ function saveTTSKeysFromUI() {
     }
 }
 
- async function pingProvider(provider) {
+async function pingProvider(provider) {
     if (!window._config) await loadConfig();
     const key = provider === 'gemini' 
         ? window._config?.ai?.gemini?.apiKey 
         : window._config?.ai?.groq?.apiKey;
-    if (!key) return false;
+    if (!key) return { success: false, time: -1 };
 
+    const start = performance.now();
     try {
         if (provider === 'gemini') {
             const resp = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }) }
+                  body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] }) }
             );
-            return resp.ok;
+            if (resp.ok) {
+                const elapsed = performance.now() - start;
+                return { success: true, time: elapsed };
+            } else {
+                // Si es 429, esperamos y reintentamos una vez
+                if (resp.status === 429) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    const retryResp = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+                        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] }) }
+                    );
+                    if (retryResp.ok) {
+                        return { success: true, time: performance.now() - start };
+                    }
+                }
+                return { success: false, time: -1 };
+            }
         } else {
             const resp = await fetch('https://api.groq.com/openai/v1/models', {
                 headers: { 'Authorization': `Bearer ${key}` }
             });
-            return resp.ok;
+            if (resp.ok) {
+                return { success: true, time: performance.now() - start };
+            }
+            return { success: false, time: -1 };
         }
     } catch (e) {
-        return false;
+        return { success: false, time: -1 };
     }
-}   
+}
     
 // ================== INICIO SELECTOR DE PROVEEDOR IA ==================
 function setAIProvider(mode) {
-    // Si ya está en ese modo, no hacer nada
     if (aiProviderMode === mode) return;
 
-    // Si es un modo fijo (gemini/groq), verificar que la API funcione
     if (mode === 'gemini' || mode === 'groq') {
-        pingProvider(mode).then(ok => {
-            if (!ok) {
+        pingProvider(mode).then(result => {
+            if (!result.success) {
                 showToast(`⚠️ ${mode.toUpperCase()} no responde. Verifica la clave o la red.`, true);
-                // Volver al modo anterior (o a auto si se desea)
                 updateAIProviderUI();
                 return;
             }
-            // Conexión exitosa: aplicar el nuevo modo
+            // Guardar tiempo
+            if (mode === 'gemini') lastGeminiPingTime = result.time;
+            else lastGroqPingTime = result.time;
+
             aiProviderMode = mode;
             localStorage.setItem('obr_ai_provider_mode', mode);
             CURRENT_AI_PROVIDER = mode;
-            // Actualizar la clave y modelo según el proveedor
             if (mode === 'gemini') {
                 AI_API_KEY = window._config?.ai?.gemini?.apiKey || AI_API_KEY;
                 CURRENT_AI_MODEL = window._config?.ai?.gemini?.model || 'gemini-2.0-flash';
@@ -735,11 +756,10 @@ function setAIProvider(mode) {
             state.apiKey = AI_API_KEY;
             state.aiProvider = CURRENT_AI_PROVIDER;
             state.aiModel = CURRENT_AI_MODEL;
-            showToast(`✅ Conectado a ${mode.toUpperCase()}`, false);
+            showToast(`✅ Conectado a ${mode.toUpperCase()} (${result.time.toFixed(0)}ms)`, false);
             updateAIProviderUI();
         });
     } else {
-        // Modo AUTO: simplemente guardar
         aiProviderMode = mode;
         localStorage.setItem('obr_ai_provider_mode', mode);
         updateAIProviderUI();
@@ -750,8 +770,9 @@ function updateAIProviderUI() {
     const btnGem = document.getElementById('ai-btn-gem');
     const btnGroq = document.getElementById('ai-btn-groq');
     const pingBtn = document.getElementById('btn-ping-ai');
-    const statusEl = document.getElementById('ai-provider-status'); // ← única declaración
+    const statusEl = document.getElementById('ai-provider-status');
 
+    // Clases de los botones (igual que antes)
     if (btnAuto) btnAuto.className = aiProviderMode === 'auto' ?
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20' :
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
@@ -763,12 +784,28 @@ function updateAIProviderUI() {
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
 
     if (pingBtn) pingBtn.style.display = aiProviderMode === 'auto' ? 'block' : 'none';
+
+    // Construir texto de estado con colores para cada proveedor
     if (statusEl) {
-        if (aiProviderMode === 'auto') {
-            statusEl.textContent = CURRENT_AI_PROVIDER ? `AUTO (actual: ${CURRENT_AI_PROVIDER.toUpperCase()})` : 'AUTO (sin probar)';
-        } else {
-            statusEl.textContent = `MODO: ${aiProviderMode.toUpperCase()}`;
-        }
+        let html = '';
+        const gemColor = lastGeminiPingTime === null ? 'gray' :
+                         lastGeminiPingTime === -1 ? 'red' :
+                         lastGeminiPingTime > 1000 ? 'orange' :
+                         lastGeminiPingTime > 400 ? 'yellow' : 'green';
+        const groqColor = lastGroqPingTime === null ? 'gray' :
+                          lastGroqPingTime === -1 ? 'red' :
+                          lastGroqPingTime > 1000 ? 'orange' :
+                          lastGroqPingTime > 400 ? 'yellow' : 'green';
+
+        const gemText = lastGeminiPingTime === null ? '---' :
+                        lastGeminiPingTime === -1 ? '❌' :
+                        `${lastGeminiPingTime.toFixed(0)}ms`;
+        const groqText = lastGroqPingTime === null ? '---' :
+                         lastGroqPingTime === -1 ? '❌' :
+                         `${lastGroqPingTime.toFixed(0)}ms`;
+
+        html = `<span style="color:${gemColor}">Gemini: ${gemText}</span> | <span style="color:${groqColor}">Groq: ${groqText}</span>`;
+        statusEl.innerHTML = html;
     }
 }
     
@@ -778,7 +815,6 @@ async function testAIPing() {
     const btn = document.getElementById('btn-ping-ai');
     if (!btn) return;
 
-    // Evitar saturar las APIs (mínimo 5 segundos entre pings)
     if (window._lastPing && Date.now() - window._lastPing < 5000) {
         showToast('⏳ Espera 5 segundos entre pruebas', true);
         return;
@@ -788,83 +824,50 @@ async function testAIPing() {
     btn.disabled = true;
     btn.textContent = 'MIDIENDO…';
 
-    // Asegurarnos de que tenemos la configuración cargada
-    if (!window._config) await loadConfig();
-
     let bestProvider = null;
     let bestTime = Infinity;
 
-    // --- Probar Gemini ---
-    const geminiKey = window._config?.ai?.gemini?.apiKey;
-    if (geminiKey) {
-        const start = performance.now();
-        try {
-            const resp = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
-                }
-            );
-            if (resp.ok) {
-                bestTime = performance.now() - start;
-                bestProvider = 'gemini';
-            } else {
-                console.warn('Gemini responded with status', resp.status);
-            }
-        } catch (e) {
-            console.warn('Gemini ping error:', e);
-        }
+    // Probar Gemini
+    const geminiResult = await pingProvider('gemini');
+    lastGeminiPingTime = geminiResult.success ? geminiResult.time : -1;
+    if (geminiResult.success && geminiResult.time < bestTime) {
+        bestTime = geminiResult.time;
+        bestProvider = 'gemini';
     }
 
-    // --- Probar Groq ---
-    const groqKey = window._config?.ai?.groq?.apiKey;
-    if (groqKey) {
-        const start = performance.now();
-        try {
-            const resp = await fetch('https://api.groq.com/openai/v1/models', {
-                headers: { 'Authorization': `Bearer ${groqKey}` }
-            });
-            if (resp.ok) {
-                const elapsed = performance.now() - start;
-                // Si Groq es más rápido que Gemini (o Gemini falló), la elegimos
-                if (elapsed < bestTime) {
-                    bestTime = elapsed;
-                    bestProvider = 'groq';
-                }
-            } else {
-                console.warn('Groq responded with status', resp.status);
-            }
-        } catch (e) {
-            console.warn('Groq ping error:', e);
-        }
+    // Probar Groq
+    const groqResult = await pingProvider('groq');
+    lastGroqPingTime = groqResult.success ? groqResult.time : -1;
+    if (groqResult.success && groqResult.time < bestTime) {
+        bestTime = groqResult.time;
+        bestProvider = 'groq';
     }
 
     btn.disabled = false;
+    btn.textContent = 'PROBAR PING AHORA';
 
     if (!bestProvider) {
         showToast('❌ Ninguna API respondió. Revisa las claves en config.json', true);
-        btn.textContent = 'PROBAR PING AHORA';
+        updateAIProviderUI(); // para mostrar los colores en los tiempos
         return;
     }
 
     // Aplicar la mejor
     if (bestProvider === 'gemini') {
-        AI_API_KEY = geminiKey;
+        AI_API_KEY = window._config.ai.gemini.apiKey;
         CURRENT_AI_PROVIDER = 'gemini';
         CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
     } else {
-        AI_API_KEY = groqKey;
+        AI_API_KEY = window._config.ai.groq.apiKey;
         CURRENT_AI_PROVIDER = 'groq';
         CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
     }
-
     state.apiKey = AI_API_KEY;
     state.aiProvider = CURRENT_AI_PROVIDER;
     state.aiModel = CURRENT_AI_MODEL;
     updateAIProviderUI();
-    
+    showToast(`✅ ${bestProvider.toUpperCase()} seleccionada (${bestTime.toFixed(0)}ms)`, false);
+}    
     // Mostrar el resultado con el tiempo
     const tiempo = bestTime.toFixed(0);
     showToast(`✅ ${bestProvider.toUpperCase()} seleccionada (${tiempo}ms)`, false);
