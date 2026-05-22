@@ -686,7 +686,7 @@ async function pingProvider(provider) {
     const key = provider === 'gemini' 
         ? window._config?.ai?.gemini?.apiKey 
         : window._config?.ai?.groq?.apiKey;
-    if (!key) return { success: false, time: -1 };
+    if (!key) return { success: false, time: -1, model: null };
 
     const start = performance.now();
     try {
@@ -697,34 +697,54 @@ async function pingProvider(provider) {
                   body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] }) }
             );
             if (resp.ok) {
-                const elapsed = performance.now() - start;
-                return { success: true, time: elapsed };
-            } else {
-                // Si es 429, esperamos y reintentamos una vez
-                if (resp.status === 429) {
-                    await new Promise(r => setTimeout(r, 2000));
-                    const retryResp = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-                        { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] }) }
-                    );
-                    if (retryResp.ok) {
-                        return { success: true, time: performance.now() - start };
-                    }
-                }
-                return { success: false, time: -1 };
+                return { success: true, time: performance.now() - start, model: 'gemini-2.0-flash' };
             }
+            if (resp.status === 429) {
+                await new Promise(r => setTimeout(r, 2000));
+                const retryResp = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+                    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] }) }
+                );
+                if (retryResp.ok) return { success: true, time: performance.now() - start, model: 'gemini-2.0-flash' };
+            }
+            return { success: false, time: -1, model: null };
         } else {
-            const resp = await fetch('https://api.groq.com/openai/v1/models', {
+            // Groq: obtener lista de modelos primero
+            const modelsResp = await fetch('https://api.groq.com/openai/v1/models', {
                 headers: { 'Authorization': `Bearer ${key}` }
             });
-            if (resp.ok) {
-                return { success: true, time: performance.now() - start };
+            if (!modelsResp.ok) return { success: false, time: -1, model: null };
+            
+            const data = await modelsResp.json();
+            const modelList = data.data.map(m => m.id);
+            // Buscar un modelo disponible (igual que en validateAndSaveKey)
+            const workingModel = modelList.find(m => m.includes('scout')) 
+                              || modelList.find(m => m.includes('vision')) 
+                              || modelList.find(m => m.includes('llama')) 
+                              || modelList[0];
+            if (!workingModel) return { success: false, time: -1, model: null };
+
+            // Ahora hacemos una solicitud real a chat/completions con "HOLA"
+            const chatResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: workingModel,
+                    messages: [{ role: "user", content: "HOLA" }],
+                    max_tokens: 10
+                })
+            });
+            if (chatResp.ok) {
+                return { success: true, time: performance.now() - start, model: workingModel };
             }
-            return { success: false, time: -1 };
+            return { success: false, time: -1, model: null };
         }
     } catch (e) {
-        return { success: false, time: -1 };
+        return { success: false, time: -1, model: null };
     }
 }
     
@@ -746,12 +766,12 @@ function setAIProvider(mode) {
             aiProviderMode = mode;
             localStorage.setItem('obr_ai_provider_mode', mode);
             CURRENT_AI_PROVIDER = mode;
-            if (mode === 'gemini') {
+                        if (mode === 'gemini') {
                 AI_API_KEY = window._config?.ai?.gemini?.apiKey || AI_API_KEY;
-                CURRENT_AI_MODEL = window._config?.ai?.gemini?.model || 'gemini-2.0-flash';
+                CURRENT_AI_MODEL = result.model || window._config?.ai?.gemini?.model || 'gemini-2.0-flash';
             } else {
                 AI_API_KEY = window._config?.ai?.groq?.apiKey || AI_API_KEY;
-                CURRENT_AI_MODEL = window._config?.ai?.groq?.model || 'llama-3.2-11b-vision-preview';
+                CURRENT_AI_MODEL = result.model || window._config?.ai?.groq?.model || 'llama-3.2-11b-vision-preview';
             }
             state.apiKey = AI_API_KEY;
             state.aiProvider = CURRENT_AI_PROVIDER;
@@ -853,14 +873,12 @@ async function testAIPing() {
     }
 
     // Aplicar la mejor
-    if (bestProvider === 'gemini') {
+        if (bestProvider === 'gemini') {
         AI_API_KEY = window._config.ai.gemini.apiKey;
-        CURRENT_AI_PROVIDER = 'gemini';
-        CURRENT_AI_MODEL = window._config.ai.gemini.model || 'gemini-2.0-flash';
+        CURRENT_AI_MODEL = geminiResult.model || window._config.ai.gemini.model || 'gemini-2.0-flash';
     } else {
         AI_API_KEY = window._config.ai.groq.apiKey;
-        CURRENT_AI_PROVIDER = 'groq';
-        CURRENT_AI_MODEL = window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
+        CURRENT_AI_MODEL = groqResult.model || window._config.ai.groq.model || 'llama-3.2-11b-vision-preview';
     }
     state.apiKey = AI_API_KEY;
     state.aiProvider = CURRENT_AI_PROVIDER;
