@@ -868,11 +868,6 @@ async function testAIPing() {
     updateAIProviderUI();
     showToast(`✅ ${bestProvider.toUpperCase()} seleccionada (${bestTime.toFixed(0)}ms)`, false);
 }    
-    // Mostrar el resultado con el tiempo
-    const tiempo = bestTime.toFixed(0);
-    showToast(`✅ ${bestProvider.toUpperCase()} seleccionada (${tiempo}ms)`, false);
-    btn.textContent = 'PROBAR PING AHORA';
-}
     // ================== FIN SELECTOR DE PROVEEDOR IA ==================    
     function openChatView() {
         document.getElementById('chat-fullscreen-view').style.display = 'flex';
