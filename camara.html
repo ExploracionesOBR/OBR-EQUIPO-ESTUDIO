@@ -317,7 +317,7 @@
         <div id="keys-modal" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
             <div style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
                 <h3 style="color:#ff3333; margin-bottom:10px; font-family:Orbitron;">🔑 CLAVES UNIFICADAS</h3>
-                <textarea id="keys-input" placeholder="Pega aquí la cadena: API1|API2|CHAT" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
+                <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
                 <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
                 <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
                 <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
@@ -471,57 +471,6 @@ let AGORA_TOKEN  = '';
 let AGORA_CHANNEL = 'obr-estudio';
 let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 
-// ================== INICIO FUNCIÓN loadConfig ==================
-async function loadConfig() {
-    try {
-        const resp = await fetch('./config.json');
-        if (!resp.ok) throw new Error('No se pudo cargar config.json');
-        const config = await resp.json();
-        
-        // Agora
-        if (config.agora) {
-            if (config.agora.appId) AGORA_APP_ID = config.agora.appId;
-            if (config.agora.token) AGORA_TOKEN = config.agora.token;
-            if (config.agora.channel) AGORA_CHANNEL = config.agora.channel;
-        }
-
-        // IA: siempre cargar Gemini y Groq disponibles
-            if (config.ai?.gemini?.apiKey) {
-            AI_API_KEY = config.ai.gemini.apiKey;
-            CURRENT_AI_PROVIDER = 'gemini';
-            CURRENT_AI_MODEL = config.ai.gemini.model || 'gemini-2.0-flash';
-        } else if (config.ai?.groq?.apiKey) {
-            AI_API_KEY = config.ai.groq.apiKey;
-            CURRENT_AI_PROVIDER = 'groq';
-            CURRENT_AI_MODEL = config.ai.groq.model || 'llama-3.2-11b-vision-preview';
-        }
-        state.apiKey = AI_API_KEY;   // ← añadir esta línea
-        // Si no hay ninguna, AI_API_KEY se queda con el valor por defecto (vacío o de state)
-
-        // TTS
-        if (config.tts?.elevenlabsKey) {
-            ELEVENLABS_API_KEY = config.tts.elevenlabsKey;
-            localStorage.setItem('obr_el_key', ELEVENLABS_API_KEY);
-        }
-        if (config.tts?.voicerssKey) {
-            VOICERSS_API_KEY = config.tts.voicerssKey;
-            localStorage.setItem('obr_voicerss_key', VOICERSS_API_KEY);
-        }
-
-        // Chat
-        if (config.chat?.overlayUrl) {
-            CHAT_OVERLAY_URL = config.chat.overlayUrl;
-        }
-
-        window._config = config;
-        console.log('✅ Configuración cargada correctamente', config);
-        return true;
-      } catch (e) {
-        console.warn('⚠️ Usando configuración por defecto:', e);
-        window._config = {}; // ← añadir esto
-        return false;
-    }
-}    
 // ================== FIN FUNCIÓN loadConfig ==================
 
     const RTM_TOKEN = undefined;
@@ -553,12 +502,13 @@ const VOICERSS_API_KEY   = "776fa230d3574c4097aa44e4e3c3949c";
 // ── Manejo de la cadena unificada de claves ──
 function parseAndStoreKeys(chain) {
     const parts = chain.split('|');
-    if (parts.length < 3) return false; // mínimo 3: gemini, groq, chat
+    if (parts.length < 3) return false;
     const [geminiKey, groqKey, chatUrl] = parts.map(p => p.trim());
-    if (geminiKey) localStorage.setItem('obr_ai_key', geminiKey);
-    if (groqKey) localStorage.setItem('obr_groq_key', groqKey);
-    if (chatUrl) localStorage.setItem('obr_chat_url', chatUrl);
-    return true;
+    let count = 0;
+    if (geminiKey) { localStorage.setItem('obr_ai_key', geminiKey); count++; }
+    if (groqKey)   { localStorage.setItem('obr_groq_key', groqKey); count++; }
+    if (chatUrl)   { localStorage.setItem('obr_chat_url', chatUrl); count++; }
+    return count; // devuelve cuántas claves se guardaron correctamente
 }
 
 function loadKeysFromStorage() {
@@ -720,7 +670,7 @@ function saveTTSKeysFromUI() {
 }
 
 async function pingProvider(provider) {
-    if (!window._config) await loadConfig();
+    if (!window._config) loadKeysFromStorage();
     const key = provider === 'gemini' 
         ? window._config?.ai?.gemini?.apiKey 
         : window._config?.ai?.groq?.apiKey;
@@ -2264,18 +2214,17 @@ window.addEventListener('load', async () => {
 
     btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
 
-    btnSave.addEventListener('click', () => {
-        const chain = input.value.trim();
-        if (!chain) { status.textContent = '❌ Cadena vacía'; return; }
-        const ok = parseAndStoreKeys(chain);
-        if (ok) {
-            loadKeysFromStorage(); // recargar las variables globales
-            status.textContent = '✅ Claves guardadas correctamente';
-            setTimeout(() => { modal.style.display = 'none'; }, 1500);
-        } else {
-            status.textContent = '❌ Formato incorrecto (se necesitan 5 campos)';
-        }
-    });
+btnSave.addEventListener('click', () => {
+    const chain = input.value.trim();
+    if (!chain) { status.textContent = '❌ Cadena vacía'; return; }
+    const count = parseAndStoreKeys(chain);
+    if (count > 0) {
+        loadKeysFromStorage();
+        status.textContent = `✅ ${count} de 3 claves guardadas.`;
+        setTimeout(() => { modal.style.display = 'none'; }, 1500);
+    } else {
+        status.textContent = '❌ Formato incorrecto (se necesitan 3 campos separados por |)';
+    }
 });
 
     function showCamError(title, msg, steps) {
@@ -3922,7 +3871,6 @@ if (document.readyState === 'complete') {
     loadConfig();
 } else {
     window.addEventListener('load', async () => {
-        await loadConfig();
     });
 }
 
