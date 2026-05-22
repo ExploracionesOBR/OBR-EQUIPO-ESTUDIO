@@ -746,14 +746,12 @@ function setAIProvider(mode) {
     }
 }
 function updateAIProviderUI() {
-    const statusEl = document.getElementById('ai-provider-status');
-if (statusEl) statusEl.textContent = aiProviderMode === 'auto' ? 'AUTO (usar ping)' : `Verificando ${aiProviderMode}...`;
     const btnAuto = document.getElementById('ai-btn-auto');
     const btnGem = document.getElementById('ai-btn-gem');
     const btnGroq = document.getElementById('ai-btn-groq');
     const pingBtn = document.getElementById('btn-ping-ai');
-    const statusEl = document.getElementById('ai-provider-status');
-    
+    const statusEl = document.getElementById('ai-provider-status'); // ← única declaración
+
     if (btnAuto) btnAuto.className = aiProviderMode === 'auto' ?
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20' :
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
@@ -763,15 +761,17 @@ if (statusEl) statusEl.textContent = aiProviderMode === 'auto' ? 'AUTO (usar pin
     if (btnGroq) btnGroq.className = aiProviderMode === 'groq' ?
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20' :
         'flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
-    
+
     if (pingBtn) pingBtn.style.display = aiProviderMode === 'auto' ? 'block' : 'none';
     if (statusEl) {
-        statusEl.textContent = aiProviderMode === 'auto' 
-            ? (CURRENT_AI_PROVIDER ? `AUTO (actual: ${CURRENT_AI_PROVIDER.toUpperCase()})` : 'AUTO (sin probar)')
-            : `MODO: ${aiProviderMode.toUpperCase()}`;
+        if (aiProviderMode === 'auto') {
+            statusEl.textContent = CURRENT_AI_PROVIDER ? `AUTO (actual: ${CURRENT_AI_PROVIDER.toUpperCase()})` : 'AUTO (sin probar)';
+        } else {
+            statusEl.textContent = `MODO: ${aiProviderMode.toUpperCase()}`;
+        }
     }
 }
-
+    
 async function testAIPing() {
     if (aiProviderMode !== 'auto') return;
 
