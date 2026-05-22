@@ -15,11 +15,11 @@
   "ai": {
     "provider": "gemini",
     "gemini": {
-      "apiKey": "AIzaSyDi_WOD-TlauGldFhSlxhuvE2zZNRlFtWc",
+      "apiKey": "AIzaSyCanLqg3P-_v747RI1lA5wUzeW7BxHfFOY",
       "model": "gemini-2.0-flash"
     },
     "groq": {
-      "apiKey": "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",
+      "apiKey": "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",
       "model": "llama-3.2-11b-vision-preview"
     }
   },
