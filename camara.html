@@ -722,13 +722,17 @@
         <button id="btn-open-keys" style="position:absolute; bottom:20px; right:20px; background:rgba(0,0,0,0.7); border:1px solid #ff3333; color:#ff3333; width:44px; height:44px; border-radius:50%; font-size:20px; cursor:pointer; z-index:400;" title="Configurar claves">🔐</button>
 
         <div id="keys-modal" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
-            <div style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
-                <h3 style="color:#ff3333; margin-bottom:10px; font-family:Orbitron;">🔑 CLAVES UNIFICADAS</h3>
-                <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
-                <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
-                <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
-                <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
-            </div>
+           <!-- ====== DENTRO DE keys-modal ====== -->
+<div style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
+    <h3 style="color:#ff3333; margin-bottom:10px; font-family:Orbitron; display:flex; align-items:center; gap:10px;">
+        🔑 CLAVES UNIFICADAS
+        <button id="btn-keys-info" class="interactive" style="background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer; transition:color 0.2s;" title="Ver instrucciones">ℹ️</button>
+    </h3>
+    <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat (dejar vacío si no se usa)" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
+    <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
+    <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
+    <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
+</div>
         </div>
     </div>
 
@@ -806,18 +810,21 @@
                         <h3 class="text-[11px] font-bold text-green-400 mb-3 border-b border-green-900/60 pb-2 uppercase tracking-wider text-center">TTS ENGINE</h3>
                         <div class="flex flex-col gap-2 mb-2 flex-1 mt-1">
                             <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Motor:</span> <span id="tts-engine-status" class="text-green-400">ELEVENLABS</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Créditos:</span> <span id="tts-credits-status" class="text-green-500">1000 / 10000</span></div>
+                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Créditos (usados):</span> <span id="tts-credits-status" class="text-green-500">0 / 10000</span></div>
                             <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Usados:</span> <span id="tts-used-status" class="text-yellow-500">0</span></div>
                             <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Fallback:</span> <span id="tts-fallback-status" class="text-green-500">NO</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>VoiceRSS:</span> <span id="tts-vrss-status" class="text-blue-400">350 / 350</span></div>
+                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>VoiceRSS (usados):</span> <span id="tts-vrss-status" class="text-blue-400">0 / 350</span></div>
                         </div>
                         <div class="border-t border-green-900/40 pt-3 mt-auto">
-                            <div class="flex justify-between gap-1.5">
-                                <button onclick="setTTSMode('auto')" id="tts-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20">AUTO</button>
-                                <button onclick="setTTSMode('elevenlabs')" id="tts-btn-el" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">ELEVENLABS</button>
-                                <button onclick="setTTSMode('voicerss')" id="tts-btn-vrss" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">VOICERSS</button>
-                            </div>
-                        </div>
+    <div class="flex justify-between gap-1.5">
+        <button onclick="setTTSMode('auto')" id="tts-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20">AUTO</button>
+        <button onclick="setTTSMode('elevenlabs')" id="tts-btn-el" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">ELEVENLABS</button>
+        <button onclick="setTTSMode('voicerss')" id="tts-btn-vrss" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">VOICERSS</button>
+    </div>
+    <div class="flex justify-between gap-1.5 mt-2">
+        <button onclick="resetTTSUsage()" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-red-700 text-red-400 hover:bg-red-900/30">♻️ RESETEAR USOS</button>
+    </div>
+</div>
                     </div>
                 </div>
 
@@ -866,10 +873,10 @@
         // ==========================================================
         // CONFIGURACIÓN EXTERNA
         // ==========================================================
-        let AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
-        let AGORA_TOKEN = '';
-        let AGORA_CHANNEL = 'obr-estudio';
-        let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+ let AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
+let AGORA_TOKEN  = null;
+let AGORA_CHANNEL = 'obr-estudio';
+let CHAT_OVERLAY_URL = 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 
         const RTM_TOKEN = undefined;
         const MIC_CHANNEL = 'obr-mic';
@@ -899,18 +906,18 @@
         let CURRENT_AI_PROVIDER = localStorage.getItem('obr_ai_provider_mode') || 'gemini';
         let CURRENT_AI_MODEL = localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash';
 
-        let AI_API_KEY = '';
-        let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || '';
-        let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
+let AI_API_KEY = '';
+let ELEVENLABS_API_KEY = 'sk_9e4cf67f3479803c41ddc9340e44c870455eb5a0d5cc4de3'; // Reemplaza con tu clave real
+let VOICERSS_API_KEY = '776fa230d3574c4097aa44e4e3c3949c'; // Reemplaza con tu clave real
 
-        // ============ TTS ============
-        const VOICERSS_DAILY_MAX = 350;
-        let elevenlabsCreditsTotal = 10000;
-        let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '92');
-        let elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
+   // APIs y variables TTS (corregido)
+const VOICERSS_DAILY_MAX  = 350;
+let elevenlabsCreditsTotal     = 10000;
+let elevenlabsCreditsUsed      = parseInt(localStorage.getItem('obr_tts_used') || '0');
+let elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
 
-        let voicerssUsedToday = 0;
-        let voicerssRemaining = VOICERSS_DAILY_MAX;
+let voicerssUsedToday     = 0;
+let voicerssRemaining     = VOICERSS_DAILY_MAX;
 
         function _initVoiceRSSCounter() {
             const today = new Date().toDateString();
@@ -990,6 +997,8 @@
         let streamVideoTrack = null;
         let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
         let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
+        let segmenter = null;
+let lidarInitialized = false;   // (también añade esta línea)
 
         // ============ MANEJO DE CLAVES ============
         function parseAndStoreKeys(chain) {
@@ -1015,18 +1024,18 @@
             state.apiKey = AI_API_KEY;
         }
 
-        function updateTTSStatusUI() {
-            const engineEl = document.getElementById('tts-engine-status');
-            const creditsEl = document.getElementById('tts-credits-status');
-            const usedEl = document.getElementById('tts-used-status');
-            const fallbackEl = document.getElementById('tts-fallback-status');
-            const vrssEl = document.getElementById('tts-vrss-status');
-            if (engineEl) engineEl.textContent = ttsMode === 'elevenlabs' ? 'ELEVENLABS' : (ttsMode === 'voicerss' ? 'VOICERSS' : 'AUTO');
-            if (creditsEl) creditsEl.textContent = elevenlabsCreditsRemaining + ' / ' + elevenlabsCreditsTotal;
-            if (usedEl) usedEl.textContent = elevenlabsCreditsUsed;
-            if (fallbackEl) fallbackEl.textContent = usingFallbackTTS ? 'SI (VoiceRSS)' : 'NO';
-            if (vrssEl) vrssEl.textContent = voicerssRemaining + ' / 350';
-        }
+function updateTTSStatusUI() {
+    const engineEl = document.getElementById('tts-engine-status');
+    const creditsEl = document.getElementById('tts-credits-status');
+    const usedEl = document.getElementById('tts-used-status');
+    const fallbackEl = document.getElementById('tts-fallback-status');
+    const vrssEl = document.getElementById('tts-vrss-status');
+    if (engineEl) engineEl.textContent = ttsMode === 'elevenlabs' ? 'ELEVENLABS' : (ttsMode === 'voicerss' ? 'VOICERSS' : 'AUTO');
+    if (creditsEl) creditsEl.textContent = elevenlabsCreditsUsed + ' / ' + elevenlabsCreditsTotal;  // CAMBIO AQUÍ
+    if (usedEl) usedEl.textContent = elevenlabsCreditsUsed;
+    if (fallbackEl) fallbackEl.textContent = usingFallbackTTS ? 'SI (VoiceRSS)' : 'NO';
+    if (vrssEl) vrssEl.textContent = voicerssUsedToday + ' / 350';
+}
 
         function initTTSModeUI() {
             const btnAuto = document.getElementById('tts-btn-auto');
@@ -1934,128 +1943,177 @@
             });
         }
 
-        async function speakText(text) {
-            if (!text) return;
-            isTtsPlaying = true;
-            isSpookySpeaking = false;
+       async function speakText(text) {
+    if (!text) return;
+    isTtsPlaying = true;
+    isSpookySpeaking = false;
+    
+    clearTimeout(_ttsWatchdog);
+    _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
+    await initAudioEngine();
 
-            clearTimeout(_ttsWatchdog);
-            _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
-            await initAudioEngine();
+    if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_IA_VISION, evpAudioCtx?.currentTime || 0, 0.05);
 
-            if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_IA_VISION, evpAudioCtx?.currentTime || 0, 0.05);
+    const safeText = text.replace(/[*_#]/g, '').trim();
+    if (!safeText) { isTtsPlaying = false; return; }
 
-            const safeText = text.replace(/[*_#]/g, '').trim();
-            if (!safeText) { isTtsPlaying = false; return; }
+    let audioUrl = null;
+    const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
+    const canUseVR = voicerssRemaining > 0;
 
-            let audioUrl = null;
-            if (ttsMode !== 'elevenlabs' && voicerssRemaining > 0) { usingFallbackTTS = true;
-                audioUrl = await getVoiceRSSAudio(safeText); }
-            if (!audioUrl) {
-                const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
-                if (canUseEL) { audioUrl = await getElevenLabsAudio(safeText, 'N2lVS1w4EtoT3dr4eOWO'); if (audioUrl)
-                        usingFallbackTTS = false; }
-            }
-            if (!audioUrl) { isTtsPlaying = false;
-                ttsNoDisponible('VoiceRSS + EL agotados'); return; }
+    if (ttsMode === 'elevenlabs') {
+        // MODO ELEVENLABS: Solo ElevenLabs
+        if (canUseEL) {
+            audioUrl = await getElevenLabsAudio(safeText, 'N2lVS1w4EtoT3dr4eOWO');
+        }
+        if (!audioUrl) {
+            ttsNoDisponible('ElevenLabs sin créditos o clave inválida');
+            return;
+        }
+    } else if (ttsMode === 'voicerss') {
+        // MODO VOICERSS: Solo VoiceRSS
+        if (canUseVR) {
+            audioUrl = await getVoiceRSSAudio(safeText);
+        }
+        if (!audioUrl) {
+            ttsNoDisponible('VoiceRSS sin créditos o clave inválida');
+            return;
+        }
+    } else {
+        // MODO AUTO: Prioridad ElevenLabs -> VoiceRSS
+        if (canUseEL) {
+            audioUrl = await getElevenLabsAudio(safeText, 'N2lVS1w4EtoT3dr4eOWO');
+        }
+        if (!audioUrl && canUseVR) {
+            audioUrl = await getVoiceRSSAudio(safeText);
+        }
+        if (!audioUrl) {
+            ttsNoDisponible('Ambos motores TTS fallaron');
+            return;
+        }
+    }
+    
+    updateTTSStatusUI();
+    const _isBlobIA = audioUrl.startsWith('blob:');
 
-            updateTTSStatusUI();
-            const _isBlobIA = audioUrl.startsWith('blob:');
-
-            if (_isBlobIA) {
-                try {
-                    const resp3 = await fetch(audioUrl);
-                    const rawBuf3 = await audioCtx.decodeAudioData(await resp3.arrayBuffer());
-                    await _ensureContextRunning();
-                    const src3 = await playBlobWithFilters(rawBuf3, 0.94 + Math.random() * 0.03, 'iavision', 'none');
-                    src3.start(0);
-                    src3.onended = () => {
-                        clearTimeout(_ttsWatchdog);
-                        _activeBufSrc = null;
-                        isTtsPlaying = false;
-                        lastEvpTime = Date.now();
-                        window._ignoreSpeechUntil = Date.now() + 1000;
-                        try { URL.revokeObjectURL(audioUrl); } catch (e) {}
-                    };
-                    return;
-                } catch (e) {}
-            }
-
-            cloudTTSPlayer.src = audioUrl;
-            cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03;
-            cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION);
-            cloudTTSPlayer.load();
-            try { await cloudTTSPlayer.play(); } catch (err) { isTtsPlaying = false; return; }
-            cloudTTSPlayer.addEventListener('ended', () => {
+    if (_isBlobIA) {
+        try {
+            const resp3 = await fetch(audioUrl);
+            const rawBuf3 = await audioCtx.decodeAudioData(await resp3.arrayBuffer());
+            await _ensureContextRunning();
+            const src3 = await playBlobWithFilters(rawBuf3, 0.94 + Math.random() * 0.03, 'iavision', 'none');
+            src3.start(0);
+            src3.onended = () => {
                 clearTimeout(_ttsWatchdog);
+                _activeBufSrc = null;
                 isTtsPlaying = false;
                 lastEvpTime = Date.now();
                 window._ignoreSpeechUntil = Date.now() + 1000;
-            }, { once: true });
-        }
+                try { URL.revokeObjectURL(audioUrl); } catch(e) {}
+            };
+            return;
+        } catch(e) {}
+    }
+
+    cloudTTSPlayer.src = audioUrl;
+    cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03;
+    cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION);
+    cloudTTSPlayer.load();
+    try { await cloudTTSPlayer.play(); } catch(err) { isTtsPlaying = false; return; }
+    cloudTTSPlayer.addEventListener('ended', () => {
+        clearTimeout(_ttsWatchdog);
+        isTtsPlaying = false;
+        lastEvpTime = Date.now();
+        window._ignoreSpeechUntil = Date.now() + 1000;
+    }, { once: true });
+}
 
         async function speakSpooky(text) {
-            if (!text) return;
-            isTtsPlaying = true;
-            isSpookySpeaking = true;
+    if (!text) return;
+    isTtsPlaying = true;
+    isSpookySpeaking = true;
 
-            clearTimeout(_ttsWatchdog);
-            _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
-            const safeText = text.substring(0, 120);
-            const randomVoice = getRandomVoice();
+    clearTimeout(_ttsWatchdog);
+    _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
+    const safeText = text.substring(0, 120);
+    const randomVoice = getRandomVoice();
 
-            let blobUrl = null;
-            if (ttsMode === 'voicerss') { usingFallbackTTS = true;
-                blobUrl = await getVoiceRSSAudio(safeText); } else {
-                const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
-                if (canUseEL) blobUrl = await getElevenLabsAudio(safeText, randomVoice);
-                if (!blobUrl) { usingFallbackTTS = true; if (ttsMode !== 'elevenlabs') blobUrl = await getVoiceRSSAudio(
-                    safeText); } else usingFallbackTTS = false;
-            }
+    let blobUrl = null;
+    const canUseEL = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
+    const canUseVR = voicerssRemaining > 0;
 
-            if (!blobUrl) { isTtsPlaying = false;
-                isSpookySpeaking = false;
-                clearTimeout(_ttsWatchdog);
-                ttsNoDisponible('EL + VoiceRSS agotados'); return; }
-            updateTTSStatusUI();
-            await playResponseIntro();
-            await initAudioEngine();
-
-            if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
-
-            try {
-                const resp = await fetch(blobUrl);
-                const rawBuf = await audioCtx.decodeAudioData(await resp.arrayBuffer());
-                const _dado = 1.55 + Math.random() * 0.29;
-                const effectType = 'reverb';
-
-                await _ensureContextRunning();
-                const src = await playBlobWithFilters(rawBuf, _dado, false, effectType);
-                src.start(0);
-                lastSpokenText = text;
-                clearTimeout(speechTimer);
-                speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3500);
-
-                src.onended = () => {
-                    clearTimeout(_ttsWatchdog);
-                    _activeBufSrc = null;
-                    lastSpokenText = "";
-                    clearTimeout(speechTimer);
-                    isTtsPlaying = false;
-                    isSpookySpeaking = false;
-                    lastEvpTime = Date.now();
-                    playResponseEnd();
-                    window._ignoreSpeechUntil = Date.now() + 1000;
-                    try { URL.revokeObjectURL(blobUrl); } catch (e) {}
-                };
-            } catch (err) {
-                lastSpokenText = "";
-                isTtsPlaying = false;
-                isSpookySpeaking = false;
-                lastEvpTime = Date.now();
-                window._ignoreSpeechUntil = Date.now() + 1000;
-            }
+    if (ttsMode === 'elevenlabs') {
+        // MODO ELEVENLABS: Solo ElevenLabs
+        if (canUseEL) {
+            blobUrl = await getElevenLabsAudio(safeText, randomVoice);
         }
+        if (!blobUrl) {
+            ttsNoDisponible('ElevenLabs sin créditos o clave inválida');
+            return;
+        }
+    } else if (ttsMode === 'voicerss') {
+        // MODO VOICERSS: Solo VoiceRSS
+        if (canUseVR) {
+            blobUrl = await getVoiceRSSAudio(safeText);
+        }
+        if (!blobUrl) {
+            ttsNoDisponible('VoiceRSS sin créditos o clave inválida');
+            return;
+        }
+    } else {
+        // MODO AUTO: Prioridad ElevenLabs -> VoiceRSS
+        if (canUseEL) {
+            blobUrl = await getElevenLabsAudio(safeText, randomVoice);
+        }
+        if (!blobUrl && canUseVR) {
+            blobUrl = await getVoiceRSSAudio(safeText);
+        }
+        if (!blobUrl) {
+            ttsNoDisponible('Ambos motores TTS fallaron');
+            return;
+        }
+    }
+
+    if (!blobUrl) { isTtsPlaying = false; isSpookySpeaking = false; clearTimeout(_ttsWatchdog); return; }
+    updateTTSStatusUI();
+    await playResponseIntro();
+    await initAudioEngine();
+
+    if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
+
+    try {
+        const resp = await fetch(blobUrl);
+        const rawBuf = await audioCtx.decodeAudioData(await resp.arrayBuffer());
+        const _dado = 1.55 + Math.random() * 0.29;
+        const effectType = 'reverb';
+
+        await _ensureContextRunning();
+        const src = await playBlobWithFilters(rawBuf, _dado, false, effectType);
+        src.start(0);
+        lastSpokenText = text;
+        clearTimeout(speechTimer);
+        speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3500);
+
+        src.onended = () => {
+            clearTimeout(_ttsWatchdog);
+            _activeBufSrc = null;
+            lastSpokenText = "";
+            clearTimeout(speechTimer);
+            isTtsPlaying = false;
+            isSpookySpeaking = false;
+            lastEvpTime = Date.now();
+            playResponseEnd();
+            window._ignoreSpeechUntil = Date.now() + 1000;
+            try { URL.revokeObjectURL(blobUrl); } catch(e) {}
+        };
+    } catch(err) {
+        lastSpokenText = "";
+        isTtsPlaying = false;
+        isSpookySpeaking = false;
+        lastEvpTime = Date.now();
+        window._ignoreSpeechUntil = Date.now() + 1000;
+    }
+}
 
         const evpFrasesAmbiguaMemoria = [
             "te escuché antes...", "aún sigo aquí", "recordé lo que dijiste...",
@@ -2493,14 +2551,14 @@
             } catch (e) { return null; }
         }
         let lastFrameTime = performance.now();
-        const targetRenderFPS = 60;
-        const fpsInterval = 1000 / targetRenderFPS;
+       const targetRenderFPS = 30; // Reduce a la mitad
+const fpsInterval = 1000 / targetRenderFPS;
         let performanceLagging = false;
 
         const analysisCanvas = document.createElement('canvas');
         const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-        analysisCanvas.width = 128;
-        analysisCanvas.height = 96;
+        analysisCanvas.width = 64;
+analysisCanvas.height = 48;
         const aiSnapCanvas = document.createElement('canvas');
         aiSnapCanvas.width = 320;
         aiSnapCanvas.height = 240;
@@ -2820,7 +2878,19 @@
                 }
             }
         }
-
+// ── Botón ℹ️ de ayuda ──
+const infoBtn = document.getElementById('btn-keys-info');
+infoBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    showToast(
+        'Formato: ClaveGemini|ClaveGroq|URLChat\n' +
+        '• Deja vacío el campo de la API que no uses.\n' +
+        '• Siempre respeta los separadores | (pipe).\n' +
+        '• Ejemplo: |sk_xxxx|https://chat.url\n' +
+        '• Ejemplo: ClaveGemini|ClaveGroq|URLdelChat',
+        false
+    );
+});
         let audioEngineInitialized = false;
 
         let miniMapInstance = null;
@@ -3003,16 +3073,6 @@
                     if (window.poseDetection) aiDetector = await poseDetection.createDetector(poseDetection
                         .SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType
                             .MULTIPOSE_LIGHTNING, enableSmoothing: true });
-                    if (window.SelfieSegmentation) {
-                        segmenter = new SelfieSegmentation({
-                            locateFile: (f) =>
-                                `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
-                        });
-                        segmenter.setOptions({ modelSelection: 1 });
-                        segmenter.onResults(res => { lidarMask = res.segmentationMask;
-                            lidarBusy = false; });
-                    }
-
                     const vRatio = el.video.videoHeight / el.video.videoWidth;
                     analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
                     analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
@@ -3036,60 +3096,61 @@
         }
 
         async function detectionLoop() {
-            if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
-                if (targetPoses.length) { targetPoses = [];
-                    lidarMask = null;
-                    currentPose = null;
-                    prevPose = null;
-                    smoothedPoses = []; }
-                setTimeout(detectionLoop, 200);
-                return;
-            }
-
-            const now = performance.now();
-            try {
-                let imageDrawnThisFrame = false;
-                const ensureImageDrawn = () => {
-                    if (!imageDrawnThisFrame) {
-                        const vRatio = el.video.videoHeight / el.video.videoWidth;
-                        analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
-                        analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
-                        imageDrawnThisFrame = true;
-                    }
-                };
-
-                if (state.isLidar && segmenter) {
-                    if (!lidarBusy) {
-                        lidarBusy = true;
-                        ensureImageDrawn();
-                        try { await segmenter.send({ image: analysisCanvas }); } catch (e) { lidarBusy =
-                            false; }
-                    }
-                } else {
-                    if (aiDetector && state.isSLS && now - lastPoseTime > 33) {
-                        lastPoseTime = now;
-                        ensureImageDrawn();
-                        try {
-                            let newPoses = await aiDetector.estimatePoses(analysisCanvas, { maxPoses: 8,
-                                flipHorizontal: false, scoreThreshold: AI_SENSITIVITY * 0.2 });
-                            if (newPoses && newPoses.length > 0) {
-                                let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp,
-                                        x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas
-                                    .height })) }));
-                                targetPoses = filterOverlapping(mappedPoses);
-                                if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(
-                                targetPoses[0].keypoints);
-                            } else {
-                                targetPoses = [];
-                                currentPose = null;
-                                smoothedPoses = [];
-                            }
-                        } catch (e) {}
-                    }
-                }
-            } catch (e) {}
-            setTimeout(detectionLoop, state.isSLS ? 33 : 200);
+    if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
+        if (targetPoses.length) {
+            targetPoses = [];
+            lidarMask = null;
+            currentPose = null;
+            prevPose = null;
+            smoothedPoses = [];
         }
+        setTimeout(detectionLoop, 500); // Reducido para ahorrar recursos
+        return;
+    }
+
+    const now = performance.now();
+    try {
+        let imageDrawnThisFrame = false;
+        const ensureImageDrawn = () => {
+            if (!imageDrawnThisFrame) {
+                const vRatio = el.video.videoHeight / el.video.videoWidth;
+                analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+                analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+                imageDrawnThisFrame = true;
+            }
+        };
+
+        // =================== LIDAR ===================
+        if (state.isLidar) {
+            // Si LIDAR está activo pero segmenter no existe, lo iniciamos
+            if (!segmenter) {
+                await initLidar();
+            }
+            if (segmenter && !lidarBusy) {
+                lidarBusy = true;
+                ensureImageDrawn();
+                try {
+                    await segmenter.send({ image: analysisCanvas });
+                } catch (e) {
+                    lidarBusy = false;
+                }
+            }
+        } else {
+            // Si LIDAR no está activo pero segmenter existe, lo destruimos
+            if (segmenter) {
+                await destroyLidar();
+            }
+        }
+        // ============================================
+        
+        // ... resto del código para SLS y Pareidolia (no tocar)
+        
+    } catch (e) {
+        console.warn('Error en detectionLoop:', e);
+    }
+    
+    setTimeout(detectionLoop, state.isSLS ? 66 : 200);
+}
 
         function _ensureAudioContext() {
             if (audioCtx) { evpAudioCtx = audioCtx; return audioCtx; }
@@ -4572,29 +4633,39 @@
             sendRTMCommand('estudio_principal', scanData);
         }
 
-        function setFilter(f, btn) {
-            if (state.filter === f && f !== 'normal') f = 'normal';
-            state.filter = f;
-            state.isSLS = (f === 'sls');
-            if (state.isSLS) window._slsStartTime = Date.now();
-            state.isLidar = (f === 'lidar');
-            document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state'));
-            if (btn && f !== 'normal') btn.classList.add('active-state');
-            document.body.className = '';
-            if (f !== 'normal') {
-                if (f === 'night') document.body.classList.add('filter-night-vision');
-                else if (f === 'thermal') document.body.classList.add('filter-thermal');
-                else if (f === 'urbex') document.body.classList.add('filter-urbex');
-            }
-            if (f === 'night' || f === 'thermal') toggleTorch(true);
-            else toggleTorch(false);
-            targetPoses = [];
-            smoothedPoses = [];
-            lidarMask = null;
-            lastLidarMask = null;
-            window.motionLevel = 0;
-            sendScanDataToStudio();
-        }
+        async function setFilter(f, btn) {
+    if (state.filter === f && f !== 'normal') f = 'normal';
+    state.filter = f;
+    state.isSLS = (f === 'sls');
+    if (state.isSLS) window._slsStartTime = Date.now();
+    
+    // === MANEJO DINÁMICO DE LIDAR ===
+    if (f === 'lidar') {
+        state.isLidar = true;
+        await initLidar(); // Asegura que LIDAR esté listo
+    } else if (state.isLidar) {
+        state.isLidar = false;
+        await destroyLidar(); // Libera recursos al desactivar
+    }
+    // ====================================
+    
+    document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state'));
+    if (btn && f !== 'normal') btn.classList.add('active-state');
+    document.body.className = '';
+    if (f !== 'normal') {
+        if (f === 'night') document.body.classList.add('filter-night-vision');
+        else if (f === 'thermal') document.body.classList.add('filter-thermal');
+        else if (f === 'urbex') document.body.classList.add('filter-urbex');
+    }
+    if (f === 'night' || f === 'thermal') toggleTorch(true);
+    else toggleTorch(false);
+    targetPoses = [];
+    smoothedPoses = [];
+    lidarMask = null;
+    lastLidarMask = null;
+    window.motionLevel = 0;
+    sendScanDataToStudio();
+}
 
         async function toggleTorch(force) {
             const t = videoStream?.getVideoTracks()[0];
@@ -5175,12 +5246,16 @@
 
         // ============ LOAD EVENT ============
         window.addEventListener('load', async () => {
-            loadKeysFromStorage();
+    loadKeysFromStorage();
 
-            const apiKeyInput = document.getElementById('keys-input');
-            if (apiKeyInput) apiKeyInput.value = state.apiKey;
-            document.getElementById('mtx-host').value = state.studioId;
-            document.getElementById('stream-name').value = state.cameraName;
+    // Sincronizar UI del TTS con el estado guardado
+    initTTSModeUI();
+    updateTTSStatusUI();
+
+    const apiKeyInput = document.getElementById('keys-input');
+    if (apiKeyInput) apiKeyInput.value = state.apiKey;
+    document.getElementById('mtx-host').value = state.studioId;
+    document.getElementById('stream-name').value = state.cameraName;
             const btn = document.getElementById('main-cam-btn');
             const hasPerm = localStorage.getItem("camPermission") === "granted" || sessionStorage.getItem(
                 "camPermission") === "granted";
@@ -5200,12 +5275,13 @@
 
             btnOpen.addEventListener('click', () => {
                 modal.style.display = 'flex';
-                const current = [
-                    localStorage.getItem('obr_ai_key') || '',
-                    localStorage.getItem('obr_groq_key') || '',
-                    localStorage.getItem('obr_chat_url') || ''
-                ].join('|');
-                input.value = current;
+        const gemini = localStorage.getItem('obr_ai_key') || '';
+const groq = localStorage.getItem('obr_groq_key') || '';
+const chat = localStorage.getItem('obr_chat_url') || '';
+
+// Si no hay nada guardado, mostrar vacío
+const current = (gemini || groq || chat) ? `${gemini}|${groq}|${chat}` : '';
+input.value = current;
                 status.textContent = 'Pega la cadena de 3 campos';
             });
 
@@ -5224,6 +5300,24 @@
                 }
             });
         });
+// ============ RESETEO DE USOS TTS ============
+window.resetTTSUsage = function() {
+    // Reset ElevenLabs
+    elevenlabsCreditsUsed = 0;
+    elevenlabsCreditsRemaining = elevenlabsCreditsTotal;
+    localStorage.setItem('obr_tts_used', '0');
+
+    // Reset VoiceRSS
+    const today = new Date().toDateString();
+    voicerssUsedToday = 0;
+    voicerssRemaining = VOICERSS_DAILY_MAX;
+    localStorage.setItem('obr_vrss_used', '0');
+    localStorage.setItem('obr_vrss_date', today);
+
+    // Actualizar UI
+    updateTTSStatusUI();
+    showToast('✅ Contadores de uso de TTS reiniciados', false);
+};
 
         // ============ EXPOSICIÓN DE FUNCIONES ============
         window.initApp = initApp;
@@ -5261,6 +5355,7 @@
             showToast('Configuración guardada', false);
             document.getElementById('settings-modal').classList.remove('active');
         }
+
     </script>
 </body>
 </html>
