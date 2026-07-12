@@ -1091,12 +1091,12 @@
                 const statusInterval = setInterval(() => {
                     if (rtmClient.isLoggedIn) {
                         // Publicar a directores
-                        rtmClient.publish('director_*', JSON.stringify({ 
-                            type: 'dock-status', 
-                            activeMedia: activeMediaRef.current, 
-                            assetStatus: assetStatusRef.current,
-                            forceCam1Audio: forceCam1AudioRef.current
-                        }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
+rtmClient.publish('director_*', JSON.stringify({ 
+    type: 'dock-status', 
+    activeMedia: activeMediaRef.current, 
+    assetStatus: assetStatusRef.current,
+    forceCam1Audio: forceCam1AudioRef.current
+}), { channelType: 'USER', customType: 'command' }).catch(()=>{});
                         rtmClient.publish('director_*', JSON.stringify({ type: 'obs-state-update', state: obsStateRef.current }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
                         rtmClient.publish('director_*', JSON.stringify({ type: 'camera-list-update', cameras: getSerializableCameras() }), { channelType: 'USER', customType: 'command' }).catch(()=>{});
 
