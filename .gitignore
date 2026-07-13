@@ -1,1 +1,2 @@
-Nothing needs to be added to .gitignore since only a source file (camara.html) was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+# No build artifacts, dependencies, or temp files detected in changes
+# Only source/config files present, so no additional ignores needed
