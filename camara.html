@@ -1,875 +1,1181 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.5 (AGORA UNIFICADO)</title>
-    
-    <link rel="icon" type="image/png" href="obr-logo.png">
-    <link rel="apple-touch-icon" href="obr-logo.png">
-    <meta name="theme-color" content="#000000">
-    <link rel="manifest" href="data:application/manifest+json,%7B%7D">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- ========== LIBRERÍAS IA ========== -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CAMARA OBR PRO v7.5 (AGORA UNIFICADO)</title>
 
-    <!-- ========== AGORA SDKs (RTC + RTM) ========== -->
-    <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
-    <script src="https://cdn.agora.io/sdk/release/AgoraRTM.js"></script>
+  <link rel="icon" type="image/png" href="obr-logo.png">
+  <link rel="apple-touch-icon" href="obr-logo.png">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="data:application/manifest+json,%7B%7D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
 
-    <style>
-        /* ==================== ESTILOS GLOBALES ==================== */
-        * {
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-            box-sizing: border-box;
-            outline: none;
-            touch-action: none;
-        }
-        :root { --hud-primary: #ff3333; }
-        body {
-            background: #000;
-            overflow: hidden;
-            font-family: 'Orbitron', sans-serif;
-            width: 100vw;
-            height: 100vh;
-            margin: 0;
-            padding: 0;
-        }
-        
-        /* ==================== CONTENEDORES PRINCIPALES ==================== */
-        #main-view-area {
-            position: absolute;
-            inset: 0;
-            background: #000;
-            overflow: hidden;
-            transition: filter 0.2s;
-            transform: translateZ(0);
-            will-change: filter;
-        }
-        #zoom-container {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            transform-origin: center center;
-            transition: transform 0.2s ease-out;
-            will-change: transform;
-            backface-visibility: hidden;
-        }
-        #shared-video-element {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-            opacity: 1;
-            pointer-events: none;
-        }
-        #sls-canvas {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 2;
-            pointer-events: none;
-            opacity: 1 !important;
-            visibility: visible;
-            display: block;
-        }
-        #audio-canvas {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 60;
-        }
-        #heatmap-buffer,
-        #lidar-buffer { display: none; }
-        #ui-layer {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 70;
-        }
-        .interactive { pointer-events: auto; cursor: pointer; }
-        
-        /* ==================== ORIENTATION LOCK ==================== */
-        #orientation-lock {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            background: #000;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        @media (orientation: portrait) {
-            #orientation-lock { display: flex; }
-            #ui-layer { display: none; }
-        }
-        body.mic-sender-mode #orientation-lock { display: none !important; }
+  <!-- ========== LIBRERÍAS IA ========== -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
-        /* ==================== FILTROS DE CÁMARA ==================== */
-        body.filter-night-vision #shared-video-element {
-            filter: grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0);
-        }
-        body.filter-night-vision #main-view-area::after {
-            content: " ";
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 10;
-            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 3px);
-            background-size: 100% 3px;
-        }
-        body.filter-thermal #shared-video-element {
-            filter: invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2);
-        }
-        body.filter-urbex #shared-video-element {
-            filter: invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85);
-        }
+  <!-- ========== AGORA SDKs (RTC + RTM) ========== -->
+  <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
+  <script src="https://cdn.agora.io/sdk/release/AgoraRTM.js"></script>
 
-        .hud-burn-hidden { display: none; }
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-        /* ==================== TALLY BORDER ==================== */
-        #tally-border {
-            position: absolute;
-            inset: 0;
-            border: 0px solid transparent;
-            transition: all 0.3s;
-            z-index: 50;
-            pointer-events: none;
-        }
-        #tally-border.preview { border: 4px solid #800000; opacity: 0.6; }
-        #tally-border.online {
-            border: 6px solid #00ff00;
-            box-shadow: inset 0 0 20px rgba(0,255,0,0.5), 0 0 15px rgba(0,255,0,0.5);
-            opacity: 1;
-        }
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-        /* ==================== AI SCAN OVERLAY ==================== */
-        #ai-scan-overlay {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 55;
-            display: none;
-            overflow: hidden;
-        }
-        .scan-box {
-            position: absolute;
-            border: 2px solid rgba(255, 0, 0, 0.9);
-            box-shadow: 0 0 15px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(255, 0, 0, 0.3);
-            background: rgba(255, 0, 0, 0.1);
-            opacity: 0;
-            animation: targetScan 0.6s ease-out forwards;
-        }
-        @keyframes targetScan {
-            0% { transform: scale(1.3); opacity: 0; border-color: white; }
-            10% { opacity: 1; border-color: red; }
-            80% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(0.8); opacity: 0; }
-        }
+  <style>
+    /* ==================== ESTILOS GLOBALES ==================== */
+    * {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      box-sizing: border-box;
+      outline: none;
+      touch-action: none;
+    }
 
-        /* ==================== TOASTS ==================== */
-        #toast-container {
-            position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            z-index: 9999;
-            pointer-events: none;
-            width: 80%;
-            align-items: center;
-        }
-        .toast {
-            background: rgba(0, 30, 0, 0.9);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 10px 20px;
-            border-radius: 4px;
-            font-family: 'Share Tech Mono';
-            font-size: 14px;
-            text-shadow: 0 0 5px #00ff00;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.8);
-            animation: slideDown 0.3s ease-out;
-            pointer-events: auto;
-            text-align: center;
-        }
-        .toast.error {
-            border-color: red;
-            color: red;
-            background: rgba(30, 0, 0, 0.9);
-            text-shadow: 0 0 5px red;
-        }
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+    :root {
+      --hud-primary: #ff3333;
+    }
 
-        /* ==================== MENÚS LATERALES ==================== */
-        .menu-container {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 100;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .menu-container.visible { opacity: 1; pointer-events: auto; }
-        .menu-container.left-side { left: 8px; }
-        .menu-container.right-side { right: 8px; }
-        .menu-btn {
-            width: 58px;
-            height: 58px;
-            border: 2px solid var(--hud-primary);
-            border-radius: 50%;
-            background: rgba(0,0,0,0.88);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--hud-primary);
-            font-size: 1.3rem;
-            backdrop-filter: blur(4px);
-            transition: all 0.15s;
-            cursor: pointer;
-            pointer-events: auto;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .menu-btn:active { transform: scale(0.88); background: rgba(255,51,51,0.25); }
-        .menu-btn.active-state { background: white; border-color: white; color: black; box-shadow: 0 0 20px white; }
-        @media (max-height: 520px) {
-            .menu-container { gap: 5px; }
-            .menu-btn { width: 46px; height: 46px; font-size: 1rem; }
-            .menu-label { display: none; }
-        }
-        .menu-label {
-            font-size: 0.58rem;
-            color: white;
-            text-align: center;
-            margin-top: 3px;
-            font-family: 'Share Tech Mono';
-            background: rgba(0,0,0,0.65);
-            border-radius: 4px;
-            padding: 1px 3px;
-        }
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Orbitron', sans-serif;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
 
-        /* ==================== TELEMETRÍA ==================== */
-        #telemetry-container {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 2px;
-            pointer-events: none;
-            z-index: 150;
-        }
-        .stat-row {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 10px;
-            color: rgba(0, 255, 0, 0.7);
-            text-shadow: 1px 1px 0px black;
-            background: rgba(0,0,0,0.3);
-            padding: 1px 4px;
-            border-radius: 2px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .signal-bars {
-            display: flex;
-            align-items: flex-end;
-            gap: 2px;
-            height: 12px;
-            width: 16px;
-        }
-        .bar {
-            width: 4px;
-            background: #333;
-            border-radius: 1px;
-            transition: background 0.3s;
-        }
-        .bar:nth-child(1) { height: 33%; }
-        .bar:nth-child(2) { height: 66%; }
-        .bar:nth-child(3) { height: 100%; }
-        .signal-level-0 .bar { background: #333; }
-        .signal-level-3 .bar { background: #00ff00; }
+    /* ==================== CONTENEDORES PRINCIPALES ==================== */
+    #main-view-area {
+      position: absolute;
+      inset: 0;
+      background: #000;
+      overflow: hidden;
+      transition: filter 0.2s;
+      transform: translateZ(0);
+      will-change: filter;
+    }
 
-        .mic-toggle { pointer-events: auto; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
-        .mic-toggle.active { opacity: 1; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+    #zoom-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: center center;
+      transition: transform 0.2s ease-out;
+      will-change: transform;
+      backface-visibility: hidden;
+    }
 
-        /* ==================== MEDIA CONTROLS ==================== */
-        #local-media-controls {
-            position: absolute;
-            bottom: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 15px;
-            z-index: 80;
-            pointer-events: auto;
-            opacity: 0.6;
-            transition: opacity 0.3s;
-        }
-        #local-media-controls:hover { opacity: 1.0; }
-        .media-btn {
-            background: rgba(0,0,0,0.15);
-            border: 1px solid rgba(255,255,255,0.05);
-            color: rgba(255,255,255,0.3);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            backdrop-filter: blur(2px);
-        }
-        .media-btn:active { transform: scale(0.9); }
-        .media-btn:hover {
-            background: rgba(255,51,51,0.3);
-            border-color: rgba(255,51,51,0.5);
-            color: rgba(255,255,255,0.8);
-        }
+    #shared-video-element {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+      opacity: 1;
+      pointer-events: none;
+    }
 
-        /* ==================== LOCAL MEDIA OVERLAY ==================== */
-        #local-media-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 1000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.5s ease-in-out;
-            opacity: 0;
-            pointer-events: none;
-        }
-        #local-media-overlay.active { display: flex; opacity: 1; pointer-events: auto; }
-        #local-video-player {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        #local-video-player.banner-mode {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 25%;
-            object-fit: cover;
-            opacity: 0.95;
-        }
-        .soft-mask {
-            mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%), linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
-            mask-composite: intersect;
-            -webkit-mask-image: -webkit-linear-gradient(top, transparent 0%, black 15%, black 85%, transparent 100%), -webkit-linear-gradient(left, transparent 0%, black 10%, black 90%, transparent 100%);
-            -webkit-mask-composite: source-in;
-        }
+    #sls-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 1 !important;
+      visibility: visible;
+      display: block;
+    }
 
-        /* ==================== LOADING SCREEN ==================== */
-        #loading {
-            position: fixed;
-            inset: 0;
-            z-index: 200;
-            background: rgba(0,0,0,0.95);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-bg {
-            position: fixed;
-            inset: 0;
-            z-index: 300;
-            background: rgba(0,0,0,0.95);
-            display: none;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-bg.active { display: flex; }
-        #progress-bar {
-            height: 100%;
-            width: 0%;
-            background: var(--hud-primary);
-            transition: width 0.3s;
-        }
+    #audio-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 60;
+    }
 
-        /* ==================== ZOOM INDICATOR ==================== */
-        #zoom-target-indicator {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            border: 2px solid #00ff00;
-            border-radius: 50%;
-            transform: translate(-50%, -50%) scale(0.5);
-            opacity: 0;
-            pointer-events: none;
-            z-index: 80;
-            transition: transform 0.3s, opacity 0.3s;
-        }
-        #zoom-target-indicator.active {
-            transform: translate(-50%, -50%) scale(1);
-            opacity: 1;
-        }
+    #heatmap-buffer,
+    #lidar-buffer {
+      display: none;
+    }
 
-        /* ==================== MINI MAPA ==================== */
-        #map-container-slot {
-            position: absolute;
-            left: 30px;
-            bottom: 45px;
-            z-index: 85;
-            width: 150px;
-            height: 150px;
-            border: none;
-            background: transparent;
-            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.5s ease-out;
-            transform-origin: center center;
-            mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%), linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
-            -webkit-mask-image: -webkit-linear-gradient(top, transparent 0%, black 20%, black 80%, transparent 100%), -webkit-linear-gradient(left, transparent 0%, black 20%, black 80%, transparent 100%);
-            mask-composite: intersect;
-            -webkit-mask-composite: source-in;
-        }
-        #map-container-slot.map-hidden { transform: scale(0); opacity: 0; pointer-events: none; }
-        #map-container-slot.map-visible { transform: scale(1); opacity: 1; pointer-events: auto; }
+    #ui-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 70;
+    }
 
-       #mini-map {
-    height: 100%;
-    width: 100%;
-    filter: brightness(85%) contrast(110%) saturate(95%);
-    /* ELIMINADO: transform: scale(1.15); transform-origin: center; */
-    background: transparent;
-}
-        .map-pulse {
-            width: 10px;
-            height: 10px;
-            background: red;
-            border-radius: 50%;
-            position: relative;
-        }
-        .map-pulse::after {
-            content: "";
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: red;
-            animation: mapPulseAnim 1.5s infinite;
-            opacity: 0.6;
-        }
-        @keyframes mapPulseAnim {
-            0% { transform: scale(1); opacity: 0.6; }
-            100% { transform: scale(3.5); opacity: 0; }
-        }
+    .interactive {
+      pointer-events: auto;
+      cursor: pointer;
+    }
 
-        #mini-map-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
-            mask-image: radial-gradient(circle at center, transparent 40%, black 80%);
-            -webkit-mask-image: radial-gradient(circle at center, transparent 40%, black 80%);
-        }
-        #mini-map-glitch {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 998;
-            opacity: 0;
-        }
-        #mini-map-glitch.hard {
-            opacity: 0.4;
-            background: rgba(255,255,255,0.05);
-            animation: mapGlitchHard 0.05s infinite;
-        }
-        @keyframes mapGlitchHard {
-            0% { transform: translate(0,0); }
-            20% { transform: translate(-3px,2px); }
-            40% { transform: translate(3px,-2px); }
-            60% { transform: translate(-2px,1px); }
-            80% { transform: translate(2px,-1px); }
-            100% { transform: translate(0,0); }
-        }
+    /* ==================== ORIENTATION LOCK ==================== */
+    #orientation-lock {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
 
-        /* ==================== SCROLLBAR PERSONALIZADO ==================== */
-        .custom-scrollbar,
-        .custom-scrollbar * { touch-action: pan-y !important; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(20,0,0,0.6);
-            border-radius: 4px;
-            border: 1px solid rgba(255,0,0,0.2);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255,0,0,0.6);
-            border-radius: 4px;
-            border: 1px solid #ff3333;
-            box-shadow: inset 0 0 5px rgba(255,0,0,0.8);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ff0000; }
+    @media (orientation: portrait) {
+      #orientation-lock {
+        display: flex;
+      }
 
-        .modal-bg input,
-        #loading input { -webkit-user-select: auto !important; user-select: auto !important; }
+      #ui-layer {
+        display: none;
+      }
+    }
 
-        .pulsing { animation: pulse 1.5s infinite; }
-        @keyframes pulse {
-            0% { opacity: 0.5; transform: scale(0.95); }
-            50% { opacity: 1; transform: scale(1.05); }
-            100% { opacity: 0.5; transform: scale(0.95); }
-        }
+    body.mic-sender-mode #orientation-lock {
+      display: none !important;
+    }
 
-        #chat-fullscreen-view {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 10000;
-            background: #000;
-            flex-direction: column;
-        }
-    </style>
+    /* ==================== FILTROS DE CÁMARA ==================== */
+    body.filter-night-vision #shared-video-element {
+      filter: grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0);
+    }
+
+    body.filter-night-vision #main-view-area::after {
+      content: " ";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0px, rgba(0, 0, 0, 0.2) 1px, transparent 1px, transparent 3px);
+      background-size: 100% 3px;
+    }
+
+    body.filter-thermal #shared-video-element {
+      filter: invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2);
+    }
+
+    body.filter-urbex #shared-video-element {
+      filter: invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85);
+    }
+
+    .hud-burn-hidden {
+      display: none;
+    }
+
+    /* ==================== TALLY BORDER ==================== */
+    #tally-border {
+      position: absolute;
+      inset: 0;
+      border: 0px solid transparent;
+      transition: all 0.3s;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    #tally-border.preview {
+      border: 4px solid #800000;
+      opacity: 0.6;
+    }
+
+    #tally-border.online {
+      border: 6px solid #00ff00;
+      box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.5), 0 0 15px rgba(0, 255, 0, 0.5);
+      opacity: 1;
+    }
+
+    /* ==================== AI SCAN OVERLAY ==================== */
+    #ai-scan-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 55;
+      display: none;
+      overflow: hidden;
+    }
+
+    .scan-box {
+      position: absolute;
+      border: 2px solid rgba(255, 0, 0, 0.9);
+      box-shadow: 0 0 15px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(255, 0, 0, 0.3);
+      background: rgba(255, 0, 0, 0.1);
+      opacity: 0;
+      animation: targetScan 0.6s ease-out forwards;
+    }
+
+    @keyframes targetScan {
+      0% {
+        transform: scale(1.3);
+        opacity: 0;
+        border-color: white;
+      }
+
+      10% {
+        opacity: 1;
+        border-color: red;
+      }
+
+      80% {
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(0.8);
+        opacity: 0;
+      }
+    }
+
+    /* ==================== TOASTS ==================== */
+    #toast-container {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+      pointer-events: none;
+      width: 80%;
+      align-items: center;
+    }
+
+    .toast {
+      background: rgba(0, 30, 0, 0.9);
+      border: 1px solid #00ff00;
+      color: #00ff00;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-family: 'Share Tech Mono';
+      font-size: 14px;
+      text-shadow: 0 0 5px #00ff00;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
+      animation: slideDown 0.3s ease-out;
+      pointer-events: auto;
+      text-align: center;
+    }
+
+    .toast.error {
+      border-color: red;
+      color: red;
+      background: rgba(30, 0, 0, 0.9);
+      text-shadow: 0 0 5px red;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ==================== MENÚS LATERALES ==================== */
+    .menu-container {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 100;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .menu-container.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .menu-container.left-side {
+      left: 8px;
+    }
+
+    .menu-container.right-side {
+      right: 8px;
+    }
+
+    .menu-btn {
+      width: 58px;
+      height: 58px;
+      border: 2px solid var(--hud-primary);
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--hud-primary);
+      font-size: 1.3rem;
+      backdrop-filter: blur(4px);
+      transition: all 0.15s;
+      cursor: pointer;
+      pointer-events: auto;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .menu-btn:active {
+      transform: scale(0.88);
+      background: rgba(255, 51, 51, 0.25);
+    }
+
+    .menu-btn.active-state {
+      background: white;
+      border-color: white;
+      color: black;
+      box-shadow: 0 0 20px white;
+    }
+
+    @media (max-height: 520px) {
+      .menu-container {
+        gap: 5px;
+      }
+
+      .menu-btn {
+        width: 46px;
+        height: 46px;
+        font-size: 1rem;
+      }
+
+      .menu-label {
+        display: none;
+      }
+    }
+
+    .menu-label {
+      font-size: 0.58rem;
+      color: white;
+      text-align: center;
+      margin-top: 3px;
+      font-family: 'Share Tech Mono';
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 4px;
+      padding: 1px 3px;
+    }
+
+    /* ==================== TELEMETRÍA ==================== */
+    #telemetry-container {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      pointer-events: none;
+      z-index: 150;
+    }
+
+    .stat-row {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(0, 255, 0, 0.7);
+      text-shadow: 1px 1px 0px black;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1px 4px;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .signal-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+      width: 16px;
+    }
+
+    .bar {
+      width: 4px;
+      background: #333;
+      border-radius: 1px;
+      transition: background 0.3s;
+    }
+
+    .bar:nth-child(1) {
+      height: 33%;
+    }
+
+    .bar:nth-child(2) {
+      height: 66%;
+    }
+
+    .bar:nth-child(3) {
+      height: 100%;
+    }
+
+    .signal-level-0 .bar {
+      background: #333;
+    }
+
+    .signal-level-3 .bar {
+      background: #00ff00;
+    }
+
+    .mic-toggle {
+      pointer-events: auto;
+      cursor: pointer;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+
+    .mic-toggle.active {
+      opacity: 1;
+      color: #00ffff;
+      text-shadow: 0 0 10px #00ffff;
+    }
+
+    /* ==================== MEDIA CONTROLS ==================== */
+    #local-media-controls {
+      position: absolute;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 15px;
+      z-index: 80;
+      pointer-events: auto;
+      opacity: 0.6;
+      transition: opacity 0.3s;
+    }
+
+    #local-media-controls:hover {
+      opacity: 1.0;
+    }
+
+    .media-btn {
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      backdrop-filter: blur(2px);
+    }
+
+    .media-btn:active {
+      transform: scale(0.9);
+    }
+
+    .media-btn:hover {
+      background: rgba(255, 51, 51, 0.3);
+      border-color: rgba(255, 51, 51, 0.5);
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* ==================== LOCAL MEDIA OVERLAY ==================== */
+    #local-media-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.5s ease-in-out;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #local-media-overlay.active {
+      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #local-video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    #local-video-player.banner-mode {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 25%;
+      object-fit: cover;
+      opacity: 0.95;
+    }
+
+    .soft-mask {
+      mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%), linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+      mask-composite: intersect;
+      -webkit-mask-image: -webkit-linear-gradient(top, transparent 0%, black 15%, black 85%, transparent 100%), -webkit-linear-gradient(left, transparent 0%, black 10%, black 90%, transparent 100%);
+      -webkit-mask-composite: source-in;
+    }
+
+    /* ==================== LOADING SCREEN ==================== */
+    #loading {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(0, 0, 0, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-bg.active {
+      display: flex;
+    }
+
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--hud-primary);
+      transition: width 0.3s;
+    }
+
+    /* ==================== ZOOM INDICATOR ==================== */
+    #zoom-target-indicator {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border: 2px solid #00ff00;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(0.5);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 80;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+
+    #zoom-target-indicator.active {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    /* ==================== MINI MAPA ==================== */
+    #map-container-slot {
+      position: absolute;
+      left: 30px;
+      bottom: 45px;
+      z-index: 85;
+      width: 150px;
+      height: 150px;
+      border: none;
+      background: transparent;
+      transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.5s ease-out;
+      transform-origin: center center;
+      mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%), linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
+      -webkit-mask-image: -webkit-linear-gradient(top, transparent 0%, black 20%, black 80%, transparent 100%), -webkit-linear-gradient(left, transparent 0%, black 20%, black 80%, transparent 100%);
+      mask-composite: intersect;
+      -webkit-mask-composite: source-in;
+    }
+
+    #map-container-slot.map-hidden {
+      transform: scale(0);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #map-container-slot.map-visible {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #mini-map {
+      height: 100%;
+      width: 100%;
+      filter: brightness(85%) contrast(110%) saturate(95%);
+      /* ELIMINADO: transform: scale(1.15); transform-origin: center; */
+      background: transparent;
+    }
+
+    .map-pulse {
+      width: 10px;
+      height: 10px;
+      background: red;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .map-pulse::after {
+      content: "";
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: red;
+      animation: mapPulseAnim 1.5s infinite;
+      opacity: 0.6;
+    }
+
+    @keyframes mapPulseAnim {
+      0% {
+        transform: scale(1);
+        opacity: 0.6;
+      }
+
+      100% {
+        transform: scale(3.5);
+        opacity: 0;
+      }
+    }
+
+    #mini-map-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      mask-image: radial-gradient(circle at center, transparent 40%, black 80%);
+      -webkit-mask-image: radial-gradient(circle at center, transparent 40%, black 80%);
+    }
+
+    #mini-map-glitch {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 998;
+      opacity: 0;
+    }
+
+    #mini-map-glitch.hard {
+      opacity: 0.4;
+      background: rgba(255, 255, 255, 0.05);
+      animation: mapGlitchHard 0.05s infinite;
+    }
+
+    @keyframes mapGlitchHard {
+      0% {
+        transform: translate(0, 0);
+      }
+
+      20% {
+        transform: translate(-3px, 2px);
+      }
+
+      40% {
+        transform: translate(3px, -2px);
+      }
+
+      60% {
+        transform: translate(-2px, 1px);
+      }
+
+      80% {
+        transform: translate(2px, -1px);
+      }
+
+      100% {
+        transform: translate(0, 0);
+      }
+    }
+
+    /* ==================== SCROLLBAR PERSONALIZADO ==================== */
+    .custom-scrollbar,
+    .custom-scrollbar * {
+      touch-action: pan-y !important;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(20, 0, 0, 0.6);
+      border-radius: 4px;
+      border: 1px solid rgba(255, 0, 0, 0.2);
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(255, 0, 0, 0.6);
+      border-radius: 4px;
+      border: 1px solid #ff3333;
+      box-shadow: inset 0 0 5px rgba(255, 0, 0, 0.8);
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #ff0000;
+    }
+
+    .modal-bg input,
+    #loading input {
+      -webkit-user-select: auto !important;
+      user-select: auto !important;
+    }
+
+    .pulsing {
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 0.5;
+        transform: scale(0.95);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.05);
+      }
+
+      100% {
+        opacity: 0.5;
+        transform: scale(0.95);
+      }
+    }
+
+    #chat-fullscreen-view {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: #000;
+      flex-direction: column;
+    }
+  </style>
 </head>
+
 <body>
 
-    <!-- ==================== TOAST CONTAINER ==================== -->
-    <div id="toast-container"></div>
+  <!-- ==================== TOAST CONTAINER ==================== -->
+  <div id="toast-container"></div>
 
-    <!-- ==================== ORIENTATION LOCK ==================== -->
-    <div id="orientation-lock">
-        <i class="fas fa-mobile-alt text-4xl mb-4 rotate-90 text-red-500"></i>
-        <h2 class="text-xl font-bold font-orbitron tracking-widest text-red-500">GIRAR DISPOSITIVO</h2>
+  <!-- ==================== ORIENTATION LOCK ==================== -->
+  <div id="orientation-lock">
+    <i class="fas fa-mobile-alt text-4xl mb-4 rotate-90 text-red-500"></i>
+    <h2 class="text-xl font-bold font-orbitron tracking-widest text-red-500">GIRAR DISPOSITIVO</h2>
+  </div>
+
+  <!-- ==================== VISTA PRINCIPAL ==================== -->
+  <div id="main-view-area">
+    <div id="zoom-container">
+      <video id="shared-video-element" autoplay playsinline muted></video>
+      <canvas id="sls-canvas"></canvas>
+      <canvas id="audio-canvas"></canvas>
+    </div>
+    <div id="ai-scan-overlay"></div>
+  </div>
+
+  <canvas id="heatmap-buffer"></canvas>
+  <canvas id="lidar-buffer"></canvas>
+
+  <div id="touch-surface" class="absolute inset-0 z-10 interactive"></div>
+  <div id="zoom-target-indicator"></div>
+
+  <!-- ==================== UI LAYER ==================== -->
+  <div id="ui-layer">
+    <div id="hud-layer" class="hud-burn-hidden">
+      <img src="obr-logo.png" id="hud-logo" class="absolute top-5 left-5 w-[80px] h-[80px] opacity-90" alt="Logo OBR">
+      <div id="hud-text-container" class="absolute top-5 left-[110px]">
+        <div id="hud-title" class="text-white font-orbitron font-bold text-base shadow-black drop-shadow-md">
+          EXPLORACIONES OBR</div>
+        <div id="hud-time" class="text-[#ff3333] font-mono text-[20px] shadow-black drop-shadow-md font-bold"
+          style="text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">--/--/-- - --:--:--</div>
+      </div>
     </div>
 
-    <!-- ==================== VISTA PRINCIPAL ==================== -->
-    <div id="main-view-area">
-        <div id="zoom-container">
-            <video id="shared-video-element" autoplay playsinline muted></video>
-            <canvas id="sls-canvas"></canvas>
-            <canvas id="audio-canvas"></canvas>
-        </div>
-        <div id="ai-scan-overlay"></div>
+    <div id="tally-border" class="preview"></div>
+
+    <div id="status-indicators"
+      class="absolute bottom-12 left-5 flex items-center gap-2 text-sm pointer-events-none z-50"
+      style="filter: drop-shadow(0px 0px 4px rgba(0,0,0,0.8));">
+      <div id="recovery-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">🚀</div>
+      <div id="ai-context-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">📄</div>
+      <div id="tts-warning"
+        class="transition-opacity duration-500 text-yellow-500 font-mono text-xs bg-black/60 px-1.5 py-0.5 rounded border border-yellow-700 items-center gap-1"
+        style="opacity: 0; display: none;">⚠️ <span class="text-[9px]">RED/TTS</span></div>
     </div>
 
-    <canvas id="heatmap-buffer"></canvas>
-    <canvas id="lidar-buffer"></canvas>
-
-    <div id="touch-surface" class="absolute inset-0 z-10 interactive"></div>
-    <div id="zoom-target-indicator"></div>
-
-    <!-- ==================== UI LAYER ==================== -->
-    <div id="ui-layer">
-        <div id="hud-layer" class="hud-burn-hidden">
-            <img src="obr-logo.png" id="hud-logo" class="absolute top-5 left-5 w-[80px] h-[80px] opacity-90" alt="Logo OBR">
-            <div id="hud-text-container" class="absolute top-5 left-[110px]">
-                <div id="hud-title" class="text-white font-orbitron font-bold text-base shadow-black drop-shadow-md">EXPLORACIONES OBR</div>
-                <div id="hud-time" class="text-[#ff3333] font-mono text-[20px] shadow-black drop-shadow-md font-bold" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">--/--/-- - --:--:--</div>
-            </div>
-        </div>
-
-        <div id="tally-border" class="preview"></div>
-
-        <div id="status-indicators" class="absolute bottom-12 left-5 flex items-center gap-2 text-sm pointer-events-none z-50" style="filter: drop-shadow(0px 0px 4px rgba(0,0,0,0.8));">
-            <div id="recovery-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">🚀</div>
-            <div id="ai-context-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">📄</div>
-            <div id="tts-warning" class="transition-opacity duration-500 text-yellow-500 font-mono text-xs bg-black/60 px-1.5 py-0.5 rounded border border-yellow-700 items-center gap-1" style="opacity: 0; display: none;">⚠️ <span class="text-[9px]">RED/TTS</span></div>
-        </div>
-
-        <div id="link-status" class="absolute bottom-4 left-4 text-[10px] font-mono text-gray-400 bg-black/60 px-2 py-1 rounded border border-gray-800 flex items-center gap-2">
-            <div id="status-dot" class="w-2 h-2 rounded-full bg-red-900"></div>
-            <span id="status-text">PREVIEW</span>
-        </div>
-
-        <div id="local-media-controls">
-            <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO"><i class="fas fa-play"></i></button>
-            <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER"><i class="fas fa-film"></i></button>
-            <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO"><i class="fas fa-stop"></i></button>
-        </div>
-
-        <div id="top-right-group" class="absolute top-4 right-4 flex items-center gap-3 z-50 pointer-events-auto">
-            <div class="interactive text-gray-400 p-2 bg-black/60 border border-gray-700 rounded-full hover:text-white hover:border-red-500 transition-colors backdrop-blur-sm" onclick="openSettings()">
-                <i class="fas fa-cog text-xl"></i>
-            </div>
-        </div>
-
-        <div id="map-container-slot" class="map-visible">
-            <div style="position: relative; width: 100%; height: 100%;">
-                <div id="map-loading" style="position: absolute; top: 45%; width: 100%; text-align: center; color: rgba(255,0,0,0.8); font-family: 'Share Tech Mono'; font-size: 12px; z-index: 5;">BUSCANDO SATÉLITES...</div>
-                <div id="mini-map"></div>
-                <div id="mini-map-tint" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; background: rgba(0, 15, 35, 0.45); mix-blend-mode: multiply;"></div>
-                <div id="mini-map-overlay"></div>
-                <div id="mini-map-glitch"></div>
-            </div>
-        </div>
-
-        <div id="telemetry-container">
-            <div class="stat-row"><span id="mic-remote-status" class="text-gray-500 font-bold">MIC REM: OFFLINE</span></div>
-            <div class="stat-row"><span id="meta-res">INIT...</span><i class="fas fa-expand text-[8px]"></i></div>
-            <div class="stat-row"><span id="meta-fps">-- FPS</span><div class="signal-bars signal-level-0" id="signal-ui"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div>
-        </div>
-
-        <div id="menu-left" class="menu-container left-side">
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('night', this)" id="btn-night"><i class="fas fa-moon"></i></div><div class="menu-label">NOCT</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('thermal', this)" id="btn-thermal"><i class="fas fa-bolt"></i></div><div class="menu-label">SPEC</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('urbex', this)" id="btn-urbex"><i class="fas fa-city"></i></div><div class="menu-label">URBEX</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('lidar', this)" id="btn-heatmap"><i class="fas fa-fingerprint"></i></div><div class="menu-label">LIDAR</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('sls', this)" id="btn-sls"><i class="fas fa-ghost"></i></div><div class="menu-label">SLS</div></div>
-        </div>
-
-        <div id="menu-right" class="menu-container right-side">
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="togglePareidolia(this)" id="btn-ia"><i class="fas fa-eye"></i></div><div class="menu-label">VISION</div></div>
-            <div onclick="event.stopPropagation()" id="wrapper-audio-scan" style="display:none;"><div class="menu-btn" onclick="toggleAudioScanner()" id="btn-audio-menu"><i class="fas fa-microphone"></i></div><div class="menu-label">AUDIO</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="resetZoom(this)"><i class="fas fa-compress"></i></div><div class="menu-label">RESET</div></div>
-        </div>
+    <div id="link-status"
+      class="absolute bottom-4 left-4 text-[10px] font-mono text-gray-400 bg-black/60 px-2 py-1 rounded border border-gray-800 flex items-center gap-2">
+      <div id="status-dot" class="w-2 h-2 rounded-full bg-red-900"></div>
+      <span id="status-text">PREVIEW</span>
     </div>
 
-    <!-- ==================== LOCAL MEDIA OVERLAY ==================== -->
-    <div id="local-media-overlay" onclick="stopLocalMedia()">
-        <video id="local-video-player" playsinline></video>
+    <div id="local-media-controls">
+      <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO"><i class="fas fa-play"></i></button>
+      <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER"><i class="fas fa-film"></i></button>
+      <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO"><i class="fas fa-stop"></i></button>
     </div>
 
-    <!-- ==================== CHAT FULLSCREEN ==================== -->
-    <div id="chat-fullscreen-view">
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#111; border-bottom:2px solid #ff3333;">
-            <h3 style="color:#ff3333; margin:0; font-family:'Orbitron',sans-serif;">CHAT UNIFICADO</h3>
-            <button onclick="closeChatView()" style="background:none; border:none; color:white; font-size:28px; cursor:pointer;">&times;</button>
-        </div>
-        <iframe id="chat-iframe" src="" style="flex:1; width:100%; border:none;" allow="autoplay"></iframe>
+    <div id="top-right-group" class="absolute top-4 right-4 flex items-center gap-3 z-50 pointer-events-auto">
+      <div
+        class="interactive text-gray-400 p-2 bg-black/60 border border-gray-700 rounded-full hover:text-white hover:border-red-500 transition-colors backdrop-blur-sm"
+        onclick="openSettings()">
+        <i class="fas fa-cog text-xl"></i>
+      </div>
     </div>
 
-    <!-- ==================== LOADING SCREEN ==================== -->
-    <div id="loading">
-        <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full">
-            <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" alt="Logo OBR">
-            <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-            <p class="text-xs font-mono text-gray-500 mb-8">v7.2 (Agora Unificado)</p>
-            <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
-            <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
-
-            <button id="main-cam-btn" class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
-            <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
-            <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="openChatView()">💬 CHAT DEL DIRECTO</button>
+    <div id="map-container-slot" class="map-visible">
+      <div style="position: relative; width: 100%; height: 100%;">
+        <div id="map-loading"
+          style="position: absolute; top: 45%; width: 100%; text-align: center; color: rgba(255,0,0,0.8); font-family: 'Share Tech Mono'; font-size: 12px; z-index: 5;">
+          BUSCANDO SATÉLITES...</div>
+        <div id="mini-map"></div>
+        <div id="mini-map-tint"
+          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; background: rgba(0, 15, 35, 0.45); mix-blend-mode: multiply;">
         </div>
-
-        <div id="mic-sender-ui" style="display:none;" class="flex flex-col items-center justify-center w-full h-full max-w-sm px-6">
-            <h2 class="text-2xl font-bold font-orbitron text-red-500 mb-2">OBR MIC SENDER</h2>
-            <p class="text-xs text-gray-500 mb-8 text-center font-mono">Transmisión de audio &amp; voz al dispositivo principal</p>
-
-            <div class="w-full bg-black/50 border border-gray-800 p-6 rounded-lg shadow-xl flex flex-col items-center">
-                <div class="w-full mb-3 text-left">
-                    <label class="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block font-mono">ID de Estudio</label>
-                    <input type="text" id="sender-studio-id" placeholder="EJ: local" class="w-full bg-black border border-gray-700 text-white p-3 text-center uppercase rounded outline-none focus:border-red-500 font-mono">
-                </div>
-                <div class="w-full mb-6 text-left">
-                    <label class="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block font-mono">Cámara Destino</label>
-                    <input type="text" id="sender-cam-name" placeholder="EJ: cam1" class="w-full bg-black border border-gray-700 text-white p-3 text-center uppercase rounded outline-none focus:border-red-500 font-mono">
-                </div>
-
-                <div id="mic-sender-status" class="text-gray-400 font-bold tracking-widest mb-6 font-mono text-center">ESPERANDO...</div>
-
-                <button id="btn-start-sender" onclick="startRemoteMicAgora()" class="w-full px-8 py-4 bg-red-900/30 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-700 hover:text-white transition-colors text-lg">CONECTAR MIC</button>
-                <button id="btn-stop-sender" onclick="stopRemoteMicAgora()" class="w-full px-8 py-3 bg-gray-800 text-gray-400 font-bold font-orbitron rounded hover:text-white transition-colors hidden">DETENER TRANSMISIÓN</button>
-            </div>
-
-            <button onclick="location.reload()" class="text-xs text-gray-500 underline mt-8 font-mono">Volver a Cámara</button>
-        </div>
-
-        <div id="cam-error-panel" style="display:none; margin-top:20px; width:300px; border:1px solid #ff3333; border-radius:6px; background:rgba(30,0,0,0.95); padding:16px; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:8px;">🚫</div>
-            <div id="cam-error-title" style="color:#ff3333; font-family:'Orbitron',sans-serif; font-size:0.75rem; font-weight:bold; margin-bottom:8px; letter-spacing:2px;">ACCESO DENEGADO</div>
-            <div id="cam-error-msg" style="color:#ccc; font-family:'Share Tech Mono',monospace; font-size:0.7rem; line-height:1.5; margin-bottom:14px;"></div>
-            <div id="cam-error-steps" style="color:#aaa; font-family:'Share Tech Mono',monospace; font-size:0.65rem; text-align:left; line-height:1.8; margin-bottom:14px; padding:8px; background:rgba(0,0,0,0.4); border-radius:4px; display:none;"></div>
-            <button onclick="retryCam()" style="width:100%; padding:10px; background:rgba(255,51,51,0.15); border:1px solid #ff3333; color:#ff3333; font-family:'Orbitron',sans-serif; font-size:0.7rem; font-weight:bold; border-radius:4px; cursor:pointer; letter-spacing:1px;">↺ REINTENTAR</button>
-        </div>
-
-        <button id="btn-open-keys" style="position:absolute; bottom:20px; right:20px; background:rgba(0,0,0,0.7); border:1px solid #ff3333; color:#ff3333; width:44px; height:44px; border-radius:50%; font-size:20px; cursor:pointer; z-index:400;" title="Configurar claves">🔐</button>
-
-        <div id="keys-modal" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
-           <!-- ====== DENTRO DE keys-modal ====== -->
-<div style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
-    <h3 style="color:#ff3333; margin-bottom:10px; font-family:Orbitron; display:flex; align-items:center; gap:10px;">
-        🔑 CLAVES UNIFICADAS
-        <button id="btn-keys-info" class="interactive" style="background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer; transition:color 0.2s;" title="Ver instrucciones">ℹ️</button>
-    </h3>
-    <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat (dejar vacío si no se usa)" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
-    <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
-    <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
-    <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
-</div>
-        </div>
+        <div id="mini-map-overlay"></div>
+        <div id="mini-map-glitch"></div>
+      </div>
     </div>
 
-    <!-- ==================== CONNECT MODAL ==================== -->
-    <div id="connect-modal" class="modal-bg">
-        <div class="bg-neutral-900 border border-cyan-500 p-8 rounded-lg w-80 text-center shadow-[0_0_30px_rgba(0,255,255,0.1)]">
-            <h3 class="text-cyan-400 mb-4 text-xl tracking-widest font-bold">CONECTAR A ESTUDIO</h3>
-            <input type="text" id="stream-name" placeholder="NOMBRE (EJ: cam1)" class="w-full bg-black border border-gray-700 text-white p-3 text-center uppercase mb-4 text-lg outline-none focus:border-cyan-400 rounded" value="cam1">
-            <button onclick="connectToStudio()" class="w-full bg-cyan-900 text-white font-bold py-3 hover:bg-cyan-700 mb-3 rounded font-orbitron">ENLAZAR (AGORA)</button>
-            <button onclick="document.getElementById('connect-modal').classList.remove('active')" class="text-gray-500 text-xs hover:text-white">CANCELAR</button>
+    <div id="telemetry-container">
+      <div class="stat-row"><span id="mic-remote-status" class="text-gray-500 font-bold">MIC REM: OFFLINE</span></div>
+      <div class="stat-row"><span id="meta-res">INIT...</span><i class="fas fa-expand text-[8px]"></i></div>
+      <div class="stat-row"><span id="meta-fps">-- FPS</span>
+        <div class="signal-bars signal-level-0" id="signal-ui">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
         </div>
+      </div>
     </div>
 
-    <!-- ==================== SETTINGS MODAL ==================== -->
-    <div id="settings-modal" class="modal-bg">
-        <div class="relative bg-neutral-900 border border-red-900 rounded w-[850px] max-w-[95%] shadow-[0_0_30px_rgba(255,0,0,0.1)] flex flex-col" style="max-height:95vh;">
-            <div class="p-3 border-b border-red-900/30 flex-shrink-0 relative flex items-center justify-center">
-                <h2 class="text-red-500 font-orbitron font-bold uppercase tracking-widest text-base m-0">CONFIGURACIÓN SISTEMA</h2>
-                <button onclick="document.getElementById('settings-modal').classList.remove('active')" class="absolute right-4 text-gray-600 hover:text-red-500 transition-colors">
+    <div id="menu-left" class="menu-container left-side">
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="setFilter('night', this)" id="btn-night"><i class="fas fa-moon"></i></div>
+        <div class="menu-label">NOCT</div>
+      </div>
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="setFilter('thermal', this)" id="btn-thermal"><i class="fas fa-bolt"></i></div>
+        <div class="menu-label">SPEC</div>
+      </div>
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="setFilter('urbex', this)" id="btn-urbex"><i class="fas fa-city"></i></div>
+        <div class="menu-label">URBEX</div>
+      </div>
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="setFilter('lidar', this)" id="btn-heatmap"><i class="fas fa-fingerprint"></i>
+        </div>
+        <div class="menu-label">LIDAR</div>
+      </div>
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="setFilter('sls', this)" id="btn-sls"><i class="fas fa-ghost"></i></div>
+        <div class="menu-label">SLS</div>
+      </div>
+    </div>
+
+    <div id="menu-right" class="menu-container right-side">
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="togglePareidolia(this)" id="btn-ia"><i class="fas fa-eye"></i></div>
+        <div class="menu-label">VISION</div>
+      </div>
+      <div onclick="event.stopPropagation()" id="wrapper-audio-scan" style="display:none;">
+        <div class="menu-btn" onclick="toggleAudioScanner()" id="btn-audio-menu"><i class="fas fa-microphone"></i></div>
+        <div class="menu-label">AUDIO</div>
+      </div>
+      <div onclick="event.stopPropagation()">
+        <div class="menu-btn" onclick="resetZoom(this)"><i class="fas fa-compress"></i></div>
+        <div class="menu-label">RESET</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== LOCAL MEDIA OVERLAY ==================== -->
+  <div id="local-media-overlay" onclick="stopLocalMedia()">
+    <video id="local-video-player" playsinline></video>
+  </div>
+
+  <!-- ==================== CHAT FULLSCREEN ==================== -->
+  <div id="chat-fullscreen-view">
+    <div
+      style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#111; border-bottom:2px solid #ff3333;">
+      <h3 style="color:#ff3333; margin:0; font-family:'Orbitron',sans-serif;">CHAT UNIFICADO</h3>
+      <button onclick="closeChatView()" style="background:none; border:none; color:white; font-size:28px; cursor:pointer;">&times;</button>
+    </div>
+    <iframe id="chat-iframe" src="" style="flex:1; width:100%; border:none;" allow="autoplay"></iframe>
+  </div>
+
+  <!-- ==================== LOADING SCREEN ==================== -->
+  <div id="loading">
+    <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full">
+      <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" alt="Logo OBR">
+      <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
+      <p class="text-xs font-mono text-gray-500 mb-8">v7.2 (Agora Unificado)</p>
+      <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container">
+        <div id="progress-bar"></div>
+      </div>
+      <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">CARGANDO...</div>
+
+      <button id="main-cam-btn" class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">INICIAR CÁMARA</button>
+      <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
+      <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="openChatView()">💬 CHAT DEL DIRECTO</button>
+    </div>
+
+    <div id="mic-sender-ui" style="display:none;"
+      class="flex flex-col items-center justify-center w-full h-full max-w-sm px-6">
+      <h2 class="text-2xl font-bold font-orbitron text-red-500 mb-2">OBR MIC SENDER</h2>
+      <p class="text-xs text-gray-500 mb-8 text-center font-mono">Transmisión de audio &amp; voz al dispositivo
+        principal</p>
+
+      <div class="w-full bg-black/50 border border-gray-800 p-6 rounded-lg shadow-xl flex flex-col items-center">
+        <div class="w-full mb-3 text-left">
+          <label class="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block font-mono">ID de Estudio</label>
+          <input type="text" id="sender-studio-id" placeholder="EJ: local" class="w-full bg-black border border-gray-700 text-white p-3 text-center uppercase rounded outline-none focus:border-red-500 font-mono">
+        </div>
+        <div class="w-full mb-6 text-left">
+          <label class="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block font-mono">Cámara Destino</label>
+          <input type="text" id="sender-cam-name" placeholder="EJ: cam1" class="w-full bg-black border border-gray-700 text-white p-3 text-center uppercase rounded outline-none focus:border-red-500 font-mono">
+        </div>
+
+        <div id="mic-sender-status" class="text-gray-400 font-bold tracking-widest mb-6 font-mono text-center">
+          ESPERANDO...</div>
+
+        <button id="btn-start-sender" onclick="startRemoteMicAgora()" class="w-full px-8 py-4 bg-red-900/30 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-700 hover:text-white transition-colors text-lg">CONECTAR MIC</button>
+        <button id="btn-stop-sender" onclick="stopRemoteMicAgora()" class="w-full px-8 py-3 bg-gray-800 text-gray-400 font-bold font-orbitron rounded hover:text-white transition-colors hidden">DETENER TRANSMISIÓN</button>
+      </div>
+
+      <button onclick="location.reload()" class="text-xs text-gray-500 underline mt-8 font-mono">Volver a Cámara</button>
+    </div>
+
+    <div id="cam-error-panel"
+      style="display:none; margin-top:20px; width:300px; border:1px solid #ff3333; border-radius:6px; background:rgba(30,0,0,0.95); padding:16px; text-align:center;">
+      <div style="font-size:2rem; margin-bottom:8px;">🚫</div>
+      <div id="cam-error-title"
+        style="color:#ff3333; font-family:'Orbitron',sans-serif; font-size:0.75rem; font-weight:bold; margin-bottom:8px; letter-spacing:2px;">
+        ACCESO DENEGADO</div>
+      <div id="cam-error-msg"
+        style="color:#ccc; font-family:'Share Tech Mono',monospace; font-size:0.7rem; line-height:1.5; margin-bottom:14px;">
+      </div>
+      <div id="cam-error-steps"
+        style="color:#aaa; font-family:'Share Tech Mono',monospace; font-size:0.65rem; text-align:left; line-height:1.8; margin-bottom:14px; padding:8px; background:rgba(0,0,0,0.4); border-radius:4px; display:none;">
+      </div>
+      <button onclick="retryCam()" style="width:100%; padding:10px; background:rgba(255,51,51,0.15); border:1px solid #ff3333; color:#ff3333; font-family:'Orbitron',sans-serif; font-size:0.7rem; font-weight:bold; border-radius:4px; cursor:pointer; letter-spacing:1px;">↺ REINTENTAR</button>
+    </div>
+
+    <button id="btn-open-keys" style="position:absolute; bottom:20px; right:20px; background:rgba(0,0,0,0.7); border:1px solid #ff3333; color:#ff3333; width:44px; height:44px; border-radius:50%; font-size:20px; cursor:pointer; z-index:400;" title="Configurar claves">🔐</button>
+
+    <div id="keys-modal"
+      style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
+      <!-- ====== DENTRO DE keys-modal ====== -->
+      <div
+        style="background:#111; border:2px solid #ff3333; padding:20px; border-radius:10px; width:90%; max-width:500px;">
+        <h3
+          style="color:#ff3333; margin-bottom:10px; font-family:Orbitron; display:flex; align-items:center; gap:10px;">
+          🔑 CLAVES UNIFICADAS
+          <button id="btn-keys-info" class="interactive" style="background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer; transition:color 0.2s;" title="Ver instrucciones">ℹ️</button>
+        </h3>
+        <textarea id="keys-input" placeholder="ClaveGemini|ClaveGroq|URLChat (dejar vacío si no se usa)" style="width:100%; height:100px; background:black; color:white; border:1px solid #333; padding:8px; font-family:monospace; font-size:12px;"></textarea>
+        <div id="keys-status" style="color:#aaa; font-size:11px; margin:8px 0; text-align:center;">Esperando...</div>
+        <button id="btn-save-keys" style="width:100%; background:#ff3333; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; border-radius:4px;">GUARDAR Y CERRAR</button>
+        <button id="btn-close-keys" style="width:100%; background:#333; color:#aaa; border:none; padding:8px; margin-top:5px; cursor:pointer; border-radius:4px;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== CONNECT MODAL ==================== -->
+  <div id="connect-modal" class="modal-bg">
+    <div
+      class="bg-neutral-900 border border-cyan-500 p-8 rounded-lg w-80 text-center shadow-[0_0_30px_rgba(0,255,255,0.1)]">
+      <h3 class="text-cyan-400 mb-4 text-xl tracking-widest font-bold">CONECTAR A ESTUDIO</h3>
+      <input type="text" id="stream-name" placeholder="NOMBRE (EJ: cam1)" class="w-full bg-black border border-gray-700 text-white p-3 text-center uppercase mb-4 text-lg outline-none focus:border-cyan-400 rounded" value="cam1">
+      <button onclick="connectToStudio()" class="w-full bg-cyan-900 text-white font-bold py-3 hover:bg-cyan-700 mb-3 rounded font-orbitron">ENLAZAR (AGORA)</button>
+      <button onclick="document.getElementById('connect-modal').classList.remove('active')" class="text-gray-500 text-xs hover:text-white">CANCELAR</button>
+    </div>
+  </div>
+
+  <!-- ==================== SETTINGS MODAL ==================== -->
+  <div id="settings-modal" class="modal-bg">
+    <div
+      class="relative bg-neutral-900 border border-red-900 rounded w-[850px] max-w-[95%] shadow-[0_0_30px_rgba(255,0,0,0.1)] flex flex-col"
+      style="max-height:95vh;">
+      <div class="p-3 border-b border-red-900/30 flex-shrink-0 relative flex items-center justify-center">
+        <h2 class="text-red-500 font-orbitron font-bold uppercase tracking-widest text-base m-0">CONFIGURACIÓN SISTEMA
+        </h2>
+        <button onclick="document.getElementById('settings-modal').classList.remove('active')" class="absolute right-4 text-gray-600 hover:text-red-500 transition-colors">
                     <i class="fas fa-times text-xl"></i>
                 </button>
+      </div>
+
+      <div id="settings-scroll-container" class="p-4 overflow-y-auto flex-1 custom-scrollbar min-h-0">
+        <div
+          class="bg-black/50 p-3 rounded border border-gray-700 shadow-[0_0_10px_rgba(255,255,255,0.02)] mb-4 grid grid-cols-2 gap-4">
+          <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600"
+                onclick="toggleCleanUI()">
+                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform"
+                  id="btn-toggle-ui-switch"></div>
+              </div>
+              <div>
+                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">OCULTAR BOTONES</h3>
+              </div>
             </div>
+            <i id="btn-toggle-ui" onclick="toggleCleanUI()" class="fas fa-eye-slash text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
+          </div>
+          <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600"
+                onclick="toggleLocalMic()">
+                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform"
+                  id="btn-toggle-mic-switch"></div>
+              </div>
+              <div>
+                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">MIC LOCAL 🎙️</h3>
+              </div>
+            </div>
+            <i id="btn-toggle-mic" onclick="toggleLocalMic()" class="fas fa-microphone text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
+          </div>
+        </div>
 
-            <div id="settings-scroll-container" class="p-4 overflow-y-auto flex-1 custom-scrollbar min-h-0">
-                <div class="bg-black/50 p-3 rounded border border-gray-700 shadow-[0_0_10px_rgba(255,255,255,0.02)] mb-4 grid grid-cols-2 gap-4">
-                    <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600" onclick="toggleCleanUI()">
-                                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform" id="btn-toggle-ui-switch"></div>
-                            </div>
-                            <div>
-                                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">OCULTAR BOTONES</h3>
-                            </div>
-                        </div>
-                        <i id="btn-toggle-ui" onclick="toggleCleanUI()" class="fas fa-eye-slash text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
-                    </div>
-                    <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600" onclick="toggleLocalMic()">
-                                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform" id="btn-toggle-mic-switch"></div>
-                            </div>
-                            <div>
-                                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">MIC LOCAL 🎙️</h3>
-                            </div>
-                        </div>
-                        <i id="btn-toggle-mic" onclick="toggleLocalMic()" class="fas fa-microphone text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div class="bg-black/50 p-4 rounded border border-cyan-600 shadow-[0_0_15px_rgba(0,255,255,0.1)] flex flex-col">
-                        <h3 class="text-[11px] font-bold text-cyan-400 mb-3 border-b border-cyan-900/60 pb-2 uppercase tracking-wider text-center">RED ESTUDIO — DOCK</h3>
-                        <div class="flex flex-col gap-3 mt-2 flex-1 justify-center">
-                            <div class="flex gap-2 items-center">
-                                <input type="text" id="mtx-host" placeholder="IP ó ID del dock" class="flex-1 min-w-0 bg-black border border-gray-700 p-2.5 text-white text-[11px] rounded font-mono outline-none focus:border-cyan-500 text-center">
-                                <button onclick="document.getElementById('settings-modal').classList.remove('active'); openConnect();" class="flex-shrink-0 flex items-center gap-1 bg-cyan-900/30 border border-cyan-600 text-cyan-400 hover:bg-cyan-700 hover:text-white text-[10px] font-bold px-3 py-2.5 rounded transition-all font-orbitron whitespace-nowrap">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div
+            class="bg-black/50 p-4 rounded border border-cyan-600 shadow-[0_0_15px_rgba(0,255,255,0.1)] flex flex-col">
+            <h3
+              class="text-[11px] font-bold text-cyan-400 mb-3 border-b border-cyan-900/60 pb-2 uppercase tracking-wider text-center">
+              RED ESTUDIO — DOCK</h3>
+            <div class="flex flex-col gap-3 mt-2 flex-1 justify-center">
+              <div class="flex gap-2 items-center">
+                <input type="text" id="mtx-host" placeholder="IP ó ID del dock" class="flex-1 min-w-0 bg-black border border-gray-700 p-2.5 text-white text-[11px] rounded font-mono outline-none focus:border-cyan-500 text-center">
+                <button onclick="document.getElementById('settings-modal').classList.remove('active'); openConnect();" class="flex-shrink-0 flex items-center gap-1 bg-cyan-900/30 border border-cyan-600 text-cyan-400 hover:bg-cyan-700 hover:text-white text-[10px] font-bold px-3 py-2.5 rounded transition-all font-orbitron whitespace-nowrap">
                                     <i class="fas fa-link"></i><span class="ml-1">ENLAZAR</span>
                                 </button>
-                            </div>
-                            <p class="text-[8px] text-gray-600 font-mono uppercase leading-tight text-center mt-2">IP SE CONVIERTE A ID AUTO</p>
-                        </div>
-                    </div>
-                    <div class="bg-black/50 p-4 rounded border border-orange-500 shadow-[0_0_15px_rgba(255,165,0,0.1)] flex flex-col">
-                        <h3 class="text-[11px] font-bold text-orange-400 mb-3 border-b border-orange-900/60 pb-2 uppercase tracking-wider text-center">IA ANALYZER</h3>
-                        <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1 mb-2 block text-center">Proveedor IA</label>
-                        <div class="flex justify-between gap-1.5 mb-3">
-                            <button onclick="setAIProvider('auto')" id="ai-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">AUTO</button>
-                            <button onclick="setAIProvider('gemini')" id="ai-btn-gem" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">GEMINI</button>
-                            <button onclick="setAIProvider('groq')" id="ai-btn-groq" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">GROQ</button>
-                        </div>
-                        <div id="ai-provider-status" class="text-[10px] font-mono text-center text-orange-400 h-4 mb-2"></div>
-                        <button id="btn-ping-ai" onclick="testAIPing()" class="w-full border border-yellow-800 text-yellow-500 hover:bg-yellow-900/30 py-1.5 rounded text-[10px] font-bold hidden">PROBAR PING AHORA</button>
-                    </div>
-                    <div class="bg-black/50 p-4 rounded border border-green-500 shadow-[0_0_15px_rgba(0,255,0,0.1)] flex flex-col">
-                        <h3 class="text-[11px] font-bold text-green-400 mb-3 border-b border-green-900/60 pb-2 uppercase tracking-wider text-center">TTS ENGINE</h3>
-                        <div class="flex flex-col gap-2 mb-2 flex-1 mt-1">
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Motor:</span> <span id="tts-engine-status" class="text-green-400">ELEVENLABS</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Créditos (usados):</span> <span id="tts-credits-status" class="text-green-500">0 / 10000</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Usados:</span> <span id="tts-used-status" class="text-yellow-500">0</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Fallback:</span> <span id="tts-fallback-status" class="text-green-500">NO</span></div>
-                            <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>VoiceRSS (usados):</span> <span id="tts-vrss-status" class="text-blue-400">0 / 350</span></div>
-                        </div>
-                        <div class="border-t border-green-900/40 pt-3 mt-auto">
-    <div class="flex justify-between gap-1.5">
-        <button onclick="setTTSMode('auto')" id="tts-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20">AUTO</button>
-        <button onclick="setTTSMode('elevenlabs')" id="tts-btn-el" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">ELEVENLABS</button>
-        <button onclick="setTTSMode('voicerss')" id="tts-btn-vrss" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">VOICERSS</button>
-    </div>
-    <div class="flex justify-between gap-1.5 mt-2">
-        <button onclick="resetTTSUsage()" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-red-700 text-red-400 hover:bg-red-900/30">♻️ RESETEAR USOS</button>
-    </div>
-</div>
-                    </div>
-                </div>
-
-                <details id="tts-filtros-details" class="bg-black/50 rounded border border-purple-600 shadow-[0_0_15px_rgba(128,0,128,0.1)] group">
-                    <summary class="flex justify-between items-center p-3 cursor-pointer select-none list-none" onclick="loadTTSFilterPanel()">
-                        <div class="flex items-center gap-2">
-                            <span class="text-purple-400 text-[9px] font-mono group-open:rotate-90 transition-transform inline-block">▶</span>
-                            <h3 class="text-[10px] font-bold text-purple-400 uppercase tracking-wider">TTS FILTROS — GOOGLE TRANSLATE</h3>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[8px] text-gray-600 font-mono">código base + ajuste panel</span>
-                            <button onclick="event.stopPropagation(); resetTTSFilters()" class="text-[8px] text-gray-500 hover:text-red-400 border border-gray-700 hover:border-red-700 px-2 py-0.5 rounded transition-colors font-mono">RESET</button>
-                        </div>
-                    </summary>
-                    <div class="px-3 pb-3 border-t border-purple-900/30">
-                        <div class="grid grid-cols-2 gap-3 mt-3">
-                            <div class="bg-black/40 rounded border border-gray-800 p-2">
-                                <label class="text-[8px] text-gray-500 font-mono uppercase block mb-1">Rate pre-proceso ×</label>
-                                <input type="number" id="tts-f-rate" min="-0.5" max="1.5" step="0.01" value="0" class="w-full bg-black border border-gray-700 text-purple-300 text-[11px] font-mono text-center p-1.5 rounded outline-none focus:border-purple-500">
-                                <div class="text-[7px] text-gray-600 font-mono mt-1">código: ×0.88 · panel ajusta encima</div>
-                                <div class="text-[7px] text-gray-700 font-mono">1.5 + panel = velocidad base del proceso</div>
-                            </div>
-                            <div class="bg-black/40 rounded border border-purple-800/60 p-2">
-                                <label class="text-[8px] text-purple-400 font-mono uppercase block mb-1">🎵 Tono (cents)</label>
-                                <input type="number" id="tts-f-pitch" min="-1200" max="1200" step="50" value="-530" class="w-full bg-black border border-purple-800/60 text-purple-300 text-[11px] font-mono text-center p-1.5 rounded outline-none focus:border-purple-400">
-                                <div class="text-[7px] text-gray-600 font-mono mt-1">código: -200c · panel se suma</div>
-                                <div class="text-[7px] text-gray-700 font-mono">100=+1 semitono · -200=-2 semitonos</div>
-                            </div>
-                        </div>
-                        <div class="flex gap-2 items-center border-t border-purple-900/30 pt-2 mt-3">
-                            <input type="text" id="tts-preview-text" placeholder="texto de prueba..." value="siento tu presencia aquí" class="flex-1 bg-black border border-gray-700 p-1.5 text-white text-[10px] rounded font-mono outline-none focus:border-purple-500">
-                            <button id="btn-tts-preview" onclick="previewGoogleTTS()" class="flex-shrink-0 flex items-center gap-1.5 bg-purple-900/30 border border-purple-600 text-purple-300 hover:bg-purple-700 hover:text-white text-sm px-3 py-1.5 rounded transition-all font-mono" title="Escuchar con filtros actuales">🔊</button>
-                        </div>
-                        <p class="text-[7px] text-gray-700 font-mono mt-1.5">Pitch: tono base. Rate: velocidad normal (preview). AUDIO SCAN aplica 1.60-1.89x encima multiplicando la base. Subir velocidad también sube tono — compensar bajando Pitch.</p>
-                    </div>
-                </details>
+              </div>
+              <p class="text-[8px] text-gray-600 font-mono uppercase leading-tight text-center mt-2">IP SE CONVIERTE A
+                ID AUTO</p>
             </div>
-
-            <div class="p-3 border-t border-red-900/30 flex-shrink-0 bg-neutral-900 rounded-b">
-                <button onclick="saveSettings()" class="w-full bg-red-900/20 border border-red-600 text-red-500 hover:bg-red-900/50 hover:text-white py-3 rounded text-sm font-bold uppercase tracking-widest transition-colors font-orbitron">GUARDAR Y CERRAR</button>
+          </div>
+          <div
+            class="bg-black/50 p-4 rounded border border-orange-500 shadow-[0_0_15px_rgba(255,165,0,0.1)] flex flex-col">
+            <h3
+              class="text-[11px] font-bold text-orange-400 mb-3 border-b border-orange-900/60 pb-2 uppercase tracking-wider text-center">
+              IA ANALYZER</h3>
+            <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1 mb-2 block text-center">Proveedor IA</label>
+            <div class="flex justify-between gap-1.5 mb-3">
+              <button onclick="setAIProvider('auto')" id="ai-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">AUTO</button>
+              <button onclick="setAIProvider('gemini')" id="ai-btn-gem" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">GEMINI</button>
+              <button onclick="setAIProvider('groq')" id="ai-btn-groq" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">GROQ</button>
             </div>
+            <div id="ai-provider-status" class="text-[10px] font-mono text-center text-orange-400 h-4 mb-2"></div>
+            <button id="btn-ping-ai" onclick="testAIPing()" class="w-full border border-yellow-800 text-yellow-500 hover:bg-yellow-900/30 py-1.5 rounded text-[10px] font-bold hidden">PROBAR PING AHORA</button>
+          </div>
+          <div
+            class="bg-black/50 p-4 rounded border border-green-500 shadow-[0_0_15px_rgba(0,255,0,0.1)] flex flex-col">
+            <h3
+              class="text-[11px] font-bold text-green-400 mb-3 border-b border-green-900/60 pb-2 uppercase tracking-wider text-center">
+              TTS ENGINE</h3>
+            <div class="flex flex-col gap-2 mb-2 flex-1 mt-1">
+              <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Motor:</span>
+                <span id="tts-engine-status" class="text-green-400">ELEVENLABS</span></div>
+              <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Créditos (usados):</span>
+                <span id="tts-credits-status" class="text-green-500">0 / 10000</span></div>
+              <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Usados:</span>
+                <span id="tts-used-status" class="text-yellow-500">0</span></div>
+              <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>Fallback:</span>
+                <span id="tts-fallback-status" class="text-green-500">NO</span></div>
+              <div class="text-[10px] font-mono text-gray-400 flex justify-between"><span>VoiceRSS (usados):</span>
+                <span id="tts-vrss-status" class="text-blue-400">0 / 350</span></div>
+            </div>
+            <div class="border-t border-green-900/40 pt-3 mt-auto">
+              <div class="flex justify-between gap-1.5">
+                <button onclick="setTTSMode('auto')" id="tts-btn-auto" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20">AUTO</button>
+                <button onclick="setTTSMode('elevenlabs')" id="tts-btn-el" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">ELEVENLABS</button>
+                <button onclick="setTTSMode('voicerss')" id="tts-btn-vrss" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-gray-700 text-gray-400">VOICERSS</button>
+              </div>
+              <div class="flex justify-between gap-1.5 mt-2">
+                <button onclick="resetTTSUsage()" class="flex-1 py-1.5 rounded text-[9px] font-bold font-mono border transition-all border-red-700 text-red-400 hover:bg-red-900/30">♻️ RESETEAR USOS</button>
+              </div>
+            </div>
+          </div>
         </div>
-    </div>
 
-    <script>
-        // ==========================================================
+        <details id="tts-filtros-details"
+          class="bg-black/50 rounded border border-purple-600 shadow-[0_0_15px_rgba(128,0,128,0.1)] group">
+          <summary class="flex justify-between items-center p-3 cursor-pointer select-none list-none"
+            onclick="loadTTSFilterPanel()">
+            <div class="flex items-center gap-2">
+              <span class="text-purple-400 text-[9px] font-mono group-open:rotate-90 transition-transform inline-block">▶</span>
+              <h3 class="text-[10px] font-bold text-purple-400 uppercase tracking-wider">TTS FILTROS — GOOGLE TRANSLATE
+              </h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[8px] text-gray-600 font-mono">código base + ajuste panel</span>
+              <button onclick="event.stopPropagation(); resetTTSFilters()" class="text-[8px] text-gray-500 hover:text-red-400 border border-gray-700 hover:border-red-700 px-2 py-0.5 rounded transition-colors font-mono">RESET</button>
+            </div>
+          </summary>
+          <div class="px-3 pb-3 border-t border-purple-900/30">
+            <div class="grid grid-cols-2 gap-3 mt-3">
+              <div class="bg-black/40 rounded border border-gray-800 p-2">
+                <label class="text-[8px] text-gray-500 font-mono uppercase block mb-1">Rate pre-proceso ×</label>
+                <input type="number" id="tts-f-rate" min="-0.5" max="1.5" step="0.01" value="0" class="w-full bg-black border border-gray-700 text-purple-300 text-[11px] font-mono text-center p-1.5 rounded outline-none focus:border-purple-500">
+                <div class="text-[7px] text-gray-600 font-mono mt-1">código: ×0.88 · panel ajusta encima</div>
+                <div class="text-[7px] text-gray-700 font-mono">1.5 + panel = velocidad base del proceso</div>
+              </div>
+              <div class="bg-black/40 rounded border border-purple-800/60 p-2">
+                <label class="text-[8px] text-purple-400 font-mono uppercase block mb-1">🎵 Tono (cents)</label>
+                <input type="number" id="tts-f-pitch" min="-1200" max="1200" step="50" value="-530" class="w-full bg-black border border-purple-800/60 text-purple-300 text-[11px] font-mono text-center p-1.5 rounded outline-none focus:border-purple-400">
+                <div class="text-[7px] text-gray-600 font-mono mt-1">código: -200c · panel se suma</div>
+                <div class="text-[7px] text-gray-700 font-mono">100=+1 semitono · -200=-2 semitonos</div>
+              </div>
+            </div>
+            <div class="flex gap-2 items-center border-t border-purple-900/30 pt-2 mt-3">
+              <input type="text" id="tts-preview-text" placeholder="texto de prueba..." value="siento tu presencia aquí" class="flex-1 bg-black border border-gray-700 p-1.5 text-white text-[10px] rounded font-mono outline-none focus:border-purple-500">
+              <button id="btn-tts-preview" onclick="previewGoogleTTS()" class="flex-shrink-0 flex items-center gap-1.5 bg-purple-900/30 border border-purple-600 text-purple-300 hover:bg-purple-700 hover:text-white text-sm px-3 py-1.5 rounded transition-all font-mono" title="Escuchar con filtros actuales">🔊</button>
+            </div>
+            <p class="text-[7px] text-gray-700 font-mono mt-1.5">Pitch: tono base. Rate: velocidad normal (preview).
+              AUDIO SCAN aplica 1.60-1.89x encima multiplicando la base. Subir velocidad también sube tono — compensar
+              bajando Pitch.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="p-3 border-t border-red-900/30 flex-shrink-0 bg-neutral-900 rounded-b">
+        <button onclick="saveSettings()" class="w-full bg-red-900/20 border border-red-600 text-red-500 hover:bg-red-900/50 hover:text-white py-3 rounded text-sm font-bold uppercase tracking-widest transition-colors font-orbitron">GUARDAR Y CERRAR</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================================
         // CONFIGURACIÓN EXTERNA
         // ==========================================================
  let AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
@@ -1057,53 +1363,59 @@ function updateTTSStatusUI() {
             initTTSModeUI();
         }
 
-        // ============ PING PROVIDER ============
-        async function pingProvider(provider) {
-            const key = provider === 'gemini' ?
-                localStorage.getItem('obr_ai_key') :
-                localStorage.getItem('obr_groq_key');
-            if (!key) return { success: false, time: -1, model: null };
+// ============ PING PROVIDER ============
+async function pingProvider(provider) {
+    const key = provider === 'gemini' ?
+        localStorage.getItem('obr_ai_key') :
+        localStorage.getItem('obr_groq_key');
+    if (!key) return { success: false, time: -1, model: null };
 
-            const start = performance.now();
-            try {
-                if (provider === 'gemini') {
-                    const resp = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] })
-                        }
-                    );
-                    if (resp.ok) {
-                        return { success: true, time: performance.now() - start, model: 'gemini-2.0-flash' };
-                    }
-                    if (resp.status === 429) {
-                        await new Promise(r => setTimeout(r, 2000));
-                        const retryResp = await fetch(
-                            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] })
-                            }
-                        );
-                        if (retryResp.ok) {
-                            return { success: true, time: performance.now() - start, model: 'gemini-2.0-flash' };
-                        }
-                    }
-                    return { success: false, time: -1, model: null };
-                } else { // Groq
-                    const resp = await fetch('https://api.groq.com/openai/v1/models', {
-                        headers: { 'Authorization': `Bearer ${key}` }
-                    });
-                    if (resp.ok) {
-                        return { success: true, time: performance.now() - start, model: null };
-                    }
-                    return { success: false, time: -1, model: null };
-                }
-            } catch (e) {
-                return { success: false, time: -1, model: null };
+    const start = performance.now();
+    try {
+        if (provider === 'gemini') {
+            // 1. Intentamos primero con 1.5-flash (el más estable y universal)
+            let resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] })
+            });
+            if (resp.ok) {
+                return { success: true, time: performance.now() - start, model: 'gemini-1.5-flash' };
             }
+
+            // 2. Si falla por rate limit (429), esperamos y reintentamos con 2.0-flash
+            if (resp.status === 429) {
+                await new Promise(r => setTimeout(r, 2000));
+            }
+
+            // 3. Fallback a 2.0-flash
+            resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: "HOLA" }] }] })
+            });
+            if (resp.ok) {
+                return { success: true, time: performance.now() - start, model: 'gemini-2.0-flash' };
+            }
+
+            return { success: false, time: -1, model: null };
+
+        } else { // Groq
+            const resp = await fetch('https://api.groq.com/openai/v1/models', {
+                headers: { 'Authorization': `Bearer ${key}` }
+            });
+            if (resp.ok) {
+                return { success: true, time: performance.now() - start, model: null };
+            }
+            return { success: false, time: -1, model: null };
         }
+    } catch (e) {
+        console.warn(`Error haciendo ping a ${provider}:`, e);
+        return { success: false, time: -1, model: null };
+    }
+}
 
         // ============ SELECTOR DE PROVEEDOR IA ============
         function setAIProvider(mode) {
@@ -1226,9 +1538,9 @@ function updateTTSStatusUI() {
             }
 
             if (bestProvider === 'gemini') {
-                AI_API_KEY = localStorage.getItem('obr_ai_key');
-                CURRENT_AI_MODEL = 'gemini-2.0-flash';
-            } else {
+    AI_API_KEY = localStorage.getItem('obr_ai_key');
+    CURRENT_AI_MODEL = 'gemini-1.5-flash'; // 🔽 Forzamos el modelo estable
+} else {
                 AI_API_KEY = localStorage.getItem('obr_groq_key');
                 CURRENT_AI_MODEL = 'llama-3.2-11b-vision-preview';
             }
@@ -1485,32 +1797,58 @@ function updateTTSStatusUI() {
             try {
                 let resultText = null;
                 if (CURRENT_AI_PROVIDER === 'groq') {
-                    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model: CURRENT_AI_MODEL,
-                            messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }] }],
-                            max_tokens: 150,
-                            temperature: 0.3,
-                            response_format: { type: "json_object" }
-                        })
-                    });
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        resultText = data.choices[0].message.content;
-                    }
-                } else {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }] })
-                    });
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        resultText = data.candidates[0].content.parts[0].text;
-                    }
-                }
+    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: CURRENT_AI_MODEL,
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }] }],
+            max_tokens: 100,
+            temperature: 0.7
+        }),
+        signal: ac.signal
+    });
+    clearTimeout(reqTimer);
+    const data = await resp.json();
+    if (resp.ok && data.choices && data.choices[0].message) {
+        success = true;
+        textResult = data.choices[0].message.content;
+    } else {
+        // Capturar el error real para no quedar en "Analizando..."
+        textResult = data.error?.message || "Error en Groq";
+        if (data.error?.code === 'model_decommissioned' || data.error?.type === 'invalid_request_error') {
+            success = true; // Romper el bucle y mostrar el error en pantalla
+        } else {
+            attempts++;
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    }
+} else {
+    const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            contents: [{ 
+                parts: [
+                    { text: prompt }, 
+                    { inlineData: { mimeType: "image/jpeg", data: base64 } }
+                ] 
+            }] 
+        }),
+        signal: ac.signal
+    });
+    clearTimeout(reqTimer);
+    const data = await resp.json();
+    if (data.candidates && data.candidates[0].content) {
+        success = true;
+        textResult = data.candidates[0].content.parts[0].text;
+    } else {
+        // Capturar error de Gemini
+        textResult = data.error?.message || "Error en Gemini";
+        success = true; // Romper bucle si hay error estructural
+    }
+}
 
                 if (resultText) {
                     let cleanJson = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -3568,8 +3906,8 @@ infoBtn.addEventListener('click', function(e) {
             const totalWidth = Math.min(w * 0.6, 900);
             const barWidth = totalWidth / numBars;
             const startX = (w - totalWidth) / 2;
-            const bottomY = h * 0.88;
-            const maxHeight = h * 0.15;
+            const bottomY = h * 0.96; // 🔽 Bajado para quedar justo sobre los botones de medios
+            const maxHeight = h * 0.13; // 🔽 Altura reducida para que sea más compacto
 
             c.save();
             for (let i = 0; i < numBars; i++) {
@@ -3641,8 +3979,8 @@ infoBtn.addEventListener('click', function(e) {
             if (!state.isAudioScan) return;
 
             const screenScale = Math.max(1.2, Math.min(4, 1920 / (window.innerWidth || 1920)));
-            const bottomY = h * 0.84;
-            const textFS = Math.round(23 * screenScale);
+const bottomY = h * 0.91; // 🔽 Posicionado justo encima de las nuevas barras
+const textFS = Math.round(23 * screenScale);
 
             const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window
                 ._liveUserLastUpdate < 1500);
@@ -3692,7 +4030,7 @@ infoBtn.addEventListener('click', function(e) {
                         uCtx.fillText(userLabel, reqW / 2, reqH / 2);
                         window._lastRenderedUserText = userLabel;
                     }
-                    const uY = bottomY - 55 * screenScale;
+                    const uY = bottomY - 40 * screenScale; // 🔽 Acercado a las barras
                     c.drawImage(uCanv, (w / 2) - (reqW / 2), uY - (reqH / 2));
                 }
                 c.restore();
@@ -3700,7 +4038,7 @@ infoBtn.addEventListener('click', function(e) {
 
             if (lastSpokenText) {
                 const label = lastSpokenText.toUpperCase();
-                const evpY = bottomY - 28 * screenScale;
+                const evpY = bottomY - 10 * screenScale; // 🔽 Pegado a las barras
                 c.save();
                 c.globalAlpha = 0.85;
                 if (!window._evpTextCanvas) {
@@ -5097,24 +5435,26 @@ setInterval(() => {
             }
 
                     if (provider === 'groq') {
-            try {
-                const response = await fetch(`https://api.groq.com/openai/v1/models`, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${k}` }
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    // Filtrar modelos de visión y ordenar para sacar el más reciente
-                    const visionModels = data.data
-                        .filter(m => m.id.includes('vision') || m.id.includes('llama-3.2') || m.id.includes('llama-3.1'))
-                        .map(m => m.id)
-                        .sort(); 
-                    workingModel = visionModels.length > 0 ? visionModels[visionModels.length - 1] : data.data[0].id;
-                }
-            } catch (e) { console.warn("Error fetching Groq models", e); }
+    try {
+        const response = await fetch(`https://api.groq.com/openai/v1/models`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${k}` }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            // Filtrar SOLO modelos de visión
+            const visionModels = data.data.filter(m => m.id.includes('vision'));
+            if (visionModels.length > 0) {
+                visionModels.sort((a, b) => b.id.localeCompare(a.id)); // 90b antes que 11b
+                workingModel = visionModels[0].id;
+            } else {
+                workingModel = 'llama-3.2-90b-vision-preview'; // Fallback de seguridad
+            }
         }
+    } catch (e) {}
+}
             else {
-                const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+                const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
                 for (const model of modelsToTry) {
                     try {
                         const response = await fetch(
@@ -5294,10 +5634,10 @@ setInterval(() => {
         // ============ LOAD EVENT ============
         window.addEventListener('load', async () => {
     loadKeysFromStorage();
-
     // Sincronizar UI del TTS con el estado guardado
     initTTSModeUI();
     updateTTSStatusUI();
+    updateAIProviderUI(); // 🔽 AÑADIDO: Sincroniza botones de IA y muestra el Ping al cargar
 
     const apiKeyInput = document.getElementById('keys-input');
     if (apiKeyInput) apiKeyInput.value = state.apiKey;
@@ -5403,6 +5743,7 @@ window.resetTTSUsage = function() {
             document.getElementById('settings-modal').classList.remove('active');
         }
 
-    </script>
+  </script>
 </body>
+
 </html>
