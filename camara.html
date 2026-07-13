@@ -464,14 +464,13 @@
         #map-container-slot.map-hidden { transform: scale(0); opacity: 0; pointer-events: none; }
         #map-container-slot.map-visible { transform: scale(1); opacity: 1; pointer-events: auto; }
 
-        #mini-map {
-            height: 100%;
-            width: 100%;
-            filter: brightness(85%) contrast(110%) saturate(95%);
-            transform: scale(1.15);
-            transform-origin: center;
-            background: transparent;
-        }
+       #mini-map {
+    height: 100%;
+    width: 100%;
+    filter: brightness(85%) contrast(110%) saturate(95%);
+    /* ELIMINADO: transform: scale(1.15); transform-origin: center; */
+    background: transparent;
+}
         .map-pulse {
             width: 10px;
             height: 10px;
@@ -996,9 +995,8 @@ let voicerssRemaining     = VOICERSS_DAILY_MAX;
         let radarAngle = 0;
         let streamVideoTrack = null;
         let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
-        let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
-        let segmenter = null;
-        let lidarInitialized = false;
+let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
+let lidarInitialized = false;
 
         // ============ MANEJO DE CLAVES ============
         function parseAndStoreKeys(chain) {
@@ -2556,9 +2554,9 @@ const fpsInterval = 1000 / targetRenderFPS;
         let performanceLagging = false;
 
         const analysisCanvas = document.createElement('canvas');
-        const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-        analysisCanvas.width = 64;
-analysisCanvas.height = 48;
+const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+analysisCanvas.width = 192; // MoveNet requiere al menos 192x192
+analysisCanvas.height = 192;
         const aiSnapCanvas = document.createElement('canvas');
         aiSnapCanvas.width = 320;
         aiSnapCanvas.height = 240;
@@ -2994,121 +2992,87 @@ infoBtn.addEventListener('click', function(e) {
         }
 
         async function initApp() {
-            unlockAudioContext();
-            document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
-            document.getElementById('cam-error-panel').style.display = 'none';
-            requestWakeLock();
-            updateProgress(10, "INICIANDO SENSOR...");
+    unlockAudioContext();
+    document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
+    document.getElementById('cam-error-panel').style.display = 'none';
+    requestWakeLock();
+    updateProgress(10, "INICIANDO SENSOR...");
+    clearTimeout(loadingTimer);
+    initMiniMap();
 
-            clearTimeout(loadingTimer);
+    const constraintSets = [
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60, max: 60 } } },
+        { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 60 } } }
+    ];
+    
+    let stream = null;
+    let lastError = null;
+    for (let i = 0; i < constraintSets.length; i++) {
+        try {
+            updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 1080p..." : "MODO BÁSICO...");
+            stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
+            break;
+        } catch (e) { lastError = e; if (e.name === 'NotAllowedError') break; }
+    }
 
-            initMiniMap();
-
-            const constraintSets = [
-                { audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 },
-                        frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
-                { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 },
-                        frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
-                { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 },
-                        frameRate: { ideal: 60, max: 60 } } },
-                { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 60 } } }
-            ];
-
-            let stream = null;
-            let lastError = null;
-            for (let i = 0; i < constraintSets.length; i++) {
-                try {
-                    updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 4K..." : i === 1 ? "INICIANDO SENSOR 1080p..." :
-                        i === 2 ? "INTENTANDO 720p..." : "MODO BÁSICO...");
-                    stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
-                    break;
-                } catch (e) {
-                    lastError = e;
-                    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
-                }
-            }
-
-            if (!stream) {
-                const e = lastError;
-                localStorage.removeItem("camPermission");
-                document.querySelectorAll('.load-btn').forEach(b => {
-                    b.style.display = 'block';
-                    if (b.id === 'main-cam-btn') { b.innerText = "INICIAR CÁMARA";
-                        b.style.borderColor = "";
-                        b.style.color = ""; }
-                });
-                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-                    showCamError('PERMISO DENEGADO', 'El navegador bloqueó el acceso a la cámara. Revisa los permisos.',
-                    null);
-                } else if (e.name === 'NotFoundError') {
-                    showCamError('CÁMARA NO DISPONIBLE',
-                        'No se encontró ninguna cámara en este dispositivo. Si tu dispositivo tiene cámara, reinicia la app.',
-                        null);
-                } else {
-                    showCamError('ERROR DE CÁMARA', `${e.name}: ${e.message}`, null);
-                }
-                return;
-            }
-
-            localStorage.setItem("camPermission", "granted");
-            try { sessionStorage.setItem("camPermission", "granted"); } catch (e) {}
-            videoStream = new MediaStream(stream.getVideoTracks());
-            const track = videoStream.getVideoTracks()[0];
-            if (track) {
-                try {
-                    await track.applyConstraints({ advanced: [{ focusMode: "manual", focusDistance: 1.0 }] });
-                } catch (e) { /* no soportado */ }
-            }
-            el.video.srcObject = videoStream;
-            el.video.play().then(() => { fixCanvasSize(); }).catch(() => {});
-
-            updateProgress(30, "PRECARGANDO MEDIOS LOCALES...");
-            await preloadLocalAssets();
-            updateProgress(50, "CALIBRANDO MOTORES IA...");
-
-            setTimeout(async () => {
-                try {
-                    if (window.tf) { try { await tf.setBackend('webgl'); } catch (e) { await tf.setBackend(
-                        'cpu'); } }
-                    if (window.poseDetection) aiDetector = await poseDetection.createDetector(poseDetection
-                        .SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType
-                            .MULTIPOSE_LIGHTNING, enableSmoothing: true });
-                    const vRatio = el.video.videoHeight / el.video.videoWidth;
-                    analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
-                    analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
-                    if (segmenter) await segmenter.send({ image: analysisCanvas });
-                    if (aiDetector) await aiDetector.estimatePoses(analysisCanvas);
-                } catch (e) {}
-
-                updateProgress(100, "SISTEMAS LISTOS");
-                document.getElementById('loading').style.display = 'none';
-                resize();
-                window.addEventListener('resize', resize);
-
-                initDOMCache();
-                requestAnimationFrame(renderLoop);
-                setInterval(telemetryLoop, 1000);
-                requestAnimationFrame(detectionLoop);
-
-                initRTM();
-                initRemoteMicReceiverAgora();
-            }, 800);
-        }
-
-        async function detectionLoop() {
-    if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
-        if (targetPoses.length) {
-            targetPoses = [];
-            lidarMask = null;
-            currentPose = null;
-            prevPose = null;
-            smoothedPoses = [];
-        }
-        setTimeout(detectionLoop, 500); // Reducido para ahorrar recursos
+    if (!stream) {
+        // Manejo de errores de cámara (tu código original está bien aquí)
+        showCamError('ERROR DE CÁMARA', lastError?.message || 'No se pudo acceder', null);
         return;
     }
 
-    const now = performance.now();
+    videoStream = new MediaStream(stream.getVideoTracks());
+    el.video.srcObject = videoStream;
+    el.video.play().then(() => { fixCanvasSize(); }).catch(() => {});
+
+    updateProgress(30, "PRECARGANDO MEDIOS...");
+    await preloadLocalAssets();
+    
+    updateProgress(50, "CALIBRANDO MOTORES IA...");
+    setTimeout(async () => {
+        try {
+            // 1. Inicializar TF.js de forma segura
+            if (window.tf) {
+                try { await tf.setBackend('webgl'); } catch (e) { await tf.setBackend('cpu'); }
+                await tf.ready(); 
+            }
+            // 2. Cargar MoveNet (SLS)
+            if (window.poseDetection) {
+                aiDetector = await poseDetection.createDetector(
+                    poseDetection.SupportedModels.MoveNet, 
+                    { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true }
+                );
+            }
+        } catch (e) { console.warn("Error inicializando IA:", e); }
+
+        updateProgress(100, "SISTEMAS LISTOS");
+        document.getElementById('loading').style.display = 'none';
+        resize();
+        window.addEventListener('resize', resize);
+        initDOMCache();
+        
+        requestAnimationFrame(renderLoop);
+        setInterval(telemetryLoop, 1000);
+        requestAnimationFrame(detectionLoop);
+
+        // 3. Iniciar Agora de forma SEGURA (evita crashes si el CDN tarda)
+        try {
+            if (typeof AgoraRTM !== 'undefined') initRTM();
+            if (typeof AgoraRTC !== 'undefined') initRemoteMicReceiverAgora();
+        } catch (e) { console.warn("Agora SDK no disponible aún:", e); }
+    }, 800);
+}
+
+    async function detectionLoop() {
+    if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
+        if (targetPoses.length) {
+            targetPoses = []; lidarMask = null; currentPose = null; prevPose = null; smoothedPoses = [];
+        }
+        setTimeout(detectionLoop, 500); 
+        return;
+    }
+
     try {
         let imageDrawnThisFrame = false;
         const ensureImageDrawn = () => {
@@ -3122,34 +3086,43 @@ infoBtn.addEventListener('click', function(e) {
 
         // =================== LIDAR ===================
         if (state.isLidar) {
-            // Si LIDAR está activo pero segmenter no existe, lo iniciamos
-            if (!segmenter) {
-                await initLidar();
-            }
+            if (!segmenter) await initLidar();
             if (segmenter && !lidarBusy) {
                 lidarBusy = true;
                 ensureImageDrawn();
-                try {
-                    await segmenter.send({ image: analysisCanvas });
-                } catch (e) {
-                    lidarBusy = false;
-                }
+                try { await segmenter.send({ image: analysisCanvas }); } catch (e) {}
+                lidarBusy = false;
             }
         } else {
-            // Si LIDAR no está activo pero segmenter existe, lo destruimos
-            if (segmenter) {
-                await destroyLidar();
-            }
+            if (segmenter) await destroyLidar();
         }
-        // ============================================
-        
-        // ... resto del código para SLS y Pareidolia (no tocar)
-        
+
+        // =================== SLS (POSE DETECTION) ===================
+               // =================== SLS (POSE DETECTION) ===================
+        if (state.isSLS && aiDetector) {
+            ensureImageDrawn();
+            try {
+                const newPoses = await aiDetector.estimatePoses(analysisCanvas);
+                // NORMALIZAR COORDENADAS A 0-1 PARA QUE SE DIBUJEN CORRECTAMENTE
+                const w = analysisCanvas.width, h = analysisCanvas.height;
+                newPoses.forEach(pose => {
+                    pose.keypoints.forEach(kp => {
+                        kp.x /= w;
+                        kp.y /= h;
+                    });
+                });
+                targetPoses = filterOverlapping(newPoses);
+                updatePose(targetPoses);
+            } catch (e) { console.warn("SLS detection error:", e); }
+        }
+
     } catch (e) {
         console.warn('Error en detectionLoop:', e);
     }
     
-    setTimeout(detectionLoop, state.isSLS ? 66 : 200);
+    // Ajuste de FPS para no quemar la CPU
+    const delay = state.isSLS ? 66 : (state.isLidar ? 100 : 200);
+    setTimeout(detectionLoop, delay);
 }
 
         function _ensureAudioContext() {
@@ -3435,6 +3408,7 @@ infoBtn.addEventListener('click', function(e) {
                 }
             } else {
                 state.isAudioScan = true;
+                document.getElementById('local-media-controls').style.display = 'none';
                 const elOk = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
                 const vrOk = voicerssRemaining > 0;
                 if (!elOk && !vrOk) { state.isAudioScan = false;
@@ -3502,6 +3476,7 @@ infoBtn.addEventListener('click', function(e) {
         }
 
         function executeAudioScanDeactivation(btnMenu) {
+          document.getElementById('local-media-controls').style.display = 'flex';
             state.isAudioScan = false;
             if (btnMenu) btnMenu.classList.remove('active-state');
             stopSweepAudio();
@@ -3801,43 +3776,36 @@ infoBtn.addEventListener('click', function(e) {
 
         function onLidarResults(results) { if (results && results.segmentationMask) lidarMask = results.segmentationMask; }
 
-        // ========== FUNCIONES LIDAR/SEGMENTACIÓN ==========
-        async function initLidar() {
-            if (segmenter || !window.SelfieSegmentation) {
-                return; // Ya está inicializado o no hay librería
-            }
-            try {
-                segmenter = new SelfieSegmentation({
-                    locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
-                    }
-                });
-                segmenter.setOptions({
-                    modelSelection: 1, // 0 = general, 1 = landscape
-                    selfieMode: true
-                });
-                segmenter.onResults(onLidarResults);
-                await segmenter.initialize();
-                lidarInitialized = true;
-            } catch (e) {
-                console.warn('Error inicializando LIDAR:', e);
-                segmenter = null;
-                lidarInitialized = false;
-            }
-        }
+// === FUNCIONES FALTANTES PARA LIDAR (MEDIAPIPE) ===
+async function initLidar() {
+    if (segmenter) return; // Ya inicializado
+    if (typeof SelfieSegmentation === 'undefined') {
+        console.warn("MediaPipe SelfieSegmentation no cargó desde el CDN.");
+        return;
+    }
+    try {
+        segmenter = new SelfieSegmentation({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+        });
+        segmenter.setOptions({ modelSelection: 1 }); // 1 para modelo completo
+        segmenter.onResults(onLidarResults);
+        lidarInitialized = true;
+        console.log("✅ LIDAR (Segmenter) inicializado.");
+    } catch (e) {
+        console.error("Error crítico iniciando LIDAR:", e);
+    }
+}
 
-        async function destroyLidar() {
-            if (segmenter) {
-                try {
-                    segmenter.close();
-                } catch (e) {}
-                segmenter = null;
-                lidarMask = null;
-                lastLidarMask = null;
-                lidarInitialized = false;
-            }
-        }
-        // ================================================
+async function destroyLidar() {
+    if (segmenter) {
+        try { segmenter.close(); } catch(e) {} // Intentar cerrar si la versión lo soporta
+        segmenter = null;
+        lidarMask = null;
+        lastLidarMask = null;
+        lidarInitialized = false;
+        console.log("🛑 LIDAR (Segmenter) liberado de RAM.");
+    }
+}
 
         const lidarAnalysisCanvas = document.createElement('canvas');
         lidarAnalysisCanvas.width = 64;
@@ -4462,19 +4430,33 @@ infoBtn.addEventListener('click', function(e) {
             if (DOM_CACHE.clock) DOM_CACHE.clock.innerText = `${dateStr} - ${timeStr}`;
         }
 
-        let watchdogZeroFps = 0;
-        setInterval(() => {
-            if (document.visibilityState !== 'visible' || isRestartingCamera || isAIProcessing) return;
-            if (currentFps === 0 && el.video.readyState >= 2 && !streamVideoTrack) {
-                watchdogZeroFps++;
-                if (watchdogZeroFps >= 8) { restartCamera();
-                    watchdogZeroFps = 0; }
-            } else watchdogZeroFps = 0;
-            if (videoStream) {
-                const track = videoStream.getVideoTracks()[0];
-                if (track && track.readyState === 'ended' && !el.video.paused) restartCamera();
-            }
-        }, 1000);
+let watchdogZeroFps = 0;
+let lastVideoTime = -1;
+
+setInterval(() => {
+    if (document.visibilityState !== 'visible' || isRestartingCamera || isAIProcessing) return;
+    
+    const video = el.video;
+    if (video && video.readyState >= 2) {
+        // Si el tiempo del video no avanza y no está en pausa, está congelado
+        if (video.currentTime === lastVideoTime && !video.paused) {
+            watchdogZeroFps++;
+        } else {
+            watchdogZeroFps = 0;
+            lastVideoTime = video.currentTime;
+        }
+    }
+
+    // Solo reiniciar si lleva 15 segundos CONGELADO (no solo con 0 FPS por lag)
+    if (watchdogZeroFps >= 15) { 
+        restartCamera();
+        watchdogZeroFps = 0;
+    }
+       if (videoStream) {
+        const track = videoStream.getVideoTracks()[0];
+        if (track && track.readyState === 'ended' && !el.video.paused) restartCamera();
+    }
+}, 1000);
 
         function telemetryLoop() {
             if (!DOM_CACHE) initDOMCache();
@@ -4678,13 +4660,36 @@ infoBtn.addEventListener('click', function(e) {
     if (state.isSLS) window._slsStartTime = Date.now();
     
     // === MANEJO DINÁMICO DE LIDAR ===
+       // === MANEJO DINÁMICO Y LIMPIEZA DE RAM ===
     if (f === 'lidar') {
         state.isLidar = true;
-        await initLidar(); // Asegura que LIDAR esté listo
+        await initLidar();
     } else if (state.isLidar) {
         state.isLidar = false;
-        await destroyLidar(); // Libera recursos al desactivar
+        await destroyLidar();
     }
+
+    if (f === 'sls') {
+        state.isSLS = true;
+        // Inicializar SLS si no existe
+        if (!aiDetector && window.poseDetection) {
+            try {
+                aiDetector = await poseDetection.createDetector(
+                    poseDetection.SupportedModels.MoveNet, 
+                    { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true }
+                );
+            } catch(e) { console.warn("SLS init error", e); }
+        }
+    } else if (state.isSLS) {
+        state.isSLS = false;
+        // DESTRUIR SLS PARA LIBERAR RAM
+        if (aiDetector) {
+            aiDetector = null; 
+            targetPoses = []; smoothedPoses = [];
+            console.log("🛑 SLS (MoveNet) liberado de RAM.");
+        }
+    }
+
     // ====================================
     
     document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-state'));
@@ -5091,20 +5096,24 @@ infoBtn.addEventListener('click', function(e) {
                 return;
             }
 
-            if (provider === 'groq') {
-                try {
-                    const response = await fetch(`https://api.groq.com/openai/v1/models`, {
-                        method: 'GET',
-                        headers: { 'Authorization': `Bearer ${k}` }
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        const models = data.data.map(m => m.id);
-                        workingModel = models.find(m => m.includes('scout')) || models.find(m => m.includes(
-                            'vision')) || models.find(m => m.includes('llama')) || models[0];
-                    }
-                } catch (e) {}
-            } else {
+                    if (provider === 'groq') {
+            try {
+                const response = await fetch(`https://api.groq.com/openai/v1/models`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${k}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    // Filtrar modelos de visión y ordenar para sacar el más reciente
+                    const visionModels = data.data
+                        .filter(m => m.id.includes('vision') || m.id.includes('llama-3.2') || m.id.includes('llama-3.1'))
+                        .map(m => m.id)
+                        .sort(); 
+                    workingModel = visionModels.length > 0 ? visionModels[visionModels.length - 1] : data.data[0].id;
+                }
+            } catch (e) { console.warn("Error fetching Groq models", e); }
+        }
+            else {
                 const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
                 for (const model of modelsToTry) {
                     try {
@@ -5382,8 +5391,6 @@ window.resetTTSUsage = function() {
         window.setAIProvider = setAIProvider;
         window.testAIPing = testAIPing;
         window.updateAIProviderUI = updateAIProviderUI;
-        window.openChatView = openChatView;
-        window.closeChatView = closeChatView;
 
         // ============ FUNCIONES FALTANTES IMPLEMENTADAS ============
         function openSettings() {
@@ -5391,29 +5398,10 @@ window.resetTTSUsage = function() {
         }
 
         function saveSettings() {
+            // Guarda configuraciones básicas
             showToast('Configuración guardada', false);
             document.getElementById('settings-modal').classList.remove('active');
         }
-        
-        // Funciones auxiliares necesarias para el arranque
-        function initTTSModeUI() { /* Placeholder - se implementará después */ }
-        function updateTTSStatusUI() { /* Placeholder - se implementará después */ }
-        function setTTSMode(mode) { /* Placeholder - se implementará después */ }
-        function toggleAudioScanner() { /* Placeholder - se implementará después */ }
-        function toggleCleanUI() { /* Placeholder - se implementará después */ }
-        function validateAndSaveKey() { /* Placeholder - se implementará después */ }
-        function openConnect() { /* Placeholder - se implementará después */ }
-        function connectToStudio() { /* Placeholder - se implementará después */ }
-        function startHybridTransmission() { connectToStudio(); }
-        function resetZoom(btn) { /* Placeholder - se implementará después */ }
-        function playLocalMedia(type) { /* Placeholder - se implementará después */ }
-        function stopLocalMedia() { /* Placeholder - se implementará después */ }
-        function startRemoteMicAgora() { /* Placeholder - se implementará después */ }
-        function stopRemoteMicAgora() { /* Placeholder - se implementará después */ }
-        function toggleLocalMic() { /* Placeholder - se implementará después */ }
-        function setAIProvider(provider) { /* Placeholder - se implementará después */ }
-        function testAIPing() { /* Placeholder - se implementará después */ }
-        function updateAIProviderUI() { /* Placeholder - se implementará después */ }
 
     </script>
 </body>
