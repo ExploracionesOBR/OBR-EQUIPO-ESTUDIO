@@ -998,7 +998,7 @@ let voicerssRemaining     = VOICERSS_DAILY_MAX;
         let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
         let aiProviderMode = localStorage.getItem('obr_ai_provider_mode') || 'auto';
         let segmenter = null;
-let lidarInitialized = false;   // (también añade esta línea)
+        let lidarInitialized = false;
 
         // ============ MANEJO DE CLAVES ============
         function parseAndStoreKeys(chain) {
@@ -3800,6 +3800,44 @@ infoBtn.addEventListener('click', function(e) {
         }
 
         function onLidarResults(results) { if (results && results.segmentationMask) lidarMask = results.segmentationMask; }
+
+        // ========== FUNCIONES LIDAR/SEGMENTACIÓN ==========
+        async function initLidar() {
+            if (segmenter || !window.SelfieSegmentation) {
+                return; // Ya está inicializado o no hay librería
+            }
+            try {
+                segmenter = new SelfieSegmentation({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+                    }
+                });
+                segmenter.setOptions({
+                    modelSelection: 1, // 0 = general, 1 = landscape
+                    selfieMode: true
+                });
+                segmenter.onResults(onLidarResults);
+                await segmenter.initialize();
+                lidarInitialized = true;
+            } catch (e) {
+                console.warn('Error inicializando LIDAR:', e);
+                segmenter = null;
+                lidarInitialized = false;
+            }
+        }
+
+        async function destroyLidar() {
+            if (segmenter) {
+                try {
+                    segmenter.close();
+                } catch (e) {}
+                segmenter = null;
+                lidarMask = null;
+                lastLidarMask = null;
+                lidarInitialized = false;
+            }
+        }
+        // ================================================
 
         const lidarAnalysisCanvas = document.createElement('canvas');
         lidarAnalysisCanvas.width = 64;
