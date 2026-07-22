@@ -433,7 +433,11 @@
                 <button onclick="setTTSMode('auto')" id="tts-btn-auto" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-green-700 text-green-400 bg-green-900/20">AUTO</button>
                 <button onclick="setTTSMode('elevenlabs')" id="tts-btn-el" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-gray-700 text-gray-400">ELEVENLABS</button>
                 <button onclick="setTTSMode('voicerss')" id="tts-btn-vrss" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-gray-700 text-gray-400">VOICERSS</button>
-            </div>
+                    </div>
+<button onclick="refreshTTSCredits()" class="mt-2 px-3 py-1.5 bg-blue-900/30 border border-blue-600 text-blue-400 hover:bg-blue-700 hover:text-white text-[9px] font-bold rounded transition-all font-orbitron">
+    🔄 REFRESCAR CRÉDITOS
+</button>
+</button>
         </div>
     </div>
 </div>
@@ -482,68 +486,85 @@
     </div>
 
 <script>
-    // ==========================================================
-    // CONFIGURACIÓN EXTERNA
-    // ==========================================================
-        const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
-    const AGORA_TOKEN  = '007eJxTYGDwP/d/v9xe7czpnYVt32w/TP6SOdXJ5bqvnXOfxOSA+8cUGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNxcwYsxoCGRk4jtxhYIRCEJ+bIT+pSDe1uKQ0JTOfgQEAU2sh5A==';
-    const AGORA_CHANNEL = 'obr-estudio';
-    let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+// ==========================================================
+// CONFIGURACIÓN EXTERNA Y CLAVES POR DEFECTO
+// ==========================================================
+const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
+const AGORA_TOKEN  = '007eJxTYGDwP/d/v9xe7czpnYVt32w/TP6SOdXJ5bqvnXOfxOSA+8cUGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNxcwYsxoCGRk4jtxhYIRCEJ+bIT+pSDe1uKQ0JTOfgQEAU2sh5A==';
+const AGORA_CHANNEL = 'obr-estudio';
+let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialstream.ninja/dock.html?session=89yKRznESR';
+const RTM_TOKEN = undefined;
+const MIC_CHANNEL = 'obr-mic';
+const AI_SENSITIVITY = 0.35; // Aumentado para reducir falsos positivos
+const VOLUMEN_BARRIDO = 0.40;
+const VOLUMEN_RESPUESTA = 0.35;
+const VOLUMEN_EVP = 1.5;
+const VOLUMEN_IA_VISION = 1.5;
 
-    const RTM_TOKEN = undefined;
-    const MIC_CHANNEL = 'obr-mic';
+// === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
+const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
+const DEFAULT_VOICERSS_KEY = '776fa230d3574c4097aa44e4e3c3949c';
 
-    const AI_SENSITIVITY = 0.2;
-    const VOLUMEN_BARRIDO = 0.40;
-    const VOLUMEN_RESPUESTA = 0.35;
-    const VOLUMEN_EVP = 1.5;
-    const VOLUMEN_IA_VISION = 1.5;
+// ============ ESTADO GLOBAL ============
+const state = {
+    filter: 'normal',
+    zoom: 1,
+    isSLS: false,
+    isLidar: false,
+    isAudioScan: false,
+    isPareidolia: false,
+    cameraName: localStorage.getItem('obr_camera_name') || 'cam1',
+    studioId: localStorage.getItem('obr_studio_id') || 'local',
+    apiKey: localStorage.getItem('obr_ai_key') || '',
+    aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
+    aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
+};
 
-    // ============ ESTADO GLOBAL (faltaba) ============
-    const state = {
-        filter: 'normal',
-        zoom: 1,
-        isSLS: false,
-        isLidar: false,
-        isAudioScan: false,
-        isPareidolia: false,
-        cameraName: localStorage.getItem('obr_camera_name') || 'cam1',
-        studioId: localStorage.getItem('obr_studio_id') || 'local',
-        apiKey: localStorage.getItem('obr_ai_key') || '',
-        aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
-        aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
-    };
+// ==========================================================
+// CONFIGURACIÓN DE APIs Y CRÉDITOS (Con fallback a tus claves)
+// ==========================================================
+let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || DEFAULT_ELEVENLABS_KEY;
+let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || DEFAULT_VOICERSS_KEY;
 
-    // APIs y variables TTS (faltaban)
-    let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || '';
-
-
-let isSystemBusy = false; // Evita que el watchdog reinicie durante configuraciones o IA
-let lastFrameUpdateTime = performance.now(); // Para detectar congelamientos reales
-// === SISTEMA DUAL DE APIs (Gemini + Groq) ===
 let GEMINI_API_KEY = localStorage.getItem('obr_gemini_key') || '';
+let GEMINI_MODEL = localStorage.getItem('obr_gemini_model') || 'gemini-2.0-flash';
+
 let GROQ_API_KEY = localStorage.getItem('obr_groq_key') || '';
-let GEMINI_MODEL = localStorage.getItem('obr_gemini_model') || 'gemini-2.5-flash';
-let GROQ_MODEL = localStorage.getItem('obr_groq_model') || 'qwen3.6-27b';
-let AI_MODE = localStorage.getItem('obr_ai_mode') || 'auto'; // 'auto' | 'gemini' | 'groq'
+let GROQ_MODEL = localStorage.getItem('obr_groq_model') || 'llama-3.2-90b-vision-preview';
+
+let CURRENT_AI_PROVIDER = localStorage.getItem('obr_ai_provider') || 'none';
+let CURRENT_AI_MODEL = localStorage.getItem('obr_ai_model') || '';
+let AI_API_KEY = localStorage.getItem('obr_ai_key') || '';
+
 let apiPing = { gemini: Infinity, groq: Infinity };
+let AI_MODE = localStorage.getItem('obr_ai_mode') || 'auto';
+let isSystemBusy = false;
+let lastFrameUpdateTime = performance.now();
 let lastApiUsed = null;
-    let elevenlabsCreditsTotal = 10000;
-    let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '0');
-    let elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
-    let voicerssRemaining = 350; 
-    let voicerssUsed = 0;
 
-    let AI_API_KEY = state.apiKey;
-    let CURRENT_AI_MODEL = state.aiModel;
-    let CURRENT_AI_PROVIDER = state.aiProvider;
+let elevenlabsCreditsTotal = 10000;
+let elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '0');
+let elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
 
-    let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
-    let usingFallbackTTS = false;
-    let _activeBufSrc = null;
-    let _ttsWatchdog = null;
+let voicerssRemaining = parseInt(localStorage.getItem('obr_vrss_remaining') || '350');
+let voicerssUsed = parseInt(localStorage.getItem('obr_vrss_used') || '0');
+const lastVrssReset = localStorage.getItem('obr_vrss_last_reset') || '';
+const today = new Date().toDateString();
 
-    function normalizarTexto(texto) {
+if (lastVrssReset !== today) {
+    voicerssRemaining = 350;
+    voicerssUsed = 0;
+    localStorage.setItem('obr_vrss_remaining', '350');
+    localStorage.setItem('obr_vrss_used', '0');
+    localStorage.setItem('obr_vrss_last_reset', today);
+}
+
+let ttsMode = localStorage.getItem('obr_tts_mode') || 'auto';
+let usingFallbackTTS = false;
+let _activeBufSrc = null;
+let _ttsWatchdog = null;
+
+function normalizarTexto(texto) {
         return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     }
 
@@ -569,10 +590,12 @@ let lastApiUsed = null;
         cloudTTSPlayer.src = '';
     }
 
-    function _incrementVoiceRSS() {
-        voicerssUsed++;
-        voicerssRemaining = Math.max(0, 350 - voicerssUsed);
-    }
+function _incrementVoiceRSS() {
+    voicerssUsed++;
+    voicerssRemaining = Math.max(0, 350 - voicerssUsed);
+    localStorage.setItem('obr_vrss_remaining', voicerssRemaining);
+    localStorage.setItem('obr_vrss_used', voicerssUsed);
+}
 
 // ✅ AUMENTAR TIEMPO DE ESPERA Y MEJORAR GESTIÓN DE ERRORES
 let loadingTimer = setTimeout(() => {
@@ -619,11 +642,18 @@ document.getElementById('connect-modal').addEventListener('show', preventAutoRel
     const usedEl = document.getElementById('tts-used-status');
     const fallbackEl = document.getElementById('tts-fallback-status');
     const vrssEl = document.getElementById('tts-vrss-status');
-    if (engineEl) engineEl.textContent = ttsMode === 'elevenlabs' ? 'ELEVENLABS' : (ttsMode === 'voicerss' ? 'VOICERSS' : 'AUTO');
-    if (creditsEl) creditsEl.textContent = elevenlabsCreditsRemaining + ' / ' + elevenlabsCreditsTotal;
+    
+    if (engineEl) {
+        const hasEL = !!ELEVENLABS_API_KEY;
+        const hasVRSS = !!VOICERSS_API_KEY;
+        engineEl.textContent = ttsMode === 'elevenlabs' ? 'ELEVENLABS' : 
+                              (ttsMode === 'voicerss' ? 'VOICERSS' : 
+                              (hasEL ? 'AUTO (EL+VRSS)' : (hasVRSS ? 'VOICERSS ONLY' : 'SIN APIs')));
+    }
+    if (creditsEl) creditsEl.textContent = `${elevenlabsCreditsRemaining} / ${elevenlabsCreditsTotal}`;
     if (usedEl) usedEl.textContent = elevenlabsCreditsUsed;
     if (fallbackEl) fallbackEl.textContent = usingFallbackTTS ? 'SI (VoiceRSS)' : 'NO';
-    if (vrssEl) vrssEl.textContent = voicerssRemaining + ' / 350';
+    if (vrssEl) vrssEl.textContent = `${voicerssRemaining} / 350 (diario)`;
 }
 
 function initTTSModeUI() {
@@ -1686,10 +1716,8 @@ const paranormalQuestions = [
     document.addEventListener('click', unlockAudioContext, { once: true });
     document.addEventListener('touchend', unlockAudioContext, { once: true });
 
-  // API Keys dinámicas - se actualizan al validar/guardar
-let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || '';
-
-    async function getElevenLabsAudio(text, voiceId) {
+// NOTA: ELEVENLABS_API_KEY y VOICERSS_API_KEY ya se declararon al inicio del script con fallback a DEFAULT_
+async function getElevenLabsAudio(text, voiceId) {
         try {
             const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
                 method: 'POST', headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
@@ -1701,6 +1729,28 @@ let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || '';
             return URL.createObjectURL(await response.blob());
         } catch (e) { return null; }
     }
+
+    async function fetchElevenLabsCredits() {
+    if (!ELEVENLABS_API_KEY) return;
+    try {
+        const resp = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+            headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.character_count !== undefined && data.character_limit !== undefined) {
+                elevenlabsCreditsUsed = data.character_count;
+                elevenlabsCreditsTotal = data.character_limit;
+                elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
+                localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
+                updateTTSStatusUI();
+                console.log(`[TTS] ElevenLabs: ${elevenlabsCreditsRemaining}/${elevenlabsCreditsTotal} créditos disponibles`);
+            }
+        }
+    } catch(e) {
+        console.warn('[TTS] No se pudo consultar créditos de ElevenLabs:', e);
+    }
+}
 
     function showTtsWarning() {
         initDOMCache();
@@ -1995,7 +2045,11 @@ setInterval(() => {
 }, 120000); // Cada 2 minutos
 
     window.onload = () => {
-    // 1. Cargar claves independientes en sus campos (SOLO si existen en el HTML)
+       // Consultar créditos reales de ElevenLabs al iniciar la app
+    fetchElevenLabsCredits();
+    
+    document.getElementById('api-key-internal').value = state.apiKey;
+  // 1. Cargar claves independientes en sus campos (SOLO si existen en el HTML)
     const geminiInput = document.getElementById('gemini-key-input');
     if (geminiInput) geminiInput.value = GEMINI_API_KEY;
     
@@ -2560,9 +2614,15 @@ const constraintSets = [
             }
         } else {
             state.isAudioScan = true;
-            const elOk  = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY;
-            const vrOk  = voicerssRemaining > 0;
-            if (!elOk && !vrOk) { state.isAudioScan = false; ttsNoDisponible('sin créditos para activar AUDIO SCAN'); return; }
+            // Verificar que tengamos al menos una API TTS válida
+const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
+const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
+
+if (!hasElevenLabs && !hasVoiceRSS) {
+    state.isAudioScan = false;
+    ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
+    return;
+}
             
             if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
                 if (!audioStream) {
@@ -3708,8 +3768,8 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
 
     async function triggerPareidolia() {
     const video = el.video;
-    if(!AI_API_KEY) return;
-    if(isAIProcessing || isTtsPlaying) return;
+    if (!AI_API_KEY) return;
+    if (isAIProcessing || isTtsPlaying) return;
     
     const now = Date.now();
     if (now - lastPareidoliaCall < 12000) return;
@@ -3720,7 +3780,6 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     currentAiImage = null;
     currentAiImgEl = null;
     window._aiImageCache = null;
-    
     startScanningEffect();
     
     let pendingAiImgEl = null;
@@ -3740,28 +3799,28 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     
     const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
     
-    // Prompts modificados para exigir SOLO texto plano, sin markdown, sin <think>
+    // Prompts optimizados para primera persona, inmersión y máximo 20 palabras
     const AI_PROMPTS = [
-        "Responde SOLO con texto plano, sin markdown, sin etiquetas <think>, sin JSON. Máximo 20 palabras. Actúa como médium digital. Primera persona. Percibo presencias únicas. Veo, hay algo, está. Rostros en sombras. Describe distinto, aumenta tensión, final inquietante.",
-        "Responde SOLO con texto plano, sin markdown, sin etiquetas <think>, sin JSON. Máximo 20 palabras. Actúa como médium digital. Primera persona. Observo detalles ocultos. Veo, hay algo, está. Detecto rostros en sombras. Evita repetir, tono siniestro, final inquietante.",
-        "Responde SOLO con texto plano, sin markdown, sin etiquetas <think>, sin JSON. Máximo 20 palabras. Actúa como médium digital. Primera persona. Siento presencias. Veo, hay algo, está. Rostros en sombras. Describe sensaciones, tensión creciente, final inquietante.",
-        "Responde SOLO con texto plano, sin markdown, sin etiquetas <think>, sin JSON. Máximo 20 palabras. Actúa como médium digital. Primera persona. Algo no encaja. Veo, hay algo, está. Rostros en sombras. Genera incomodidad, evita repetir, final inquietante.",
-        "Responde SOLO con texto plano, sin markdown, sin etiquetas <think>, sin JSON. Máximo 20 palabras. Actúa como médium digital en serie. Primera persona. La presencia avanza. Veo, hay algo, está. Rostros en sombras. Conecta antes, aumenta peligro, final inquietante.",
-        "Responde SOLO con texto plano, sin markdown, sin etiquetas <think>, sin JSON. Máximo 20 palabras. Actúa como médium digital. Primera persona. La presencia está cerca. Veo, hay algo, está. Rostros en sombras. Amenaza directa, máxima tensión, final inquietante."
+        "Primera persona. Alguien del equipo reporta: 'Veo' o 'Hay' o 'Está'. Describe SOLO lo que ves en la imagen: figuras, sombras, rostros, objetos. Máx 20 palabras. Tono directo, siniestro, sin explicaciones.",
+        "Primera persona. Reporte de campo: 'Veo' o 'Detecto' o 'Hay'. Menciona elementos visibles: siluetas, formas, luces, sombras. Máx 20 palabras. Sin interpretaciones, final inquietante.",
+        "Primera persona. Observación: 'Veo' o 'Está' o 'Hay algo'. Describe contornos, manchas, figuras detectadas. Máx 20 palabras. Directo al punto, tensión creciente.",
+        "Primera persona. Testigo reporta: 'Veo' o 'Detecto' o 'Hay'. Enumera: personas, sombras, objetos, textos visibles. Máx 20 palabras. Tono escalofriante.",
+        "Primera persona. Alguien avisa: 'Veo' o 'Hay' o 'Está cerca'. Menciona figuras humanas, sombras inusuales, objetos, luces. Máx 20 palabras. Amenaza directa.",
+        "Primera persona. Reporte visual: 'Veo' o 'Detecto' o 'Hay algo'. Describe lo observable sin suposiciones. Máx 20 palabras. Final perturbador."
     ];
     const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
     
     try {
         let attempts = 0, success = false, textResult = "Analizando...";
-        const _aiTimeout = setTimeout(() => { 
-            if (isAIProcessing) { 
-                isAIProcessing = false; 
-                currentAiText = ""; 
-                if (state.isPareidolia) startScanningEffect(); 
-            } 
+        const _aiTimeout = setTimeout(() => {
+            if (isAIProcessing) {
+                isAIProcessing = false;
+                currentAiText = "";
+                if (state.isPareidolia) startScanningEffect();
+            }
         }, 20000);
         
-        while(attempts < 3 && !success) {
+        while (attempts < 3 && !success) {
             try {
                 const ac = new AbortController();
                 const reqTimer = setTimeout(() => ac.abort(), 8000);
@@ -3790,8 +3849,8 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                         success = true;
                         textResult = data.choices[0].message.content;
                     } else {
-                        if(data.error && data.error.code === 'model_decommissioned') {
-                            textResult = "MODELO OBSOLETO";
+                        if (data.error && data.error.code === 'model_decommissioned') {
+                            textResult = "MODELO GROQ OBSOLETO";
                             success = true;
                             break;
                         }
@@ -3799,6 +3858,7 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                         await new Promise(r => setTimeout(r, 1000));
                     }
                 } else {
+                    // ✅ GEMINI: CORREGIDO para enviar prompt + imagen (antes solo enviaba "ping")
                     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -3822,47 +3882,44 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                         await new Promise(r => setTimeout(r, 1000));
                     }
                 }
-            } catch(err) {
+            } catch (err) {
                 attempts++;
                 await new Promise(r => setTimeout(r, 1000));
             }
         }
         
-        clearTimeout(_aiTimeout);
-        
-        // === LIMPIEZA AGRESIVA PARA IA VISION ===
-        let text = textResult;
-        
-        // 1. Eliminar etiquetas <think> y todo su contenido
-        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        
-        // 2. Eliminar bloques de código markdown (```json ... ```)
-        text = text.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
-        
-        // 3. Eliminar cualquier rastro de formato JSON o metadatos
-        text = text.replace(/\{[\s\S]*\}/g, '').trim(); // Elimina objetos JSON sueltos
-        text = text.replace(/rol:[\s\S]*?(?=\n|$)/gi, '');
-        text = text.replace(/punto de vista:[\s\S]*?(?=\n|$)/gi, '');
-        text = text.replace(/acción:[\s\S]*?(?=\n|$)/gi, '');
-        text = text.replace(/<[^>]+>/g, ''); // Elimina cualquier otra etiqueta HTML/XML
-        
-        // 4. Eliminar caracteres de markdown
-        text = text.replace(/[*_#`]/g, '').trim();
-        
-        // 5. Extraer SOLO la primera línea con contenido real (evita bloques de texto extra)
-        const lines = text.split('\n').filter(line => line.trim().length > 2);
-        text = lines[0] || text;
-        
-        // 6. Limitar a ~25 palabras (aprox 120 caracteres) por seguridad absoluta
-        const words = text.split(/\s+/);
-        if (words.length > 25) {
-            text = words.slice(0, 25).join(' ') + "...";
-        }
-        
-        // 7. Validación final
-        if (text.length < 3 || text.toLowerCase().includes('error') || text.toLowerCase().includes('fail') || text.toLowerCase().includes('analizando')) {
-            text = "señal interferida";
-        }
+clearTimeout(_aiTimeout);
+
+// === LIMPIEZA AGRESIVA DE RESPUESTAS ===
+let text = textResult;
+
+// 1. Eliminar etiquetas <think> y todo su contenido (incluye saltos de línea)
+text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+// 2. Eliminar metadatos comunes de razonamiento
+text = text.replace(/el usuario quiere que[\s\S]*?(?=\n|$)/gi, '').trim();
+text = text.replace(/the user wants[\s\S]*?(?=\n|$)/gi, '').trim();
+text = text.replace(/rol:[\s\S]*?(?=\n|$)/gi, '').trim();
+text = text.replace(/punto de vista:[\s\S]*?(?=\n|$)/gi, '').trim();
+text = text.replace(/<[^>]+>/g, '').trim();
+
+// 3. Eliminar caracteres de markdown y limpiar espacios
+text = text.replace(/[*_#`]/g, '').trim();
+
+// 4. Extraer SOLO la primera línea válida (evita bloques de texto extra)
+const lines = text.split('\n').filter(line => line.trim().length > 2);
+text = lines[0] || text;
+
+// 5. Limitar a ~20 palabras por seguridad absoluta
+const words = text.split(/\s+/);
+if (words.length > 20) {
+    text = words.slice(0, 20).join(' ') + "...";
+}
+
+// 6. Validación final: si contiene palabras prohibidas o es muy corta, usar fallback
+if (text.length < 3 || text.toLowerCase().includes('error') || text.toLowerCase().includes('analizando') || text.toLowerCase().includes('usuario') || text.toLowerCase().includes('user')) {
+    text = "señal interferida";
+}
         
         stopScanningEffect();
         currentAiText = text;
@@ -3870,21 +3927,21 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
         currentAiImage = pendingAiImageSrc;
         
         clearTimeout(aiTextTimer);
-        aiTextTimer = setTimeout(() => { 
-            if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} } 
-            currentAiText = ""; 
-            currentAiImage = null; 
-            currentAiImgEl = null; 
-            window._aiImageCache = null; 
-            if (state.isPareidolia) startScanningEffect(); 
+        aiTextTimer = setTimeout(() => {
+            if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} }
+            currentAiText = "";
+            currentAiImage = null;
+            currentAiImgEl = null;
+            window._aiImageCache = null;
+            if (state.isPareidolia) startScanningEffect();
         }, 9000);
         
         speakText(text);
-    } catch(e) {
+    } catch (e) {
         isAIProcessing = false;
         currentAiText = "error de señal";
         setTimeout(() => {
-            if(currentAiText === "error de señal") {
+            if (currentAiText === "error de señal") {
                 currentAiText = "";
                 if (state.isPareidolia) startScanningEffect();
             }
@@ -3915,9 +3972,13 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                 executePareidoliaDeactivation(btn);
             }
         } else {
-            const elOk = elevenlabsCreditsRemaining > 5 && ELEVENLABS_API_KEY; 
-            const vrOk = voicerssRemaining > 0; 
-            if (!elOk && !vrOk) { ttsNoDisponible('sin créditos para activar IA VISION'); return; }
+            const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
+const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
+
+if (!hasElevenLabs && !hasVoiceRSS) {
+    ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
+    return;
+}
             
             isPareidoliaActive = true; 
             state.isPareidolia = true;
@@ -4177,23 +4238,15 @@ async function validateGeminiKey() {
     try {
         // PASO 1: Verificar que la clave es válida consultando la lista de modelos
         const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${k}`);
-        
         if (!listResp.ok) {
             const errData = await listResp.json().catch(() => ({}));
             const errMsg = errData.error?.message || 'Clave inválida';
-            
             if (errMsg.includes('API key not valid') || listResp.status === 403) {
-                status.innerText = "❌ CLAVE INVÁLIDA";
-                status.style.color = 'red';
+                status.innerText = "❌ CLAVE INVÁLIDA"; status.style.color = 'red';
                 modelInfo.innerText = "Verifica tu API Key de Google AI Studio";
-            } else if (listResp.status === 429) {
-                status.innerText = "❌ LÍMITE ALCANZADO";
-                status.style.color = 'red';
-                modelInfo.innerText = "Demasiadas peticiones, espera un momento";
             } else {
-                status.innerText = `❌ ERROR ${listResp.status}`;
-                status.style.color = 'red';
-                modelInfo.innerText = errMsg.substring(0, 50);
+                status.innerText = `❌ ERROR ${listResp.status}`; status.style.color = 'red';
+                modelInfo.innerText = errMsg.substring(0, 40);
             }
             return;
         }
@@ -4201,24 +4254,19 @@ async function validateGeminiKey() {
         const listData = await listResp.json();
         const availableModels = listData.models.map(m => m.name.replace('models/', ''));
         
-        // PASO 2: Probar modelos en orden de preferencia (solo los que están disponibles)
+        // PASO 2: Probar modelos con texto simple para medir latencia (sin imagen, solo validación)
         status.innerText = "⏳ PROBANDO MODELOS...";
         modelInfo.innerText = "Buscando mejor modelo disponible...";
-        
-        const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"];
+        const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
         let bestModel = null;
         let fastestTime = Infinity;
         
         for (const model of modelsToTry) {
-            // Solo probar si el modelo está disponible en la cuenta
-            if (!availableModels.some(m => m.includes(model.replace('-flash', '').replace('-pro', '')))) {
-                continue;
-            }
+            if (!availableModels.some(m => m.includes(model.replace('-flash', '').replace('-pro', '')))) continue;
             
             const start = performance.now();
             const ac = new AbortController();
             const t = setTimeout(() => ac.abort(), 6000);
-            
             try {
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -4226,45 +4274,26 @@ async function validateGeminiKey() {
                     signal: ac.signal
                 });
                 clearTimeout(t);
-                
                 if (resp.ok) {
                     const timeTaken = performance.now() - start;
-                    if (timeTaken < fastestTime) {
-                        fastestTime = timeTaken;
-                        bestModel = model;
-                    }
+                    if (timeTaken < fastestTime) { fastestTime = timeTaken; bestModel = model; }
                 }
-            } catch(e) {
-                clearTimeout(t);
-                continue;
-            }
-        }
-        
-        // Si no encontró ninguno de los preferidos, usar el primero disponible
-        if (!bestModel && availableModels.length > 0) {
-            const flashModel = availableModels.find(m => m.includes('flash'));
-            bestModel = flashModel || availableModels[0];
-            fastestTime = 0;
+            } catch(e) { clearTimeout(t); continue; }
         }
         
         if (bestModel) {
-            GEMINI_API_KEY = k; 
-            GEMINI_MODEL = bestModel;
+            GEMINI_API_KEY = k; GEMINI_MODEL = bestModel;
             localStorage.setItem('obr_gemini_key', k);
             localStorage.setItem('obr_gemini_model', bestModel);
-            
-            status.innerText = `✅ OK (${Math.round(fastestTime)}ms)`;
-            status.style.color = '#00ff41';
+            status.innerText = `✅ OK (${Math.round(fastestTime)}ms)`; status.style.color = '#00ff41';
             modelInfo.innerText = `Modelo: ${bestModel}`;
             showToast(`GEMINI VALIDADO — ${bestModel}`, false);
         } else {
-            status.innerText = "❌ SIN MODELOS DISPONIBLES";
-            status.style.color = 'red';
+            status.innerText = "❌ SIN MODELOS DISPONIBLES"; status.style.color = 'red';
             modelInfo.innerText = "Tu cuenta no tiene acceso a modelos Gemini";
         }
     } catch(e) {
-        status.innerText = "❌ ERROR DE RED";
-        status.style.color = 'red';
+        status.innerText = "❌ ERROR DE RED"; status.style.color = 'red';
         modelInfo.innerText = "Verifica tu conexión a internet";
     }
 }
@@ -4626,6 +4655,13 @@ function updateSettingsIndicator() {
         gearIcon.className = 'fas fa-cog text-xl text-gray-500';
         settingsBtn.style.borderColor = 'rgba(128, 128, 128, 0.5)';
     }
+}
+
+async function refreshTTSCredits() {
+    showToast('Consultando créditos...', false);
+    await fetchElevenLabsCredits();
+    updateTTSStatusUI();
+    showToast('Créditos actualizados', false);
 }
 
 // Llamar updateSettingsIndicator desde telemetryLoop
