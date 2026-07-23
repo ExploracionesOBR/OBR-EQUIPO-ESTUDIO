@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extractor de Fonemas Automático</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Wavesurfer JS -->
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/timeline.min.js"></script>
+    <!-- JSZip para empaquetar clips -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .clip-item:hover .clip-actions { opacity: 1; }
+        /* Scrollbar personalizado para la lista de clips */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-gray-800 overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm z-10 px-6 py-4 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2 rounded-lg">
+                <i class="fas fa-wave-square"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-gray-900 leading-tight">Extractor de Fonemas</h1>
+                <p class="text-xs text-gray-500">Creación de banco de voz a partir de audiolibros</p>
+            </div>
+        </div>
+        <div>
+            <label for="audio-upload" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-2 px-4 rounded-lg cursor-pointer transition border border-indigo-200 shadow-sm flex items-center">
+                <i class="fas fa-upload mr-2"></i> Subir Audio
+            </label>
+            <input type="file" id="audio-upload" accept="audio/*" class="hidden">
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex overflow-hidden p-6 gap-6">
+        
+        <!-- Columna Izquierda: Editor de Audio -->
+        <div class="w-2/3 flex flex-col gap-4">
+            <!-- Visualizador WaveSurfer -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col flex-grow relative">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-semibold text-gray-700"><i class="fas fa-scissors mr-2"></i>Editor de Onda</h2>
+                    <div id="loading-indicator" class="hidden text-sm text-indigo-600 font-medium bg-indigo-50 px-3 py-1 rounded-full">
+                        <i class="fas fa-spinner fa-spin mr-1"></i> Procesando audio...
+                    </div>
+                </div>
+
+                <div id="waveform-container" class="w-full bg-gray-50 border border-gray-200 rounded-lg overflow-hidden flex-grow relative flex flex-col">
+                    <div id="timeline" class="border-b border-gray-200 bg-white"></div>
+                    <div id="waveform" class="flex-grow"></div>
+                    <!-- Overlay de carga -->
+                    <div id="waveform-overlay" class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10">
+                        <i class="fas fa-file-audio text-4xl text-gray-300 mb-2"></i>
+                        <p class="text-gray-500 font-medium">Sube un archivo de audio para comenzar</p>
+                    </div>
+                </div>
+
+                <!-- Controles de Reproducción -->
+                <div class="mt-4 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <button id="btn-play" class="bg-gray-100 hover:bg-gray-200 text-gray-700 w-10 h-10 rounded-full flex items-center justify-center transition disabled:opacity-50">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button id="btn-stop" class="bg-gray-100 hover:bg-gray-200 text-gray-700 w-10 h-10 rounded-full flex items-center justify-center transition disabled:opacity-50">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                        <span id="time-display" class="font-mono text-sm text-gray-500 ml-2">00:00.0 / 00:00.0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-search-minus text-gray-400 text-sm"></i>
+                        <input type="range" id="zoom-slider" min="10" max="1000" value="10" class="w-32 accent-indigo-600">
+                        <i class="fas fa-search-plus text-gray-400 text-sm"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Extracción Automática (VAD) -->
+            <div class="bg-purple-50 rounded-xl shadow-sm border border-purple-100 p-4 shrink-0">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="font-semibold text-purple-800"><i class="fas fa-robot mr-2"></i>Extracción Autónoma</h2>
+                    <span class="text-xs font-medium bg-purple-200 text-purple-800 px-2 py-1 rounded">Regiones: <span id="region-count">0</span></span>
+                </div>
+                
+                <div class="flex flex-wrap gap-4 items-end justify-between">
+                    <div class="flex-grow max-w-[200px]">
+                        <label class="flex justify-between text-xs font-medium text-gray-700 mb-1">
+                            <span>Sensibilidad al sonido</span>
+                            <span id="sens-val">50%</span>
+                        </label>
+                        <input type="range" id="auto-threshold" min="1" max="100" value="50" class="w-full accent-purple-600">
+                        <p class="text-[10px] text-gray-500 mt-1">Sube para sonidos suaves ("s", "f").</p>
+                    </div>
+                    
+                    <div class="flex-grow max-w-[200px]">
+                        <label class="flex justify-between text-xs font-medium text-gray-700 mb-1">
+                            <span>Tamaño máx. de corte</span>
+                            <span id="dur-val">250ms (Fonemas)</span>
+                        </label>
+                        <input type="range" id="max-duration" min="50" max="2000" step="50" value="250" class="w-full accent-purple-600">
+                        <p class="text-[10px] text-gray-500 mt-1">Usa 100-300ms para micro-cortes.</p>
+                    </div>
+                    
+                    <div class="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                        <button id="btn-auto-detect" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md shadow transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-magic mr-2"></i> Escanear Audio
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-3 border-t border-purple-200 flex justify-end gap-2">
+                    <button id="btn-clear-regions" class="text-purple-600 hover:bg-purple-100 font-medium py-1.5 px-3 rounded text-sm transition">
+                        Limpiar Cortes
+                    </button>
+                    <button id="btn-extract-all" class="bg-gray-800 hover:bg-gray-900 text-white font-bold py-1.5 px-4 rounded shadow transition flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-layer-group mr-2"></i> Extraer Todos al Banco
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Banco de Clips -->
+        <div class="w-1/3 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
+                <h2 class="font-bold text-gray-800"><i class="fas fa-archive text-indigo-600 mr-2"></i>Banco de Voz</h2>
+                <span id="clip-count" class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded-full">0 clips</span>
+            </div>
+
+            <!-- Lista de clips (Scrollable) -->
+            <div id="clips-list" class="flex-grow overflow-y-auto p-2 bg-gray-50/50">
+                <!-- Estado vacío -->
+                <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-3 opacity-50"></i>
+                    <p class="text-sm">No hay clips extraídos aún.</p>
+                    <p class="text-xs mt-1">Crea regiones en la onda y extráelas.</p>
+                </div>
+                <!-- Los clips se añadirán aquí dinámicamente -->
+            </div>
+
+            <!-- Acciones Globales del Banco -->
+            <div class="p-4 border-t border-gray-200 bg-white rounded-b-xl shrink-0">
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button id="btn-play-all" class="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-2 rounded-lg flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-play mr-1"></i> Secuencia
+                    </button>
+                    <button id="btn-play-random" class="bg-teal-100 hover:bg-teal-200 text-teal-700 font-semibold py-2 px-2 rounded-lg flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-random mr-1"></i> Aleatorio
+                    </button>
+                </div>
+                <!-- Botón para detener reproducción -->
+                <button id="btn-stop-sequence" class="w-full bg-red-100 hover:bg-red-200 text-red-700 font-semibold py-2 px-4 rounded-lg mb-2 flex items-center justify-center transition hidden">
+                    <i class="fas fa-stop-circle mr-2"></i> Detener Secuencia
+                </button>
+                <button id="btn-download-zip" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <i class="fas fa-file-zipper mr-2"></i> Descargar Banco (ZIP)
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Overlay de progreso de extracción -->
+    <div id="extraction-progress-overlay" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 border border-gray-100 text-center">
+            <div class="flex flex-col items-center mb-4">
+                <div class="bg-indigo-50 text-indigo-600 p-4 rounded-full animate-bounce mb-3">
+                    <i class="fas fa-layer-group text-2xl"></i>
+                </div>
+                <h3 class="font-bold text-lg text-gray-900">Extrayendo Fonemas</h3>
+                <p class="text-xs text-gray-500 font-medium">Segmentando y procesando audio real</p>
+            </div>
+            <div class="mb-2 flex justify-between items-center text-sm px-1">
+                <span id="progress-text" class="text-gray-600 font-semibold">Procesando: 0 / 0</span>
+                <span id="progress-percent" class="text-indigo-600 font-bold font-mono">0%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden mb-2">
+                <div id="progress-bar" class="bg-indigo-600 h-full w-0 transition-all duration-100 ease-out"></div>
+            </div>
+            <p class="text-[10px] text-gray-400">Por favor, mantén esta pestaña abierta...</p>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let currentAudioBuffer = null;
+        let originalFileName = "audio";
+        let extractedClips = [];
+        let clipCounter = 1;
+        
+        // Contexto de audio global para reproducción segura y bypass de políticas de bloqueo de navegador
+        window.playbackCtx = null; 
+        let activeAudioSource = null; // Nodo reproductor activo actualmente
+        let isPlayingSequence = false;
+        let cancelPlayback = false;
+
+        // Inicializar WaveSurfer
+        const wavesurfer = WaveSurfer.create({
+            container: '#waveform',
+            waveColor: '#a5b4fc',
+            progressColor: '#4f46e5',
+            cursorColor: '#312e81',
+            barWidth: 2,
+            barGap: 1,
+            barRadius: 2,
+            height: 150,
+            normalize: true,
+            minPxPerSec: 50,
+        });
+
+        // Inicializar Plugins
+        const wsTimeline = wavesurfer.registerPlugin(WaveSurfer.Timeline.create({
+            container: '#timeline',
+            height: 20,
+            timeInterval: 0.5,
+            primaryLabelInterval: 5,
+            style: { fontSize: '10px', color: '#64748b' }
+        }));
+
+        const wsRegions = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
+
+        // Elementos UI
+        const audioUpload = document.getElementById('audio-upload');
+        const overlay = document.getElementById('waveform-overlay');
+        const btnPlay = document.getElementById('btn-play');
+        const btnStop = document.getElementById('btn-stop');
+        const zoomSlider = document.getElementById('zoom-slider');
+        const timeDisplay = document.getElementById('time-display');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        
+        // Elementos de la lista y acciones
+        const clipsList = document.getElementById('clips-list');
+        const emptyState = document.getElementById('empty-state');
+        const clipCountSpan = document.getElementById('clip-count');
+        const btnPlayAll = document.getElementById('btn-play-all');
+        const btnPlayRandom = document.getElementById('btn-play-random');
+        const btnStopSequence = document.getElementById('btn-stop-sequence');
+        const btnDownloadZip = document.getElementById('btn-download-zip');
+
+        // Elementos VAD Automático
+        const btnAutoDetect = document.getElementById('btn-auto-detect');
+        const thresholdSlider = document.getElementById('auto-threshold');
+        const sensValDisplay = document.getElementById('sens-val');
+        const maxDurationSlider = document.getElementById('max-duration');
+        const durValDisplay = document.getElementById('dur-val');
+        const regionCountSpan = document.getElementById('region-count');
+        const btnClearRegions = document.getElementById('btn-clear-regions');
+        const btnExtractAll = document.getElementById('btn-extract-all');
+
+        // Formatear tiempo (mm:ss.ms)
+        const formatTime = (seconds) => {
+            if(isNaN(seconds)) return "00:00.0";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 10);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms}`;
+        };
+
+        // Eventos básicos de WaveSurfer
+        wavesurfer.on('audioprocess', (time) => {
+            timeDisplay.textContent = `${formatTime(time)} / ${formatTime(wavesurfer.getDuration())}`;
+        });
+        wavesurfer.on('seek', (time) => {
+            timeDisplay.textContent = `${formatTime(wavesurfer.getCurrentTime())} / ${formatTime(wavesurfer.getDuration())}`;
+        });
+        wavesurfer.on('ready', () => {
+            timeDisplay.textContent = `00:00.0 / ${formatTime(wavesurfer.getDuration())}`;
+            overlay.classList.add('hidden');
+            btnAutoDetect.disabled = false;
+        });
+
+        // Controles de zoom y play
+        zoomSlider.addEventListener('input', (e) => {
+            wavesurfer.zoom(Number(e.target.value));
+        });
+        btnPlay.addEventListener('click', () => {
+            wavesurfer.playPause();
+            btnPlay.innerHTML = wavesurfer.isPlaying() ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+        });
+        btnStop.addEventListener('click', () => {
+            wavesurfer.stop();
+            btnPlay.innerHTML = '<i class="fas fa-play"></i>';
+        });
+        wavesurfer.on('finish', () => {
+            btnPlay.innerHTML = '<i class="fas fa-play"></i>';
+        });
+
+        // Carga de archivo
+        audioUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                loadingIndicator.classList.remove('hidden');
+                originalFileName = file.name.replace(/\.[^/.]+$/, ""); // Quitar extensión
+                wsRegions.clearRegions(); // Limpiar regiones anteriores
+                
+                // Guardar AudioBuffer original para extracciones exactas
+                const reader = new FileReader();
+                reader.onload = async (ev) => {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    currentAudioBuffer = await audioContext.decodeAudioData(ev.target.result);
+                    loadingIndicator.classList.add('hidden');
+                };
+                reader.readAsArrayBuffer(file);
+                
+                // Cargar en wavesurfer
+                const objectUrl = URL.createObjectURL(file);
+                wavesurfer.load(objectUrl);
+                
+                // Habilitar crear regiones arrastrando el ratón
+                wavesurfer.once('ready', () => {
+                    wsRegions.enableDragSelection({
+                        color: 'rgba(79, 70, 229, 0.2)'
+                    });
+                });
+            }
+        });
+
+        // VAD - Detección Automática y Corte de Fonemas
+        thresholdSlider.addEventListener('input', (e) => {
+            sensValDisplay.textContent = e.target.value + '%';
+        });
+
+        maxDurationSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            durValDisplay.textContent = val + 'ms ' + (val <= 400 ? '(Fonemas)' : '(Palabras)');
+        });
+
+        wsRegions.on('region-created', updateRegionCount);
+        wsRegions.on('region-removed', updateRegionCount);
+
+        function updateRegionCount() {
+            const count = wsRegions.getRegions().length;
+            regionCountSpan.textContent = count;
+            btnExtractAll.disabled = count === 0;
+        }
+
+        btnClearRegions.addEventListener('click', () => {
+            wsRegions.clearRegions();
+        });
+
+        btnAutoDetect.addEventListener('click', () => {
+            if (!currentAudioBuffer) return;
+            
+            wsRegions.clearRegions();
+            btnAutoDetect.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...';
+            btnAutoDetect.disabled = true;
+
+            setTimeout(() => {
+                const channelData = currentAudioBuffer.getChannelData(0);
+                const sampleRate = currentAudioBuffer.sampleRate;
+                const step = Math.floor(sampleRate * 0.01); // Ventanas de 10ms
+
+                const sensitivity = parseInt(thresholdSlider.value);
+                const threshold = 0.1 - (sensitivity / 100) * 0.095; 
+
+                // Límite de duración para forzar corte de fonemas
+                const maxDurationSec = parseInt(maxDurationSlider.value) / 1000;
+                const maxDurationSamples = maxDurationSec * sampleRate;
+
+                const minSilence = sampleRate * 0.15;  
+                const minDuration = sampleRate * 0.05; 
+
+                let isSound = false;
+                let startOffset = 0;
+                let silenceLength = 0;
+
+                for(let i = 0; i < channelData.length; i += step) {
+                    let sum = 0;
+                    for(let j = 0; j < step && i + j < channelData.length; j++) {
+                        sum += channelData[i+j] * channelData[i+j];
+                    }
+                    let rms = Math.sqrt(sum / step);
+
+                    if(rms > threshold) {
+                        if(!isSound) {
+                            isSound = true;
+                            startOffset = i;
+                        }
+                        silenceLength = 0;
+
+                        // REGLA: Forzar corte si dura más del máximo configurado (Milisegundos)
+                        if (i - startOffset >= maxDurationSamples) {
+                            const endPos = i;
+                            if (endPos > startOffset) {
+                                wsRegions.addRegion({
+                                    start: startOffset / sampleRate,
+                                    end: endPos / sampleRate,
+                                    color: 'rgba(168, 85, 247, 0.3)', // Color morado
+                                    drag: true,
+                                    resize: true
+                                });
+                            }
+                            startOffset = i; 
+                        }
+
+                    } else {
+                        if(isSound) {
+                            silenceLength += step;
+                            // Si hay silencio suficiente, cerrar la región
+                            if(silenceLength >= minSilence) {
+                                isSound = false;
+                                const activeEnd = i - silenceLength;
+                                // CORRECCIÓN CLAVE: Asegurar que el fragmento activo real es más largo que minDuration
+                                if(activeEnd - startOffset > minDuration && activeEnd > startOffset) {
+                                    wsRegions.addRegion({
+                                        start: startOffset / sampleRate,
+                                        end: activeEnd / sampleRate,
+                                        color: 'rgba(168, 85, 247, 0.3)',
+                                        drag: true,
+                                        resize: true
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Procesar la última parte si terminó hablando
+                if(isSound) {
+                    const activeEnd = channelData.length;
+                    if(activeEnd - startOffset > minDuration && activeEnd > startOffset) {
+                        wsRegions.addRegion({
+                            start: startOffset / sampleRate,
+                            end: activeEnd / sampleRate,
+                            color: 'rgba(168, 85, 247, 0.3)'
+                        });
+                    }
+                }
+
+                btnAutoDetect.innerHTML = '<i class="fas fa-magic mr-2"></i> Escanear Audio';
+                btnAutoDetect.disabled = false;
+            }, 50);
+        });
+
+        // Función vital para cortar el audio real y devolver tanto el Blob como el buffer de Audio para reproducción directa
+        function extractRegionAudio(startSec, endSec) {
+            if (!currentAudioBuffer) return null;
+
+            const sampleRate = currentAudioBuffer.sampleRate;
+            
+            // Forzar límites numéricos para que no ocurran redondeos inválidos
+            const startSample = Math.max(0, Math.floor(startSec * sampleRate));
+            const endSample = Math.min(currentAudioBuffer.length, Math.floor(endSec * sampleRate));
+            const frameCount = endSample - startSample;
+            
+            // CORRECCIÓN DE ERROR: Si el fragmento es de 0 o menos muestras, cancelar la extracción sin arrojar excepción
+            if (frameCount <= 0) {
+                console.warn(`Fragmento de audio omitido por tamaño menor al límite mínimo tolerado (startSec: ${startSec}, endSec: ${endSec})`);
+                return null;
+            }
+            
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const newBuffer = audioContext.createBuffer(
+                    currentAudioBuffer.numberOfChannels, 
+                    frameCount, 
+                    sampleRate
+                );
+
+                for (let channel = 0; channel < currentAudioBuffer.numberOfChannels; channel++) {
+                    const oldChannelData = currentAudioBuffer.getChannelData(channel);
+                    const newChannelData = newBuffer.getChannelData(channel);
+                    for (let i = 0; i < frameCount; i++) {
+                        newChannelData[i] = oldChannelData[startSample + i];
+                    }
+                }
+                return {
+                    blob: bufferToWav(newBuffer),
+                    buffer: newBuffer
+                };
+            } catch (err) {
+                console.error("Error al generar el clip de audio:", err);
+                return null;
+            }
+        }
+
+        // Extraer masivamente todas las regiones del VAD con indicador de carga y asincronía
+        btnExtractAll.addEventListener('click', async () => {
+            const regions = wsRegions.getRegions();
+            if (regions.length === 0) return;
+
+            // Ordenar de izquierda a derecha en el tiempo
+            regions.sort((a, b) => a.start - b.start); 
+
+            const total = regions.length;
+            
+            // Mostrar ventana de progreso de extracción
+            const progressOverlay = document.getElementById('extraction-progress-overlay');
+            const progressText = document.getElementById('progress-text');
+            const progressPercent = document.getElementById('progress-percent');
+            const progressBar = document.getElementById('progress-bar');
+            
+            progressOverlay.classList.remove('hidden');
+            progressText.textContent = `Procesando: 0 / ${total}`;
+            progressPercent.textContent = `0%`;
+            progressBar.style.width = `0%`;
+
+            // Breve espera para asegurar que el navegador renderice la pantalla de carga antes de iniciar
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Procesar clips de manera asíncrona para no congelar el navegador
+            for (let i = 0; i < total; i++) {
+                const region = regions[i];
+                const result = extractRegionAudio(region.start, region.end);
+                
+                if (result) {
+                    const duration = (region.end - region.start).toFixed(2);
+                    const defaultName = `${originalFileName}_${String(clipCounter).padStart(3, '0')}`;
+                    addClipToBank(result.blob, defaultName, duration, result.buffer);
+                    clipCounter++;
+                }
+
+                // Actualizar interfaz de progreso
+                const processed = i + 1;
+                const pct = Math.round((processed / total) * 100);
+                progressText.textContent = `Procesando: ${processed} / ${total}`;
+                progressPercent.textContent = `${pct}%`;
+                progressBar.style.width = `${pct}%`;
+
+                // Dar un respiro a la CPU/interfaz de usuario cada 3 clips para que la barra se dibuje fluida
+                if (i % 3 === 0 || i === total - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 15));
+                }
+            }
+            
+            // Retraso de medio segundo para que el usuario aprecie el 100% completado
+            setTimeout(() => {
+                progressOverlay.classList.add('hidden');
+                wsRegions.clearRegions();
+            }, 500);
+        });
+
+        function addClipToBank(blob, name, duration, audioBuffer) {
+            const url = URL.createObjectURL(blob);
+            const id = 'clip_' + Date.now() + Math.random().toString(36).substr(2, 9);
+            
+            const clipObj = { id, name, url, duration, blob, buffer: audioBuffer };
+            extractedClips.push(clipObj);
+            
+            if (emptyState) emptyState.classList.add('hidden');
+
+            const clipEl = document.createElement('div');
+            clipEl.className = 'clip-item group bg-white border border-gray-200 rounded-lg p-3 mb-2 shadow-sm transition relative overflow-hidden';
+            clipEl.id = id;
+            clipEl.innerHTML = `
+                <div class="flex justify-between items-center z-10 relative">
+                    <div class="flex-grow truncate pr-2">
+                        <input type="text" value="${name}" class="text-sm font-semibold text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none w-full transition" onchange="window.renameClip('${id}', this.value)">
+                        <span class="text-[10px] text-gray-400 font-mono">${duration}s</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="window.playClip('${id}')" class="text-indigo-600 hover:bg-indigo-50 w-8 h-8 rounded-full flex items-center justify-center transition">
+                            <i class="fas fa-play text-sm"></i>
+                        </button>
+                        <div class="clip-actions opacity-0 transition flex gap-1 bg-white pl-1">
+                            <button onclick="window.downloadClip('${id}')" class="text-gray-500 hover:text-green-600 w-8 h-8 rounded-full flex items-center justify-center transition">
+                                <i class="fas fa-download text-sm"></i>
+                            </button>
+                            <button onclick="window.deleteClip('${id}')" class="text-gray-500 hover:text-red-600 w-8 h-8 rounded-full flex items-center justify-center transition">
+                                <i class="fas fa-trash text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            clipsList.appendChild(clipEl);
+            updateGlobalActions();
+            
+            // Auto scroll al último elemento
+            clipEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        // Actualizar estados de botones de la lista
+        function updateGlobalActions() {
+            const hasClips = extractedClips.length > 0;
+            btnPlayAll.disabled = !hasClips;
+            btnPlayRandom.disabled = !hasClips;
+            btnDownloadZip.disabled = !hasClips;
+            clipCountSpan.textContent = `${extractedClips.length} clips`;
+            
+            if (!hasClips && emptyState) {
+                emptyState.classList.remove('hidden');
+            }
+        }
+
+        // Función central robustecida usando Web Audio API nativa para bypass de políticas Autoplay de navegadores modernos
+        async function playSequenceCore(clipsArray, buttonId) {
+            if (clipsArray.length === 0 || isPlayingSequence) return;
+            
+            isPlayingSequence = true;
+            cancelPlayback = false;
+            btnStopSequence.classList.remove('hidden');
+            
+            const btn = document.getElementById(buttonId);
+            const originalHtml = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            
+            // Deshabilitar el otro botón de reproducción
+            const otherBtn = buttonId === 'btn-play-all' ? btnPlayRandom : btnPlayAll;
+            otherBtn.disabled = true;
+
+            // Inicializar o reanudar el contexto de audio global (esto se autoriza con el clic del usuario)
+            if (!window.playbackCtx) {
+                window.playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (window.playbackCtx.state === 'suspended') {
+                await window.playbackCtx.resume();
+            }
+
+            const ctx = window.playbackCtx;
+
+            for (let i = 0; i < clipsArray.length; i++) {
+                if (cancelPlayback) break;
+                
+                const clip = clipsArray[i];
+                const clipElement = document.getElementById(clip.id);
+                
+                if (clipElement) {
+                    clipElement.classList.add('border-indigo-500', 'bg-indigo-50');
+                    clipElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+
+                // Reproducción nativa en buffer, sin depender de un objeto Audio HTML5 que bloquee el Autoplay
+                await new Promise(resolve => {
+                    if (cancelPlayback) {
+                        resolve();
+                        return;
+                    }
+
+                    try {
+                        const source = ctx.createBufferSource();
+                        source.buffer = clip.buffer;
+                        source.connect(ctx.destination);
+                        activeAudioSource = source;
+
+                        source.onended = () => {
+                            activeAudioSource = null;
+                            resolve();
+                        };
+
+                        source.start(0);
+                    } catch (e) {
+                        console.error("Error durante reproducción de buffer:", e);
+                        resolve(); // Saltar al siguiente en caso de error
+                    }
+                });
+
+                if (clipElement) {
+                    clipElement.classList.remove('border-indigo-500', 'bg-indigo-50');
+                }
+                
+                if (cancelPlayback) break;
+                // Pequeña pausa natural milimétrica entre clips
+                await new Promise(r => setTimeout(r, 80));
+            }
+
+            isPlayingSequence = false;
+            cancelPlayback = false;
+            btnStopSequence.classList.add('hidden');
+            btn.innerHTML = originalHtml;
+            otherBtn.disabled = false;
+            activeAudioSource = null;
+        }
+
+        btnPlayAll.addEventListener('click', () => {
+            playSequenceCore(extractedClips, 'btn-play-all');
+        });
+
+        btnPlayRandom.addEventListener('click', () => {
+            // Algoritmo Fisher-Yates para mezclar la secuencia
+            const shuffled = [...extractedClips].sort(() => Math.random() - 0.5);
+            playSequenceCore(shuffled, 'btn-play-random');
+        });
+
+        btnStopSequence.addEventListener('click', () => {
+            cancelPlayback = true;
+            if (activeAudioSource) {
+                try {
+                    activeAudioSource.stop();
+                } catch(e) {}
+                activeAudioSource = null;
+            }
+        });
+
+        window.playClip = (id) => {
+            // Detener secuencia si está corriendo
+            if (isPlayingSequence) {
+                cancelPlayback = true;
+                if (activeAudioSource) {
+                    try { activeAudioSource.stop(); } catch(e) {}
+                }
+            }
+            const clip = extractedClips.find(c => c.id === id);
+            if (clip && clip.buffer) {
+                if (!window.playbackCtx) {
+                    window.playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const ctx = window.playbackCtx;
+                if (ctx.state === 'suspended') {
+                    ctx.resume();
+                }
+                
+                // Reproducir el fonema inmediatamente a través del BufferSource
+                const source = ctx.createBufferSource();
+                source.buffer = clip.buffer;
+                source.connect(ctx.destination);
+                source.start(0);
+            }
+        };
+
+        window.renameClip = (id, newName) => {
+            const clip = extractedClips.find(c => c.id === id);
+            if (clip) clip.name = newName;
+        };
+
+        window.deleteClip = (id) => {
+            extractedClips = extractedClips.filter(c => c.id !== id);
+            const el = document.getElementById(id);
+            if (el) el.remove();
+            updateGlobalActions();
+        };
+
+        window.downloadClip = (id) => {
+            const clip = extractedClips.find(c => c.id === id);
+            if (clip) {
+                const a = document.createElement('a');
+                a.href = clip.url;
+                a.download = `${clip.name}.wav`;
+                a.click();
+            }
+        };
+
+        // Descargar todo como ZIP
+        btnDownloadZip.addEventListener('click', async () => {
+            if (extractedClips.length === 0) return;
+            
+            const originalHtml = btnDownloadZip.innerHTML;
+            btnDownloadZip.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Comprimiendo...';
+            btnDownloadZip.disabled = true;
+
+            const zip = new JSZip();
+            const folder = zip.folder("banco_fonemas");
+
+            extractedClips.forEach(clip => {
+                folder.file(`${clip.name}.wav`, clip.blob);
+            });
+
+            const content = await zip.generateAsync({type:"blob"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(content);
+            a.download = `Banco_Fonemas_${new Date().toISOString().slice(0,10)}.zip`;
+            a.click();
+
+            btnDownloadZip.innerHTML = originalHtml;
+            btnDownloadZip.disabled = false;
+        });
+
+        // Utilidad: Convertir AudioBuffer a WAV Blob (PCM 16-bit)
+        function bufferToWav(abuffer) {
+            let numOfChan = abuffer.numberOfChannels,
+                length = abuffer.length * numOfChan * 2 + 44,
+                buffer = new ArrayBuffer(length),
+                view = new DataView(buffer),
+                channels = [], i, sample,
+                offset = 0,
+                pos = 0;
+
+            function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+            function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+            setUint32(0x46464952); // "RIFF"
+            setUint32(length - 8); // file length - 8
+            setUint32(0x45564157); // "WAVE"
+            setUint32(0x20746d66); // "fmt " chunk
+            setUint32(16); // length = 16
+            setUint16(1); // PCM (uncompressed)
+            setUint16(numOfChan);
+            setUint32(abuffer.sampleRate);
+            setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+            setUint16(numOfChan * 2); // block-align
+            setUint16(16); // 16-bit
+            setUint32(0x61746164); // "data" - chunk
+            setUint32(length - pos - 4); // chunk length
+
+            for(i = 0; i < abuffer.numberOfChannels; i++)
+                channels.push(abuffer.getChannelData(i));
+
+            while(pos < length) {
+                for(i = 0; i < numOfChan; i++) {
+                    sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+                    sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; // float to 16-bit PCM
+                    view.setInt16(pos, sample, true); 
+                    pos += 2;
+                }
+                offset++
+            }
+            return new Blob([buffer], {type: "audio/wav"});
+        }
+    </script>
+</body>
+</html>
