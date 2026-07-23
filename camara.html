@@ -2045,58 +2045,54 @@ setInterval(() => {
 }, 120000); // Cada 2 minutos
 
     window.onload = () => {
-       // Consultar créditos reales de ElevenLabs al iniciar la app
-    fetchElevenLabsCredits();
+    // 1. Consultar créditos reales de ElevenLabs al iniciar (protegido)
+    if (ELEVENLABS_API_KEY) {
+        fetchElevenLabsCredits();
+    }
     
-    document.getElementById('api-key-internal').value = state.apiKey;
-  // 1. Cargar claves independientes en sus campos (SOLO si existen en el HTML)
+    // 2. Cargar claves en los campos del modal (SOLO si existen)
     const geminiInput = document.getElementById('gemini-key-input');
     if (geminiInput) geminiInput.value = GEMINI_API_KEY;
     
     const groqInput = document.getElementById('groq-key-input');
     if (groqInput) groqInput.value = GROQ_API_KEY;
     
-    const elevenInput = document.getElementById('eleven-key-input');
-    if (elevenInput) elevenInput.value = ELEVENLABS_API_KEY;
+    // NOTA: El campo 'eleven-key-input' no existe en el HTML actual, 
+    // por eso lo omitimos para evitar el error "Cannot set properties of null"
     
-    // 2. Mostrar estado visual si ya estaban guardadas en localStorage
-    const geminiStatus = document.getElementById('gemini-status');
-    if (GEMINI_API_KEY && geminiStatus) {
-        geminiStatus.innerText = "💾 GUARDADA";
-        geminiStatus.style.color = '#ffaa00';
+    // 3. Mostrar estado visual si ya están guardadas
+    if (GEMINI_API_KEY && document.getElementById('gemini-status')) {
+        document.getElementById('gemini-status').innerText = "💾 GUARDADA";
+        document.getElementById('gemini-status').style.color = '#ffaa00';
         const geminiInfo = document.getElementById('gemini-model-info');
         if (geminiInfo) geminiInfo.innerText = `Auto: ${GEMINI_MODEL}`;
     }
     
-    const groqStatus = document.getElementById('groq-status');
-    if (GROQ_API_KEY && groqStatus) {
-        groqStatus.innerText = "💾 GUARDADA";
-        groqStatus.style.color = '#ffaa00';
+    if (GROQ_API_KEY && document.getElementById('groq-status')) {
+        document.getElementById('groq-status').innerText = "💾 GUARDADA";
+        document.getElementById('groq-status').style.color = '#ffaa00';
         const groqInfo = document.getElementById('groq-model-info');
         if (groqInfo) groqInfo.innerText = `Auto: ${GROQ_MODEL}`;
     }
     
-    const elevenStatus = document.getElementById('eleven-status');
-    if (ELEVENLABS_API_KEY && elevenStatus) {
-        elevenStatus.innerText = "💾 GUARDADA";
-        elevenStatus.style.color = '#ffaa00';
-    }
-
-    // 3. Cargar configuración de Red y Cámara (Protegido)
+    // 4. Cargar configuración de Red y Cámara (Protegido)
     const mtxHost = document.getElementById('mtx-host');
     if (mtxHost) mtxHost.value = state.studioId;
     
     const streamName = document.getElementById('stream-name');
     if (streamName) streamName.value = state.cameraName;
-
-    // 4. Botón de inicio (Protegido)
+    
+    // 5. Botón de inicio (Protegido)
     const btn = document.getElementById('main-cam-btn');
     const hasPerm = localStorage.getItem("camPermission") === "granted" || sessionStorage.getItem("camPermission") === "granted";
-    if (btn && hasPerm) { 
-        btn.innerText = "▶ REANUDAR CÁMARA"; 
-        btn.style.borderColor = "#00ff41"; 
-        btn.style.color = "#00ff41"; 
+    if (btn && hasPerm) {
+        btn.innerText = "▶ REANUDAR CÁMARA";
+        btn.style.borderColor = "#00ff41";
+        btn.style.color = "#00ff41";
     }
+    
+    // 6. Actualizar UI de TTS
+    updateTTSStatusUI();
 };
 
     function showCamError(title, msg, steps) {
@@ -3799,17 +3795,25 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     
     const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
     
-    // Prompts optimizados para primera persona, inmersión y máximo 20 palabras
-    const AI_PROMPTS = [
-        "Primera persona. Alguien del equipo reporta: 'Veo' o 'Hay' o 'Está'. Describe SOLO lo que ves en la imagen: figuras, sombras, rostros, objetos. Máx 20 palabras. Tono directo, siniestro, sin explicaciones.",
-        "Primera persona. Reporte de campo: 'Veo' o 'Detecto' o 'Hay'. Menciona elementos visibles: siluetas, formas, luces, sombras. Máx 20 palabras. Sin interpretaciones, final inquietante.",
-        "Primera persona. Observación: 'Veo' o 'Está' o 'Hay algo'. Describe contornos, manchas, figuras detectadas. Máx 20 palabras. Directo al punto, tensión creciente.",
-        "Primera persona. Testigo reporta: 'Veo' o 'Detecto' o 'Hay'. Enumera: personas, sombras, objetos, textos visibles. Máx 20 palabras. Tono escalofriante.",
-        "Primera persona. Alguien avisa: 'Veo' o 'Hay' o 'Está cerca'. Menciona figuras humanas, sombras inusuales, objetos, luces. Máx 20 palabras. Amenaza directa.",
-        "Primera persona. Reporte visual: 'Veo' o 'Detecto' o 'Hay algo'. Describe lo observable sin suposiciones. Máx 20 palabras. Final perturbador."
-    ];
-    const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
-    
+
+// PROMPTS PROGRESIVOS DE SENSIBILIDAD PARANORMAL
+const AI_PROMPTS = [
+
+`Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Describe únicamente elementos claramente visibles. Si alguna forma resulta ligeramente inusual, puedes mencionarla como una apariencia. Usa entre 22 y 24 palabras. Devuelve únicamente texto plano.`,
+
+`Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Describe elementos visibles y menciona discretamente formas que parezcan recordar un rostro, una silueta o una figura. Nunca lo afirmes como un hecho. Entre 22 y 24 palabras. Solo texto plano.`,
+
+`Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Prioriza sombras, reflejos o contornos ambiguos que parezcan adoptar una forma humana, manteniendo siempre la incertidumbre. Entre 22 y 24 palabras. Solo texto plano.`,
+
+`Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Busca anomalías visuales compatibles con pareidolia, como rostros, figuras o presencias apenas distinguibles, describiéndolas como simples apariencias. Entre 22 y 24 palabras. Solo texto plano.`,
+
+`Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Da prioridad a cualquier sombra, figura, reflejo o contorno que pueda sugerir una presencia observándome, usando expresiones como "parece", "aparenta" o "da la impresión". Nunca afirmes que sea real. Entre 22 y 24 palabras. Solo texto plano.`,
+
+`Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Examina cuidadosamente cualquier anomalía visual compatible con pareidolia y descríbela con un tono inquietante, como si algo pareciera ocultarse en la escena, sin asegurar nunca que exista una entidad paranormal. Entre 22 y 24 palabras. Solo texto plano.`
+
+];
+
+const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
     try {
         let attempts = 0, success = false, textResult = "Analizando...";
         const _aiTimeout = setTimeout(() => {
@@ -3831,15 +3835,40 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                         headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             model: CURRENT_AI_MODEL,
-                            messages: [{
-                                role: "user",
-                                content: [
-                                    { type: "text", text: prompt },
-                                    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
-                                ]
-                            }],
+                            messages: [
+                              {
+    role: "user",
+    content: `Eres un investigador paranormal de Exploraciones OBR que transmite observaciones en vivo desde una cámara corporal.
+
+Tu tarea es describir lo que observas y reportar posibles anomalías visuales.
+
+Reglas obligatorias:
+
+- Responde siempre en español.
+- Habla siempre en primera persona.
+- Comienza siempre con "Veo".
+- Describe únicamente elementos visibles.
+- Si un elemento puede parecer una figura, rostro, sombra, silueta o presencia, descríbelo usando expresiones como "parece", "aparenta", "recuerda a", "da la impresión de" o "tiene forma de".
+- Nunca afirmes como un hecho que existe una entidad paranormal.
+- Mantén un tono inquietante pero objetivo.
+- No expliques tu respuesta.
+- No uses inglés.
+- No menciones que eres una IA.
+- No describas aspectos técnicos de la imagen.
+- Devuelve una única oración natural de entre 22 y 24 palabras.
+- Devuelve únicamente texto plano.`
+
+},
+                                {
+                                    role: "user",
+                                    content: [
+                                        { type: "text", text: prompt },
+                                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
+                                    ]
+                                }
+                            ],
                             max_tokens: 50,
-                            temperature: 0.7
+                            temperature: 0.9 // 🔒 Aumentado para más creatividad y menos análisis técnico
                         }),
                         signal: ac.signal
                     });
@@ -3858,7 +3887,7 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                         await new Promise(r => setTimeout(r, 1000));
                     }
                 } else {
-                    // ✅ GEMINI: CORREGIDO para enviar prompt + imagen (antes solo enviaba "ping")
+                    // GEMINI
                     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -3888,40 +3917,52 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
             }
         }
         
-clearTimeout(_aiTimeout);
+        clearTimeout(_aiTimeout);
 
 // === LIMPIEZA AGRESIVA DE RESPUESTAS ===
 let text = textResult;
 
-// 1. Eliminar etiquetas <think> y todo su contenido (incluye saltos de línea)
+// 1. Eliminar etiquetas <think> y todo su contenido
 text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-// 2. Eliminar metadatos comunes de razonamiento
+// 2. Eliminar cualquier cosa que parezca proceso de pensamiento o metadatos
 text = text.replace(/el usuario quiere que[\s\S]*?(?=\n|$)/gi, '').trim();
 text = text.replace(/the user wants[\s\S]*?(?=\n|$)/gi, '').trim();
 text = text.replace(/rol:[\s\S]*?(?=\n|$)/gi, '').trim();
 text = text.replace(/punto de vista:[\s\S]*?(?=\n|$)/gi, '').trim();
+text = text.replace(/acción:[\s\S]*?(?=\n|$)/gi, '').trim();
 text = text.replace(/<[^>]+>/g, '').trim();
 
-// 3. Eliminar caracteres de markdown y limpiar espacios
+// 3. Eliminar caracteres de markdown
 text = text.replace(/[*_#`]/g, '').trim();
 
-// 4. Extraer SOLO la primera línea válida (evita bloques de texto extra)
+// 4. 🔒 CRÍTICO: Eliminar puntos suspensivos excesivos (causan pausas en TTS)
+text = text.replace(/\.{3,}/g, '.').trim(); // "..." → "."
+text = text.replace(/\.{2,}/g, '.').trim(); // ".." → "."
+
+// 5. Eliminar comas duplicadas (también causan pausas)
+text = text.replace(/,{2,}/g, ',').trim();
+
+// 6. Eliminar saltos de línea múltiples
+text = text.replace(/\n{2,}/g, ' ').trim();
+
+// 7. Extraer SOLO la primera línea válida
 const lines = text.split('\n').filter(line => line.trim().length > 2);
 text = lines[0] || text;
 
-// 5. Limitar a ~20 palabras por seguridad absoluta
+// 8. Limitar a ~20 palabras
 const words = text.split(/\s+/);
 if (words.length > 20) {
-    text = words.slice(0, 20).join(' ') + "...";
+    text = words.slice(0, 20).join(' ') + ".";
 }
 
-// 6. Validación final: si contiene palabras prohibidas o es muy corta, usar fallback
+// 9. Validación final
 if (text.length < 3 || text.toLowerCase().includes('error') || text.toLowerCase().includes('analizando') || text.toLowerCase().includes('usuario') || text.toLowerCase().includes('user')) {
     text = "señal interferida";
 }
-        
-        stopScanningEffect();
+
+stopScanningEffect();
+
         currentAiText = text;
         currentAiImgEl = pendingAiImgEl;
         currentAiImage = pendingAiImageSrc;
@@ -4230,6 +4271,7 @@ async function validateGeminiKey() {
     const status = document.getElementById('gemini-status');
     const modelInfo = document.getElementById('gemini-model-info');
     const k = input.value.trim();
+    
     if (!k) { status.innerText = "❌ VACÍO"; status.style.color = 'red'; return; }
     
     status.innerText = "⏳ VERIFICANDO CLAVE..."; status.style.color = '#ffaa00';
@@ -4241,12 +4283,19 @@ async function validateGeminiKey() {
         if (!listResp.ok) {
             const errData = await listResp.json().catch(() => ({}));
             const errMsg = errData.error?.message || 'Clave inválida';
+            
             if (errMsg.includes('API key not valid') || listResp.status === 403) {
-                status.innerText = "❌ CLAVE INVÁLIDA"; status.style.color = 'red';
+                status.innerText = "❌ CLAVE INVÁLIDA";
+                status.style.color = 'red';
                 modelInfo.innerText = "Verifica tu API Key de Google AI Studio";
+            } else if (listResp.status === 429) {
+                status.innerText = "❌ LÍMITE ALCANZADO";
+                status.style.color = 'red';
+                modelInfo.innerText = "Demasiadas peticiones, espera un momento";
             } else {
-                status.innerText = `❌ ERROR ${listResp.status}`; status.style.color = 'red';
-                modelInfo.innerText = errMsg.substring(0, 40);
+                status.innerText = `❌ ERROR ${listResp.status}`;
+                status.style.color = 'red';
+                modelInfo.innerText = errMsg.substring(0, 50);
             }
             return;
         }
@@ -4254,47 +4303,76 @@ async function validateGeminiKey() {
         const listData = await listResp.json();
         const availableModels = listData.models.map(m => m.name.replace('models/', ''));
         
-        // PASO 2: Probar modelos con texto simple para medir latencia (sin imagen, solo validación)
+        // PASO 2: Probar modelos en orden de preferencia con un texto simple (SIN imagen)
         status.innerText = "⏳ PROBANDO MODELOS...";
         modelInfo.innerText = "Buscando mejor modelo disponible...";
+        
         const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
         let bestModel = null;
         let fastestTime = Infinity;
         
         for (const model of modelsToTry) {
-            if (!availableModels.some(m => m.includes(model.replace('-flash', '').replace('-pro', '')))) continue;
+            // Verificar si el modelo está disponible (búsqueda flexible)
+            const isAvailable = availableModels.some(m => m.includes(model.replace('-flash', '').replace('-pro', '')) || m === model);
+            if (!isAvailable) continue;
             
             const start = performance.now();
             const ac = new AbortController();
             const t = setTimeout(() => ac.abort(), 6000);
+            
             try {
+                // ✅ CORREGIDO: Enviamos un texto simple "ping" para validar. 
+                // No usamos 'prompt' ni 'base64' porque no existen en esta función.
                 const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }),
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        contents: [{ parts: [{ text: "ping" }] }] 
+                    }),
                     signal: ac.signal
                 });
                 clearTimeout(t);
+                
                 if (resp.ok) {
                     const timeTaken = performance.now() - start;
-                    if (timeTaken < fastestTime) { fastestTime = timeTaken; bestModel = model; }
+                    if (timeTaken < fastestTime) {
+                        fastestTime = timeTaken;
+                        bestModel = model;
+                    }
                 }
-            } catch(e) { clearTimeout(t); continue; }
+            } catch(e) {
+                clearTimeout(t);
+                continue;
+            }
+        }
+        
+        // Si no encontró ninguno de los preferidos, usar el primero disponible que contenga "flash"
+        if (!bestModel && availableModels.length > 0) {
+            const flashModel = availableModels.find(m => m.includes('flash'));
+            bestModel = flashModel || availableModels[0];
+            fastestTime = 0;
         }
         
         if (bestModel) {
-            GEMINI_API_KEY = k; GEMINI_MODEL = bestModel;
+            GEMINI_API_KEY = k;
+            GEMINI_MODEL = bestModel;
             localStorage.setItem('obr_gemini_key', k);
             localStorage.setItem('obr_gemini_model', bestModel);
-            status.innerText = `✅ OK (${Math.round(fastestTime)}ms)`; status.style.color = '#00ff41';
+            
+            status.innerText = `✅ OK (${Math.round(fastestTime)}ms)`;
+            status.style.color = '#00ff41';
             modelInfo.innerText = `Modelo: ${bestModel}`;
             showToast(`GEMINI VALIDADO — ${bestModel}`, false);
         } else {
-            status.innerText = "❌ SIN MODELOS DISPONIBLES"; status.style.color = 'red';
+            status.innerText = "❌ SIN MODELOS DISPONIBLES";
+            status.style.color = 'red';
             modelInfo.innerText = "Tu cuenta no tiene acceso a modelos Gemini";
         }
     } catch(e) {
-        status.innerText = "❌ ERROR DE RED"; status.style.color = 'red';
+        status.innerText = "❌ ERROR DE RED";
+        status.style.color = 'red';
         modelInfo.innerText = "Verifica tu conexión a internet";
+        console.error("Error validando Gemini:", e);
     }
 }
 
