@@ -156,6 +156,50 @@
         @keyframes pulse { 0% { opacity: 0.5; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.5; transform: scale(0.95); } }
         
         #chat-fullscreen-view { display:none; position:fixed; inset:0; z-index:10000; background:#000; flex-direction:column; }
+    /* Animaciones para Audio Scan */
+.audio-scan-active #local-media-controls {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+}
+
+.audio-scan-active #telemetry-container {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+.audio-scan-active #status-indicators {
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+/* Transiciones suaves */
+#local-media-controls, #telemetry-container, #status-indicators {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Gráfico de onda simplificado */
+.waveform-container {
+    position: absolute;
+    bottom: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    height: 120px;
+    pointer-events: none;
+    z-index: 65;
+}
+
+.waveform-bar {
+    position: absolute;
+    bottom: 50%;
+    width: 3px;
+    background: linear-gradient(to top, #00ffff, #ff00ff);
+    border-radius: 2px;
+    transform-origin: center;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+}
+    
     </style>
 </head>
 <body>
@@ -2590,258 +2634,337 @@ const constraintSets = [
     }
 
     async function toggleAudioScanner() {
-        const btnMenu = document.getElementById('btn-audio-menu');
-        
-        if (state.isAudioScan) {
-            if (window._waitingAudioDeactivation) return;
-            
-            if (isTtsPlaying || isSpookySpeaking) {
-                window._waitingAudioDeactivation = true;
-                
-                const checkInterval = setInterval(() => {
-                    if (!isTtsPlaying && !isSpookySpeaking) {
-                        clearInterval(checkInterval);
-                        window._waitingAudioDeactivation = false;
-                        if(state.isAudioScan) executeAudioScanDeactivation(btnMenu);
-                    }
-                }, 500);
-            } else {
-                executeAudioScanDeactivation(btnMenu);
-            }
-        } else {
-            state.isAudioScan = true;
-            // Verificar que tengamos al menos una API TTS válida
-const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
-const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
-
-if (!hasElevenLabs && !hasVoiceRSS) {
-    state.isAudioScan = false;
-    ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
-    return;
-}
-            
-            if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
-                if (!audioStream) {
-                    try {
-                        audioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
-                    } catch(e) { console.warn("Permiso de micrófono local denegado."); }
+    const btnMenu = document.getElementById('btn-audio-menu');
+    
+    if (state.isAudioScan) {
+        // === DESACTIVAR ===
+        if (window._waitingAudioDeactivation) return;
+        if (isTtsPlaying || isSpookySpeaking) {
+            window._waitingAudioDeactivation = true;
+            const checkInterval = setInterval(() => {
+                if (!isTtsPlaying && !isSpookySpeaking) {
+                    clearInterval(checkInterval);
+                    window._waitingAudioDeactivation = false;
+                    if(state.isAudioScan) executeAudioScanDeactivation(btnMenu);
                 }
-            }
-            
-            await initAudioEngine(); 
-            updateAudioRouting();
-            
-            const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-            const hasLocal = audioStream && audioStream.getAudioTracks().length > 0;
-            
-            if (!hasRemote && !hasLocal) {
-                showToast("NO HAY MIC SENDER O ESTUDIO CONECTADO", true);
-                state.isAudioScan = false;
-                if (btnMenu) btnMenu.classList.remove('active-state');
-                return;
-            }
-
-            if (btnMenu) btnMenu.classList.add('active-state');
-            
-            window._audioScanStartTime = Date.now();
-            window._evpNextGap = 999999;
-            window._waitingFirstInteraction = true;
-            window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null }; 
-            lastValidAudioTime = Date.now(); 
-
-            window._isAnnouncement = true; 
-            speakAnnouncement('ESPIRIT BOX ACTIVADO').then(() => {
-                if (!state.isAudioScan) return;
-                sweepAudio.volume = 0; sweepAudio.currentTime = 0; sweepAudio.play().catch(() => {});
-                _fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200); 
-                
-                setTimeout(() => {
-                    if (!state.isAudioScan) return;
-                    lastReconnectTime = 0;
-                    reconnectAudioNode();
-                    window._isAnnouncement = false; 
-                    lastEvpTime = Date.now(); 
-                    scheduleBackgroundAIContext(true); 
-                }, 150);
-            }).catch(() => {
-                if (!state.isAudioScan) return;
-                startSweepAudio();
-                setTimeout(() => {
-                    if (!state.isAudioScan) return;
-                    lastReconnectTime = 0;
-                    reconnectAudioNode();
-                    window._isAnnouncement = false; 
-                    lastEvpTime = Date.now(); 
-                    scheduleBackgroundAIContext(true); 
-                }, 150);
-            });
+            }, 500);
+        } else {
+            executeAudioScanDeactivation(btnMenu);
         }
-    }
-
-    function executeAudioScanDeactivation(btnMenu) {
-        state.isAudioScan = false;
-        if (btnMenu) btnMenu.classList.remove('active-state');
-        stopSweepAudio();
-
-        clearTimeout(_ttsWatchdog);
-        clearTimeout(backgroundAITimer);
+    } else {
+        // === ACTIVAR ===
+        state.isAudioScan = true;
+        
+        // Verificar APIs TTS
+        const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
+        const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
+        if (!hasElevenLabs && !hasVoiceRSS) {
+            state.isAudioScan = false;
+            ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
+            return;
+        }
+        
+        // Configurar micrófono si es necesario
+        if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
+            if (!audioStream) {
+                try {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } 
+                    });
+                } catch(e) { console.warn("Permiso de micrófono local denegado."); }
+            }
+        }
+        
+        await initAudioEngine();
+        updateAudioRouting();
+        
+        // Verificar que haya micrófono activo
+        const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
+        const hasLocal = audioStream && audioStream.getAudioTracks().length > 0;
+        if (!hasRemote && !hasLocal) {
+            showToast("NO HAY MIC SENDER O ESTUDIO CONECTADO", true);
+            state.isAudioScan = false;
+            if (btnMenu) btnMenu.classList.remove('active-state');
+            return;
+        }
+        
+        // Activar UI
+        if (btnMenu) btnMenu.classList.add('active-state');
+        
+        // === OCULTAR ELEMENTOS ===
+        document.body.classList.add('audio-scan-active');
+        
+        window._audioScanStartTime = Date.now();
+        window._evpNextGap = 999999;
+        window._waitingFirstInteraction = true;
         window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
+        lastValidAudioTime = Date.now();
+        window._isAnnouncement = true;
         
-        if (cloudTTSPlayer) { cloudTTSPlayer.pause(); cloudTTSPlayer.src = ''; }
-        if (_activeBufSrc) { try { _activeBufSrc.stop(); } catch(e){} _activeBufSrc = null; }
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
-        
-        stopLocalSpeech(); 
-        
-        isTtsPlaying = false; isSpookySpeaking = false;
-        lastSpokenText = ''; clearTimeout(speechTimer);
-        lastEvpTime = Date.now() + 99999; 
-        simulatedPikes.fill(0); cumulativeEVPEnergy = 0; ambientNoiseLevel = 0.01;
-        evpContextMemory = []; 
-        
-        window._isAnnouncement = true; 
-        speakAnnouncement('ESPIRIT BOX DESACTIVADO', true).then(() => {
-            window._isAnnouncement = false;
+        speakAnnouncement('ESPIRIT BOX ACTIVADO').then(() => {
+            if (!state.isAudioScan) return;
+            sweepAudio.volume = 0; sweepAudio.currentTime = 0; sweepAudio.play().catch(() => {});
+            _fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200);
+            setTimeout(() => {
+                if (!state.isAudioScan) return;
+                lastReconnectTime = 0;
+                reconnectAudioNode();
+                window._isAnnouncement = false;
+                lastEvpTime = Date.now();
+                scheduleBackgroundAIContext(true);
+            }, 150);
         }).catch(() => {
-            window._isAnnouncement = false;
+            if (!state.isAudioScan) return;
+            startSweepAudio();
+            setTimeout(() => {
+                if (!state.isAudioScan) return;
+                lastReconnectTime = 0;
+                reconnectAudioNode();
+                window._isAnnouncement = false;
+                lastEvpTime = Date.now();
+                scheduleBackgroundAIContext(true);
+            }, 150);
         });
     }
-    function drawAudioVisualizer(c, w, h) {
-        if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
-        const now = performance.now();
-        if (now - (window._lastAudioDraw || 0) < 66) return;
-        window._lastAudioDraw = now;
-        
-        audioAnalyser.getByteTimeDomainData(audioDataArray);
-        const bufferLength = audioAnalyser.frequencyBinCount;
-        
-        let minVal = 255;
-        let maxVal = 0;
-        let rmsSum = 0;
-        let isBufferFrozen = true;
-        let currentMaxVolume = 0;
+}
 
-        if (!window._lastAudioBuffer) {
-            window._lastAudioBuffer = new Uint8Array(bufferLength);
-            isBufferFrozen = false; 
-        }
+function executeAudioScanDeactivation(btnMenu) {
+    state.isAudioScan = false;
+    if (btnMenu) btnMenu.classList.remove('active-state');
+    
+    // === MOSTRAR ELEMENTOS NUEVAMENTE ===
+    document.body.classList.remove('audio-scan-active');
+    
+    stopSweepAudio();
+    clearTimeout(_ttsWatchdog);
+    clearTimeout(backgroundAITimer);
+    window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
+    if (cloudTTSPlayer) { cloudTTSPlayer.pause(); cloudTTSPlayer.src = ''; }
+    if (_activeBufSrc) { try { _activeBufSrc.stop(); } catch(e){} _activeBufSrc = null; }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    stopLocalSpeech();
+    isTtsPlaying = false; isSpookySpeaking = false;
+    lastSpokenText = ''; clearTimeout(speechTimer);
+    lastEvpTime = Date.now() + 99999;
+    simulatedPikes.fill(0); cumulativeEVPEnergy = 0; ambientNoiseLevel = 0.01;
+    evpContextMemory = [];
+    window._isAnnouncement = true;
+    
+    speakAnnouncement('ESPIRIT BOX DESACTIVADO', true).then(() => {
+        window._isAnnouncement = false;
+    }).catch(() => {
+        window._isAnnouncement = false;
+    });
+}
+    
 
-        for (let i = 0; i < bufferLength; i++) {
-            const val = audioDataArray[i];
-            
-            if (val < minVal) minVal = val;
-            if (val > maxVal) maxVal = val;
-            
-            if (isBufferFrozen && val !== window._lastAudioBuffer[i]) {
-                isBufferFrozen = false;
-            }
-            
-            const v = Math.abs((val / 128.0) - 1); 
-            if (v > currentMaxVolume) currentMaxVolume = v;
-            rmsSum += v * v;
-        }
-        
-        window._lastAudioBuffer.set(audioDataArray);
-
-        const rmsLevel = Math.sqrt(rmsSum / bufferLength);
-        const amplitude = maxVal - minVal; 
-        
-        const isHardwareDead = isBufferFrozen || amplitude <= 1;
-
-        if (!isHardwareDead) {
+function drawAudioVisualizer(c, w, h) {
+    if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
+    
+    // 🔒 CRÍTICO: Sin throttle de 66ms para movimiento continuo y sin parpadeo
+    audioAnalyser.getByteTimeDomainData(audioDataArray);
+    const bufferLength = audioAnalyser.frequencyBinCount;
+    
+    let minVal = 255, maxVal = 0, rmsSum = 0, currentMaxVolume = 0;
+    let isBufferFrozen = true;
+    
+    if (!window._lastAudioBuffer) {
+        window._lastAudioBuffer = new Uint8Array(bufferLength);
+        isBufferFrozen = false;
+    }
+    
+    for (let i = 0; i < bufferLength; i++) {
+        const val = audioDataArray[i];
+        if (val < minVal) minVal = val;
+        if (val > maxVal) maxVal = val;
+        if (isBufferFrozen && val !== window._lastAudioBuffer[i]) isBufferFrozen = false;
+        const v = Math.abs((val / 128.0) - 1);
+        if (v > currentMaxVolume) currentMaxVolume = v;
+        rmsSum += v * v;
+    }
+    window._lastAudioBuffer.set(audioDataArray);
+    
+    const rmsLevel = Math.sqrt(rmsSum / bufferLength);
+    const amplitude = maxVal - minVal;
+    const isHardwareDead = isBufferFrozen || amplitude <= 1;
+    
+    if (!isHardwareDead) {
+        lastValidAudioTime = Date.now();
+    } else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
+        if (Date.now() - lastValidAudioTime > 2500) {
             lastValidAudioTime = Date.now();
-        } else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
-            if (Date.now() - lastValidAudioTime > 2500) {
-                lastValidAudioTime = Date.now(); 
-                lastReconnectTime = 0; 
-                reconnectAudioNode();
+            lastReconnectTime = 0;
+            reconnectAudioNode();
+        }
+    }
+    
+    const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window._liveUserLastUpdate < 1500);
+    ambientNoiseLevel = ambientNoiseLevel * 0.985 + rmsLevel * 0.015;
+    const dynamicThreshold = ambientNoiseLevel * 2.2 + 0.015;
+    
+    if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && rmsLevel > dynamicThreshold) {
+        cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
+    }
+    cumulativeEVPEnergy *= 0.93;
+    cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
+    
+    // 🔥 OPTIMIZACIÓN: Reducir bins en móvil (64) y en PC (128) para ahorrar recursos
+    const isMobile = window.innerWidth < 600;
+    const visualBins = isMobile ? 64 : 128;
+    const step = Math.floor(bufferLength / visualBins);
+    const displayWidth = w * 0.465; // Ancho al 50%
+    const startX = (w - displayWidth) / 2;
+    const sliceW = displayWidth / visualBins;
+    const nowAnim = performance.now();
+    
+    if (isSpookySpeaking || isTtsPlaying) {
+        const env = (Math.sin(nowAnim * 0.005) + 1) * 0.5;
+        const env2 = (Math.sin(nowAnim * 0.0031) + 1) * 0.5;
+        const combined = env * 0.6 + env2 * 0.4;
+        for (let i = 0; i < visualBins; i++) {
+            simulatedPikes[i] *= 0.80;
+            const specShape = Math.sin((i / visualBins) * Math.PI);
+            if (Math.random() < 0.03) {
+                simulatedPikes[i] = (combined * 0.18 + 0.06) * specShape * (0.7 + Math.random() * 0.6);
             }
         }
-
-        const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window._liveUserLastUpdate < 1500);
-
-        ambientNoiseLevel = ambientNoiseLevel * 0.985 + rmsLevel * 0.015;
-        const dynamicThreshold = ambientNoiseLevel * 2.2 + 0.015;
-
-        if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && rmsLevel > dynamicThreshold) {
-            cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0; 
-        }
-        cumulativeEVPEnergy *= 0.93; cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
-
-        const visualBins = 128, step = Math.floor(bufferLength / visualBins), displayWidth = Math.min(w * 0.92, 1400);
-        const startX = (w - displayWidth) / 2, sliceW = displayWidth / visualBins, nowAnim = performance.now();
-
+    } else {
+        for (let i = 0; i < visualBins; i++) simulatedPikes[i] *= 0.9;
+    }
+    
+    const sp2 = window._sp2Buffer;
+    for (let i = 0; i < visualBins; i++) {
+        const l2 = i > 1 ? simulatedPikes[i-2] : 0;
+        const l1 = i > 0 ? simulatedPikes[i-1] : 0;
+        const r1 = i < visualBins-1 ? simulatedPikes[i+1] : 0;
+        const r2 = i < visualBins-2 ? simulatedPikes[i+2] : 0;
+        sp2[i] = l2*0.1 + l1*0.25 + simulatedPikes[i]*0.3 + r1*0.25 + r2*0.1;
+    }
+    for (let i = 0; i < visualBins; i++) simulatedPikes[i] = sp2[i];
+    
+    c.save();
+    
+    const screenScale = Math.max(1.2, Math.min(4, 1920 / (window.innerWidth || 1920)));
+    const waveHeight = 55 * screenScale; 
+    const bottomY = h * 0.88; // Base baja
+    const sensitivity = Math.min(5.0, 4.5 / screenScale * 2.0);
+    const clampH = waveHeight * 0.95;
+    const clampY = (val) => Math.max(-clampH, Math.min(clampH, val));
+    const textFS = Math.round(23 * screenScale);
+    
+    // ==========================================
+    // 🔥 NUEVO DISEÑO DEL GRÁFICO (SIN SOMBRAS Y CON DISOLUCIÓN)
+    // ==========================================
+    
+    // 1. Pre-cálculo y Suavizado de los valores Y de la onda
+    const rawYValues = new Float32Array(visualBins);
+    for (let i = 0; i < visualBins; i++) {
+        let v = (audioDataArray[i * step] / 128.0) - 1;
         if (isSpookySpeaking || isTtsPlaying) {
-            const env = (Math.sin(nowAnim * 0.005) + 1) * 0.5, env2 = (Math.sin(nowAnim * 0.0031) + 1) * 0.5, combined = env * 0.6 + env2 * 0.4;
-            for (let i = 0; i < visualBins; i++) {
-                simulatedPikes[i] *= 0.80; const specShape = Math.sin((i / visualBins) * Math.PI);
-                if (Math.random() < 0.03) simulatedPikes[i] = (combined * 0.18 + 0.06) * specShape * (0.7 + Math.random() * 0.6);
-            }
-        } else { for (let i = 0; i < visualBins; i++) simulatedPikes[i] *= 0.9; }
-        
-        const sp2 = window._sp2Buffer;
-        for (let i = 0; i < visualBins; i++) {
-            const l2 = i > 1 ? simulatedPikes[i-2] : 0, l1 = i > 0 ? simulatedPikes[i-1] : 0, r1 = i < visualBins-1 ? simulatedPikes[i+1] : 0, r2 = i < visualBins-2 ? simulatedPikes[i+2] : 0;
-            sp2[i] = l2*0.1 + l1*0.25 + simulatedPikes[i]*0.3 + r1*0.25 + r2*0.1;
+            v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
         }
-        for (let i = 0; i < visualBins; i++) simulatedPikes[i] = sp2[i];
+        rawYValues[i] = v;
+    }
+
+    const yValues = new Float32Array(visualBins);
+    for (let i = 0; i < visualBins; i++) {
+        const prev = i > 0 ? rawYValues[i-1] : 0;
+        const next = i < visualBins - 1 ? rawYValues[i+1] : 0;
+        let smoothed = (prev * 0.1 + rawYValues[i] * 0.8 + next * 0.1); 
         
-        c.save();
+        // 🔥 NUEVO: Factor de "Disolver y Crecer" en los extremos
+        // Esto hace que en i=0 y i=final, el valor sea exactamente 0.
+        const fadeFactor = Math.pow(Math.sin((i / (visualBins - 1)) * Math.PI), 0.8);
+        yValues[i] = smoothed * fadeFactor;
+    }
 
-        const screenScale  = Math.max(1.2, Math.min(4, 1920 / (window.innerWidth || 1920)));
-        const bottomY      = h * 0.84, waveHeight = 71 * screenScale, sensitivity = Math.min(3.5, 3.5 / screenScale * 1.5);
-        const clampH       = waveHeight * 0.95, clampY = (val) => Math.max(-clampH, Math.min(clampH, val));
-        const textFS       = Math.round(23 * screenScale);
+    // 🔥 OPTIMIZACIÓN: Apagar sombras globalmente para el canvas (mejora el FPS drásticamente)
+    c.shadowBlur = 0;
+    c.shadowColor = 'transparent';
 
-        c.beginPath(); c.strokeStyle = 'rgba(0, 255, 255, 0.8)'; c.shadowColor = 'rgba(0, 255, 255, 0.8)'; c.shadowBlur = 15; c.lineWidth = screenScale * (window.innerWidth < 600 ? 3.5 : 1.5); c.lineJoin = 'round';
-        let x = startX;
-        for (let i = 0; i < visualBins; i++) {
-            let v = (audioDataArray[i * step] / 128.0) - 1;
-            if (isSpookySpeaking || isTtsPlaying) v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
-            const y = bottomY + clampY(v * waveHeight * sensitivity);
-            if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); x += sliceW;
-        }
-        c.stroke();
+    // 2. Relleno de fondo con degradado (El "cuerpo" de la onda)
+    c.beginPath();
+    let x = startX;
+    c.moveTo(startX, bottomY); // Nace desde el centro en el extremo izquierdo
+    for (let i = 0; i < visualBins; i++) {
+        const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity);
+        c.lineTo(x, y);
+        x += sliceW;
+    }
+    c.lineTo(startX + displayWidth, bottomY); // Muere en el centro en el extremo derecho
+    c.closePath();
 
+    const grd = c.createLinearGradient(0, bottomY - waveHeight, 0, bottomY + waveHeight);
+    grd.addColorStop(0, 'rgba(0, 150, 255, 0.0)');
+    grd.addColorStop(0.3, 'rgba(0, 180, 255, 0.2)');
+    grd.addColorStop(0.5, 'rgba(0, 230, 255, 0.6)');
+    grd.addColorStop(0.7, 'rgba(0, 180, 255, 0.2)');
+    grd.addColorStop(1, 'rgba(0, 150, 255, 0.0)');
+    c.fillStyle = grd;
+    c.fill();
+
+    // 3. Efecto de capas de tubo (Sin sombras, 2 capas optimizadas)
+    const numLayers = 2; // 🔥 Reducido a 2 capas para un rendimiento excelente
+    for (let l = numLayers - 1; l >= 0; l--) {
+        const scale = 1.0 - (l / numLayers) * 0.3;
+        const alpha = 0.3 + (l / numLayers) * 0.7;
+        
+        c.beginPath();
         x = startX;
         for (let i = 0; i < visualBins; i++) {
-            let v = (audioDataArray[i * step] / 128.0) - 1;
-            if (isSpookySpeaking || isTtsPlaying) v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
-            if (Math.abs(v) > 0.15 && i % 2 === 0) {
-                const y = bottomY + clampY(v * waveHeight * sensitivity); c.save(); c.fillStyle = 'rgba(255,255,255,0.95)'; c.shadowColor = 'white'; c.shadowBlur = 15; c.beginPath(); c.arc(x, y, 2.5, 0, Math.PI * 2); c.fill(); c.restore();
-            } x += sliceW;
+            const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity * scale);
+            if (i === 0) c.moveTo(x, y);
+            else c.lineTo(x, y);
+            x += sliceW;
         }
-
-        c.beginPath(); c.strokeStyle = 'rgba(255, 0, 255, 0.8)'; c.shadowColor = 'rgba(255, 0, 255, 0.8)'; c.shadowBlur = 15; c.lineWidth = screenScale * (window.innerWidth < 600 ? 3.0 : 1.2); x = startX;
-        for (let i = 0; i < visualBins; i++) {
-            let v = (audioDataArray[i * step] / 128.0) - 1;
-            if (isSpookySpeaking || isTtsPlaying) v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
-            const y = bottomY - clampY(v * waveHeight * sensitivity * 0.8);
-            if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
-            if (Math.abs(v) > 0.05 && i % 8 === 0) { const pSize = Math.random() * 2 + 1; c.fillStyle = Math.random() > 0.5 ? '#00ffff' : '#ff00ff'; c.fillRect(x, y + (Math.random() * 30 - 15), pSize, pSize); } x += sliceW;
-        }
+        c.strokeStyle = `rgba(0, 200, 255, ${alpha})`;
+        c.lineWidth = 1.0 + (l * 2.0); // Capa gruesa exterior, capa fina interior
         c.stroke();
+    }
 
-        let _userAlpha = 1.0;
-        if (window._liveUserFadeStart) {
-            const elapsed = performance.now() - window._liveUserFadeStart; const fadeDur = window._liveUserFadeDuration || 800; _userAlpha = Math.max(0, 1 - elapsed / fadeDur);
-            if (_userAlpha <= 0) { window._liveUserFadeStart = null; window._liveUserText = ''; }
-        }
-        
-        if ((isUserTalkingNow || _userAlpha < 1) && window._liveUserText && _userAlpha > 0) {
+    // 4. Línea central blanca brillante (Sin sombra)
+    c.beginPath();
+    x = startX;
+    for (let i = 0; i < visualBins; i++) {
+        const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity);
+        if (i === 0) c.moveTo(x, y);
+        else c.lineTo(x, y);
+        x += sliceW;
+    }
+    c.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    c.lineWidth = screenScale * 1.5;
+    c.stroke();
+
+    // ==========================================
+    // FIN DEL NUEVO DISEÑO DEL GRÁFICO
+    // ==========================================
+    
+    // 🔒 TEXTO DEL USUARIO (Optimizado para no perder palabras al transcribir)
+    if (window._liveUserText && window._liveUserLastUpdate) {
+        const timeSinceUpdate = Date.now() - window._liveUserLastUpdate;
+        if (timeSinceUpdate < 3000) { 
             c.save();
-            c.globalAlpha = _userAlpha * 0.85; 
-            const userLabel = window._liveUserText.toUpperCase(); 
+            c.globalAlpha = 0.95; 
+            
+            let displayUserText = window._liveUserText;
+            const userWords = displayUserText.split(' ');
+            
+            // 🔥 CORRECCIÓN: Cortar de forma inmediata a las últimas 8 palabras visibles
+            if (userWords.length > 8) {
+                displayUserText = userWords.slice(-8).join(' ');
+            }
+            
+            const userLabel = displayUserText.toUpperCase();
             
             if (!window._userTextCanvas) {
                 window._userTextCanvas = document.createElement('canvas');
                 window._userTextCtx = window._userTextCanvas.getContext('2d', {willReadFrequently: true});
                 window._lastRenderedUserText = "";
             }
+            
             const uCanv = window._userTextCanvas;
             const uCtx = window._userTextCtx;
-            
-            c.font = `bold ${textFS}px 'Share Tech Mono'`; 
+            c.font = `bold ${textFS}px 'Share Tech Mono'`;
             const txtW = c.measureText(userLabel).width;
             
             if (txtW > 0 && textFS > 0) {
@@ -2849,166 +2972,169 @@ if (!hasElevenLabs && !hasVoiceRSS) {
                 const reqH = Math.ceil(textFS * 4);
                 
                 if (userLabel !== window._lastRenderedUserText || uCanv.width !== reqW || uCanv.height !== reqH) {
-                    uCanv.width = reqW; uCanv.height = reqH;
-                    uCtx.clearRect(0,0,reqW,reqH);
+                    uCanv.width = reqW;
+                    uCanv.height = reqH;
+                    uCtx.clearRect(0, 0, reqW, reqH);
                     uCtx.font = `bold ${textFS}px 'Share Tech Mono'`;
                     uCtx.textAlign = "center";
                     uCtx.textBaseline = "middle";
                     uCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
                     uCtx.shadowColor = "#00d4ff";
-                    uCtx.shadowBlur = 40 * screenScale; uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    uCtx.shadowBlur = 20 * screenScale; uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    uCtx.shadowBlur = 10 * screenScale; uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    uCtx.shadowBlur = 5 * screenScale;  uCtx.fillText(userLabel, reqW/2, reqH/2);
+                    uCtx.shadowBlur = 40 * screenScale;
+                    uCtx.fillText(userLabel, reqW/2, reqH/2);
+                    uCtx.shadowBlur = 20 * screenScale;
+                    uCtx.fillText(userLabel, reqW/2, reqH/2);
+                    uCtx.shadowBlur = 10 * screenScale;
+                    uCtx.fillText(userLabel, reqW/2, reqH/2);
+                    uCtx.shadowBlur = 5 * screenScale;
+                    uCtx.fillText(userLabel, reqW/2, reqH/2);
                     window._lastRenderedUserText = userLabel;
                 }
-                const uY = bottomY - 55 * screenScale;
+                
+                const uY = bottomY - 80 * screenScale; 
                 c.drawImage(uCanv, (w / 2) - (reqW / 2), uY - (reqH / 2));
             }
-            
             c.restore();
-        }
-
-        if (lastSpokenText) {
-            const label = lastSpokenText.toUpperCase();
-            const evpY = bottomY - 28 * screenScale; 
-
-            c.save();
-            c.globalAlpha = 0.85; 
-
-            if (!window._evpTextCanvas) {
-                window._evpTextCanvas = document.createElement('canvas');
-                window._evpTextCtx = window._evpTextCanvas.getContext('2d', {willReadFrequently: true});
-                window._lastRenderedEvpText = "";
-            }
-            const tCanv = window._evpTextCanvas;
-            const tCtx = window._evpTextCtx;
-
-            c.font = `bold ${textFS}px 'Share Tech Mono'`; 
-            const txtW = c.measureText(label).width;
-
-            if (txtW > 0 && textFS > 0) {
-                const reqW = Math.ceil(txtW + textFS * 4);
-                const reqH = Math.ceil(textFS * 3);
-
-                if (label !== window._lastRenderedEvpText || tCanv.width !== reqW || tCanv.height !== reqH) {
-                    tCanv.width = reqW;
-                    tCanv.height = reqH;
-                    tCtx.clearRect(0, 0, reqW, reqH);
-
-                    const cx = reqW / 2;
-                    const cy = reqH / 2;
-
-                    tCtx.font = `bold ${textFS}px 'Share Tech Mono'`;
-                    tCtx.textAlign = "center";
-                    tCtx.textBaseline = "middle";
-
-                    tCtx.fillStyle = "rgba(255, 255, 255, 0.85)"; 
-                    tCtx.shadowColor = "#ab0202";
-                    
-                    tCtx.shadowBlur = 40 * screenScale; tCtx.fillText(label, cx, cy);
-                    tCtx.shadowBlur = 20 * screenScale; tCtx.fillText(label, cx, cy);
-                    tCtx.shadowBlur = 10 * screenScale; tCtx.fillText(label, cx, cy);
-                    tCtx.shadowBlur = 5 * screenScale;  tCtx.fillText(label, cx, cy);
-
-                    tCtx.globalCompositeOperation = "destination-out";
-                    
-                    tCtx.save();
-                    tCtx.translate(cx, cy);
-                    tCtx.rotate((120 * Math.PI) / 180); 
-                    
-                    for(let i=0; i<18; i++) {
-                        tCtx.fillStyle = `rgba(0,0,0,${0.6 + Math.random() * 0.4})`;
-                        const cutW = (Math.random() * 0.3 + 0.05) * reqW; 
-                        const cutH = (Math.random() * 2 + 0.5) * screenScale;
-                        const rx = (Math.random() - 0.5) * reqW * 2;
-                        const ry = (Math.random() - 0.5) * (reqH + reqW); 
-                        tCtx.fillRect(rx, ry, cutW, cutH);
-                    }
-                    tCtx.restore();
-                    
-                    for(let i = 0; i < 300; i++) {
-                        tCtx.fillStyle = `rgba(0,0,0,${0.4 + Math.random() * 0.4})`;
-                        tCtx.fillRect(Math.random() * reqW, Math.random() * reqH, Math.random() * 3 * screenScale, Math.random() * 2 * screenScale);
-                    }
-
-                    tCtx.globalCompositeOperation = "source-over";
-                    window._lastRenderedEvpText = label;
-                }
-                c.drawImage(tCanv, (w / 2) - (reqW / 2), evpY - (reqH / 2));
-            }
-            c.restore();
-        }
-        c.restore();
-
-        const now_evp = Date.now(); 
-        const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
-        
-        const isSilent = micActive && currentMaxVolume < (dynamicThreshold * 1.5) && !isUserTalkingNow; 
-        const hasEnergy = cumulativeEVPEnergy > 12; 
-        const hasSpike = micActive && rmsLevel > (dynamicThreshold * 2.2) && !isUserTalkingNow; 
-        
-        const afterQuestion = (now_evp - lastQuestionTime) < 8000; 
-        const timeSinceLastEvp = now_evp - lastEvpTime;
-        
-        const forceTriggerTime = 40000 + Math.random() * 20000; 
-        const isForced = (timeSinceLastEvp > forceTriggerTime);
-
-        let currentGap = window._evpNextGap || 8000;
-        
-        if (hasSpike && currentGap > 1500) currentGap = 1500;
-        if (hasEnergy && currentGap > 3000) currentGap = 3000;
-
-        const triggerProb = afterQuestion ? 0.20 : (hasSpike ? 0.15 : (hasEnergy ? 0.35 : 0.65));
-        
-        const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement && 
-            (isForced || ((isSilent || hasEnergy || hasSpike) && timeSinceLastEvp > currentGap && Math.random() > triggerProb));
-
-        if (shouldTrigger) {
-            
-            lastEvpTime = Date.now() + 99999; 
-            
-            if (afterQuestion || window._waitingFirstInteraction) {
-                window._evpNextGap = afterQuestion ? (2000 + Math.random() * 2000) : (20000 + Math.random() * 20000); 
-            } else {
-                const dado = Math.random();
-                if (dado < 0.25) {
-                    window._evpNextGap = 1500 + Math.random() * 1500;   
-                } else if (dado < 0.55) {
-                    window._evpNextGap = 4000 + Math.random() * 4000;   
-                } else if (dado < 0.80) {
-                    window._evpNextGap = 10000 + Math.random() * 8000;  
-                } else {
-                    window._evpNextGap = 20000 + Math.random() * 15000; 
-                }
-            }
-
-            if (ttsMainGain) { const volVar = 0.75 + Math.random() * 0.5; ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05); }
-
-            let evpText; 
-            const textRoll = Math.random();
-            
-            if (afterQuestion) {
-                const objetos = window._aiContext?.objetos ? window._aiContext.objetos.split(',').map(o => o.trim()) : [];
-                evpText = generarEventoEVP(objetos);
-            } else {
-                const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000); 
-                
-                if (memoriasValidas.length > 0 && textRoll < 0.35) {
-                    const randomMemory = memoriasValidas[Math.floor(Math.random() * memoriasValidas.length)];
-                    const palabras = randomMemory.text.split(' ').filter(w => w.length > 2);
-                    const objeto = palabras.length > 0 ? [palabras[Math.floor(Math.random() * palabras.length)]] : [];
-                    evpText = generarEventoEVP(objeto);
-                } else {
-                    evpText = generarEventoEVP();
-                }
-            }
-
-            speakSpooky(evpText); 
-            cumulativeEVPEnergy = -30;
         }
     }
-        function getAudioBins() {
+    
+    // 🔒 TEXTO EVP
+    if (lastSpokenText) {
+        const label = lastSpokenText.toUpperCase();
+        
+        c.save();
+        c.globalAlpha = 0.85;
+        
+        if (!window._evpTextCanvas) {
+            window._evpTextCanvas = document.createElement('canvas');
+            window._evpTextCtx = window._evpTextCanvas.getContext('2d', {willReadFrequently: true});
+            window._lastRenderedEvpText = "";
+        }
+        
+        const tCanv = window._evpTextCanvas;
+        const tCtx = window._evpTextCtx;
+        c.font = `bold ${textFS}px 'Share Tech Mono'`;
+        const txtW = c.measureText(label).width;
+        
+        if (txtW > 0 && textFS > 0) {
+            const reqW = Math.ceil(txtW + textFS * 4);
+            const reqH = Math.ceil(textFS * 3);
+            
+            if (label !== window._lastRenderedEvpText || tCanv.width !== reqW || tCanv.height !== reqH) {
+                tCanv.width = reqW;
+                tCanv.height = reqH;
+                tCtx.clearRect(0, 0, reqW, reqH);
+                const cx = reqW / 2;
+                const cy = reqH / 2;
+                tCtx.font = `bold ${textFS}px 'Share Tech Mono'`;
+                tCtx.textAlign = "center";
+                tCtx.textBaseline = "middle";
+                tCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+                tCtx.shadowColor = "#ab0202";
+                tCtx.shadowBlur = 40 * screenScale;
+                tCtx.fillText(label, cx, cy);
+                tCtx.shadowBlur = 20 * screenScale;
+                tCtx.fillText(label, cx, cy);
+                tCtx.shadowBlur = 10 * screenScale;
+                tCtx.fillText(label, cx, cy);
+                tCtx.shadowBlur = 5 * screenScale;
+                tCtx.fillText(label, cx, cy);
+                tCtx.globalCompositeOperation = "destination-out";
+                tCtx.save();
+                tCtx.translate(cx, cy);
+                tCtx.rotate((120 * Math.PI) / 180);
+                for(let i=0; i<18; i++) {
+                    tCtx.fillStyle = `rgba(0,0,0,${0.6 + Math.random() * 0.4})`;
+                    const cutW = (Math.random() * 0.3 + 0.05) * reqW;
+                    const cutH = (Math.random() * 2 + 0.5) * screenScale;
+                    const rx = (Math.random() - 0.5) * reqW * 2;
+                    const ry = (Math.random() - 0.5) * (reqH + reqW);
+                    tCtx.fillRect(rx, ry, cutW, cutH);
+                }
+                tCtx.restore();
+                for(let i = 0; i < 300; i++) {
+                    tCtx.fillStyle = `rgba(0,0,0,${0.4 + Math.random() * 0.4})`;
+                    tCtx.fillRect(Math.random() * reqW, Math.random() * reqH, Math.random() * 3 * screenScale, Math.random() * 2 * screenScale);
+                }
+                tCtx.globalCompositeOperation = "source-over";
+                window._lastRenderedEvpText = label;
+            }
+            
+            const evpY = bottomY - 30 * screenScale; 
+            c.drawImage(tCanv, (w / 2) - (reqW / 2), evpY - (reqH / 2));
+        }
+        c.restore();
+    }
+    
+    c.restore();
+    
+    // Lógica de trigger EVP (sin cambios en la detección)
+    const now_evp = Date.now();
+    const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
+    const isSilent = micActive && currentMaxVolume < (dynamicThreshold * 1.5) && !isUserTalkingNow;
+    const hasEnergy = cumulativeEVPEnergy > 12;
+    const hasSpike = micActive && rmsLevel > (dynamicThreshold * 2.2) && !isUserTalkingNow;
+    const afterQuestion = (now_evp - lastQuestionTime) < 8000;
+    const timeSinceLastEvp = now_evp - lastEvpTime;
+    const forceTriggerTime = 40000 + Math.random() * 20000;
+    const isForced = (timeSinceLastEvp > forceTriggerTime);
+    
+    let currentGap = window._evpNextGap || 8000;
+    if (hasSpike && currentGap > 1500) currentGap = 1500;
+    if (hasEnergy && currentGap > 3000) currentGap = 3000;
+    
+    const triggerProb = afterQuestion ? 0.20 : (hasSpike ? 0.15 : (hasEnergy ? 0.35 : 0.65));
+    const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement &&
+        (isForced || ((isSilent || hasEnergy || hasSpike) && timeSinceLastEvp > currentGap && Math.random() > triggerProb));
+    
+    if (shouldTrigger) {
+        lastEvpTime = Date.now() + 99999;
+        if (afterQuestion || window._waitingFirstInteraction) {
+            window._evpNextGap = afterQuestion ? (2000 + Math.random() * 2000) : (20000 + Math.random() * 20000);
+        } else {
+            const dado = Math.random();
+            if (dado < 0.25) window._evpNextGap = 1500 + Math.random() * 1500;
+            else if (dado < 0.55) window._evpNextGap = 4000 + Math.random() * 4000;
+            else if (dado < 0.80) window._evpNextGap = 10000 + Math.random() * 8000;
+            else window._evpNextGap = 20000 + Math.random() * 15000;
+        }
+        
+        if (ttsMainGain) {
+            const volVar = 0.75 + Math.random() * 0.5;
+            ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
+        }
+        
+        let evpText;
+        const textRoll = Math.random();
+        if (afterQuestion) {
+            const objetos = window._aiContext?.objetos ? window._aiContext.objetos.split(',').map(o => o.trim()) : [];
+            evpText = generarEventoEVP(objetos);
+        } else {
+            const memoriasValidas = evpContextMemory.filter(m => (now_evp - m.time) < 120000);
+            if (memoriasValidas.length > 0 && textRoll < 0.35) {
+                const randomMemory = memoriasValidas[Math.floor(Math.random() * memoriasValidas.length)];
+                const palabras = randomMemory.text.split(' ').filter(w => w.length > 2);
+                const objeto = palabras.length > 0 ? [palabras[Math.floor(Math.random() * palabras.length)]] : [];
+                evpText = generarEventoEVP(objeto);
+            } else {
+                evpText = generarEventoEVP();
+            }
+        }
+        
+        // 🔥 CORRECCIÓN: Si el EVP lanza varias frases, seleccionar una sola al azar
+        if (evpText && evpText.trim() !== '') {
+            const palabrasEvp = evpText.split(' ');
+            if (palabrasEvp.length > 1) {
+                evpText = palabrasEvp[Math.floor(Math.random() * palabrasEvp.length)];
+            }
+            speakSpooky(evpText);
+        }
+        
+        cumulativeEVPEnergy = -30;
+    }
+}
+
+ function getAudioBins() {
         if (!audioAnalyser || !audioDataArray) return [];
         audioAnalyser.getByteTimeDomainData(audioDataArray);
         const bins = [];
