@@ -46,11 +46,6 @@
         #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 70; }
         .interactive { pointer-events: auto; cursor: pointer; }
         
-        #orientation-lock { position: fixed; inset: 0; z-index: 9999; background: #000; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        @media (orientation: portrait) { #orientation-lock { display: flex; } #ui-layer { display: none; } }
-        
-        body.mic-sender-mode #orientation-lock { display: none !important; }
-
         body.filter-night-vision #shared-video-element { filter: grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0); }
         body.filter-night-vision #main-view-area::after { content: " "; position: absolute; inset: 0; pointer-events: none; z-index: 10; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 3px); background-size: 100% 3px; }
         
@@ -114,8 +109,205 @@
         }
 
         #loading { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .modal-bg { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.95); display: none; align-items: center; justify-content: center; }
-        .modal-bg.active { display: flex; }
+        /* === MODALES ADAPTATIVOS === */
+.modal-bg { 
+    position: fixed; 
+    inset: 0; 
+    z-index: 300; 
+    background: rgba(0,0,0,0.95); 
+    display: none; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 10px;
+}
+.modal-bg.active { display: flex; }
+
+/* En móvil: modales a pantalla completa con scroll */
+@media (max-width: 768px) {
+    .modal-bg { 
+        padding: 0; 
+        align-items: flex-start; 
+    }
+    .modal-bg > div { 
+        width: 100% !important; 
+        max-width: 100% !important; 
+        height: 100vh !important; 
+        max-height: 100vh !important; 
+        border-radius: 0 !important; 
+        border: none !important;
+        margin: 0 !important;
+    }
+    .modal-bg .custom-scrollbar { 
+        -webkit-overflow-scrolling: touch; 
+    }
+}
+
+
+/* === DISEÑO VERTICAL ADAPTATIVO === */
+@media (orientation: portrait) {
+    /* 1. HUD más grande y legible */
+    #hud-layer { 
+        transform: scale(0.8); /* 🔒 Aumentado de 0.65 a 0.8 */
+        transform-origin: top left; 
+    }
+    #hud-logo { 
+        width: 50px !important; 
+        height: 50px !important; 
+    }
+    #hud-title { 
+        font-size: 14px !important; /* 🔒 Aumentado de 10px a 14px */
+        font-weight: 900 !important;
+    }
+    #hud-time { 
+        font-size: 16px !important; /* 🔒 Aumentado de 12px a 16px */
+        font-weight: bold !important;
+    }
+    
+    /* 2. Video sin estirarse - mantener proporción */
+    #shared-video-element, #sls-canvas, #audio-canvas { 
+        width: 100% !important; 
+        height: 100% !important; 
+        object-fit: cover !important; 
+    }
+    #main-view-area { 
+        position: absolute !important; 
+        inset: 0 !important; 
+        overflow: hidden !important; 
+    }
+    #zoom-container { 
+        position: absolute !important; 
+        inset: 0 !important; 
+        width: 100% !important; 
+        height: 100% !important; 
+    }
+    
+    /* 3. Mapa: abajo IZQUIERDA (pequeño, alineado con telemetría) */
+    #map-container-slot { 
+        width: 90px !important; 
+        height: 90px !important; 
+        left: 8px !important; 
+        bottom: 8px !important; 
+        top: auto !important;
+        transform: scale(0.9) !important;
+        transform-origin: bottom left !important;
+    }
+    
+    /* 4. FILTROS: abajo CENTRO, entre mapa y telemetría */
+    #menu-left { 
+        top: auto !important; 
+        bottom: 12px !important; 
+        left: 50% !important; 
+        right: auto !important; 
+        transform: translateX(-50%) !important; 
+        flex-direction: row !important; 
+        gap: 6px !important;
+    }
+    #menu-left .menu-btn { 
+        width: 42px !important; 
+        height: 42px !important; 
+        font-size: 1rem !important; 
+    }
+    #menu-left .menu-label { display: none !important; }
+    
+    /* 5.  BOTÓN MEDIA: arriba de telemetría (esquina inferior derecha) */
+    #btn-media-toggle { 
+        display: flex !important; 
+        position: absolute !important;
+        bottom: 75px !important; /* 🔒 Arriba de telemetría */
+        right: 10px !important;  /* 🔒 Alineado a la derecha */
+        left: auto !important;
+        transform: none !important;
+        width: 38px !important;
+        height: 38px !important;
+        z-index: 90 !important;
+        opacity: 0.9 !important;
+    }
+    
+    /* 6. Controles de media (intro/banner/outro): se despliegan hacia arriba */
+    #local-media-controls { 
+        bottom: 120px !important; 
+        right: 10px !important; 
+        left: auto !important;
+        transform: none !important;
+        flex-direction: column-reverse !important; /* 🔒 Se despliegan hacia arriba */
+        gap: 6px !important;
+        opacity: 0; 
+        pointer-events: none; 
+        transition: all 0.3s !important;
+    }
+    #local-media-controls.media-visible { 
+        opacity: 1 !important; 
+        pointer-events: auto !important; 
+    }
+    .media-btn { 
+        width: 36px !important; 
+        height: 36px !important; 
+        font-size: 14px !important; 
+    }
+    
+    /* 7. Telemetría: abajo DERECHA (alineada con mapa) */
+    #telemetry-container { 
+        bottom: 8px !important; 
+        right: 8px !important; 
+        top: auto !important; 
+        left: auto !important; 
+        transform: scale(0.85) !important; 
+        transform-origin: bottom right !important;
+        opacity: 1 !important;
+    }
+    
+    /* 8. MENÚ DERECHO (herramientas): MITAD DE PANTALLA */
+    #menu-right { 
+        top: 50% !important;
+        right: 8px !important; 
+        bottom: auto !important; 
+        left: auto !important; 
+        transform: translateY(-50%) !important; 
+        flex-direction: column !important; 
+        gap: 8px !important;
+    }
+    #menu-right .menu-btn { 
+        width: 46px !important; 
+        height: 46px !important; 
+        font-size: 1.1rem !important; 
+    }
+    #menu-right .menu-label { display: none !important; }
+    
+    /* 9. ENGRANAJE: arriba derecha, AISLADO */
+    #top-right-group { 
+        top: 10px !important; 
+        right: 10px !important;
+    }
+    #settings-gear-icon { 
+        font-size: 1.4rem !important; 
+    }
+    
+    /* 10. Indicadores de estado */
+    #status-indicators { 
+        bottom: 105px !important; 
+        left: 10px !important; 
+        top: auto !important;
+    }
+    
+    /* 11. Toast notifications */
+    #toast-container { top: 60px !important; }
+    
+    /* 12. Tally border más delgado */
+    #tally-border.preview { 
+        border-width: 3px !important; 
+    }
+    #tally-border.online { 
+        border-width: 4px !important; 
+    }
+    
+    /* 13. 🔒 PANEL IA VISION: Escalar para que quepa en vertical */
+    #audio-canvas {
+        transform: scale(0.7) !important; /* 🔒 Reduce el panel de IA */
+        transform-origin: top left !important;
+    }
+}
+
+
         #progress-bar { height: 100%; width: 0%; background: var(--hud-primary); transition: width 0.3s; }
         
         #zoom-target-indicator { position: absolute; width: 60px; height: 60px; border: 2px solid #00ff00; border-radius: 50%; transform: translate(-50%, -50%) scale(0.5); opacity: 0; pointer-events: none; z-index: 80; transition: transform 0.3s, opacity 0.3s; }
@@ -212,12 +404,6 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     </style>
 </head>
 <body>
-
-    <div id="orientation-lock">
-        <i class="fas fa-mobile-alt text-4xl mb-4 rotate-90 text-red-500"></i>
-        <h2 class="text-xl font-bold font-orbitron tracking-widest text-red-500">GIRAR DISPOSITIVO</h2>
-    </div>
-
     <div id="main-view-area">
         <div id="zoom-container">
             <video id="shared-video-element" autoplay playsinline muted></video>
@@ -251,11 +437,17 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
             <div id="tts-warning" class="transition-opacity duration-500 text-yellow-500 font-mono text-xs bg-black/60 px-1.5 py-0.5 rounded border border-yellow-700 items-center gap-1" style="opacity: 0; display: none;">⚠️ <span class="text-[9px]">RED/TTS</span></div>
         </div>
         
-       <div id="local-media-controls">
-            <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO"><i class="fas fa-play"></i></button>
-            <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER"><i class="fas fa-film"></i></button>
-            <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO"><i class="fas fa-stop"></i></button>
-        </div>
+<!-- Botón Media agrupador (SOLO visible en vertical) -->
+<button id="btn-media-toggle" onclick="toggleMediaPanel()" class="media-btn" style="display:none;" title="MEDIA">
+    <i class="fas fa-photo-film"></i>
+</button>
+
+<div id="local-media-controls">
+    <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO"><i class="fas fa-play"></i></button>
+    <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER"><i class="fas fa-film"></i></button>
+    <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO"><i class="fas fa-stop"></i></button>
+</div>
+
 
 <div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
     <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
@@ -307,7 +499,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-    <p class="text-xs font-mono text-gray-500 mb-8">v7.2 (Agora Unificado)</p>
+    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal</p>
     
     <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
     <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">LISTO PARA INICIAR</div>
@@ -2091,8 +2283,11 @@ async function getElevenLabsAudio(text, voiceId) {
         
         if (window._uiRestoreTimeout) clearTimeout(window._uiRestoreTimeout);
 
-        if (mapSlot) mapSlot.classList.replace('map-visible', 'map-hidden');
-        if (telemetry) { telemetry.style.transition = 'opacity 0.5s'; telemetry.style.opacity = '0'; }
+        const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+if (!isPortrait) {
+    if (mapSlot) mapSlot.classList.replace('map-visible', 'map-hidden');
+    if (telemetry) { telemetry.style.transition = 'opacity 0.5s'; telemetry.style.opacity = '0'; }
+}
         if (linkStatus) { linkStatus.style.transition = 'opacity 0.5s'; linkStatus.style.opacity = '0'; }
         
         video.onloadedmetadata = () => {
@@ -2130,6 +2325,8 @@ async function getElevenLabsAudio(text, voiceId) {
         };
     }
 
+    
+
     function stopLocalMedia() { 
         const overlay = document.getElementById('local-media-overlay'), video = document.getElementById('local-video-player'); 
         overlay.classList.remove('active'); 
@@ -2150,6 +2347,60 @@ async function getElevenLabsAudio(text, voiceId) {
             if(linkStatus) linkStatus.style.opacity = '1';
         }, 2000);
     }
+
+let mediaPanelVisible = false;
+
+function toggleMediaPanel() {
+    const controls = document.getElementById('local-media-controls');
+    const btn = document.getElementById('btn-media-toggle');
+    mediaPanelVisible = !mediaPanelVisible;
+    
+    if (controls) {
+        controls.classList.toggle('media-visible', mediaPanelVisible);
+    }
+    
+    // Ocultar el botón Media cuando se despliega el panel
+    if (btn) {
+        btn.style.opacity = mediaPanelVisible ? '0' : '1';
+        btn.style.pointerEvents = mediaPanelVisible ? 'none' : 'auto';
+    }
+    
+    // Auto-ocultar después de 8 segundos
+    if (mediaPanelVisible) {
+        setTimeout(() => {
+            if (mediaPanelVisible) toggleMediaPanel();
+        }, 8000);
+    }
+}
+
+// === FIX: Mostrar botón Media solo en vertical ===
+function checkOrientation() {
+    const btn = document.getElementById('btn-media-toggle');
+    if (!btn) return;
+    
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+    btn.style.display = isPortrait ? 'flex' : 'none';
+}
+
+window.addEventListener('resize', checkOrientation);
+window.addEventListener('orientationchange', checkOrientation);
+window.addEventListener('load', checkOrientation);
+
+// === FIX: Redimensionar correctamente al rotar ===
+function handleOrientationChange() {
+    // Esperar a que el navegador termine de rotar
+    setTimeout(() => {
+        fixCanvasSize();
+        resize();
+        if (miniMapInstance) {
+            miniMapInstance.invalidateSize();
+        }
+        console.log('[ORIENTACIÓN] Ajustado a:', window.innerWidth, 'x', window.innerHeight);
+    }, 300);
+}
+
+window.addEventListener('resize', handleOrientationChange);
+window.addEventListener('orientationchange', handleOrientationChange);
 
     window.addEventListener('beforeunload', () => { 
         if (videoStream) videoStream.getTracks().forEach(track => track.stop()); 
@@ -3510,65 +3761,157 @@ function drawLidarEffect(c, width, height, currentFrame) {
          for(let i=0; i<h; i+=4) sCtx.rect(0, i, w, 1.5); sCtx.fill();
     }
 
-    function resize() { const w = 1920; const h = 1080; el.canvas.width = w; el.canvas.height = h; el.lidarCanvas.width = w; el.lidarCanvas.height = h; el.audioCanvas.width = w; el.audioCanvas.height = h; }
-    function fixCanvasSize() { const w = el.video.videoWidth || 1920, h = el.video.videoHeight || 1080; el.canvas.width = w; el.canvas.height = h; el.canvas.style.width = "100vw"; el.canvas.style.height = "100vh"; }
-    window.addEventListener("resize", fixCanvasSize);
-
-    function drawFallbackSilhouette() { audioLayerCtx.globalAlpha = 0.12; audioLayerCtx.fillStyle = "#00ffff"; audioLayerCtx.fillRect(0, 0, el.audioCanvas.width, el.audioCanvas.height); audioLayerCtx.globalAlpha = 1; }
-    function updateProgress(p, t) { document.getElementById('progress-bar').style.width = p + '%'; document.getElementById('progress-text').innerText = t; }
-
-    function drawBurnInHUD(ctx, width, height, scale) {
-        if(scale <= 0.01) return;
-        const HUD_TAMANO = 1.35, HUD_IZQUIERDA = 50, HUD_ARRIBA = 50;    
-        ctx.save(); 
-        
-        ctx.globalAlpha = Math.max(0, Math.min(1, scale)); 
-        
-        const adjustedScale = scale * HUD_TAMANO; 
-        ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA); 
-        ctx.scale(HUD_TAMANO, HUD_TAMANO); 
-        ctx.shadowColor = "black"; ctx.shadowBlur = 4;
-        if(logoImg.complete && logoImg.naturalWidth > 0) ctx.drawImage(logoImg, 0, 0, 80, 80); 
-        
-        ctx.fillStyle = "white"; ctx.font = "bold 16px 'Orbitron', sans-serif"; ctx.fillText("EXPLORACIONES OBR", 90, 30); 
-        
-        if (DOM_CACHE && DOM_CACHE.clock) {
-             ctx.fillStyle = "#ff3333"; ctx.font = "16px 'Share Tech Mono', monospace"; 
-             ctx.fillText(DOM_CACHE.clock.innerText, 90, 52); 
-        }
-        
-        ctx.restore(); 
-        if(state.isSLS) {
-            ctx.save(); 
-            ctx.globalAlpha = Math.max(0, Math.min(1, scale)); 
-            ctx.translate(width / 2, 80); 
-            ctx.scale(HUD_TAMANO * 1.3, HUD_TAMANO * 1.3);
-            const bx = -40, by = 0; ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, 80, 20); ctx.strokeStyle = "#d946ef"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, 80, 20);
-            ctx.fillStyle = "#d946ef"; ctx.font = "10px monospace"; ctx.textAlign = "center"; ctx.fillText("● SLS ACTIVO", 0, by + 13); 
-            ctx.restore();
-        }
-    }
-
-    function drawGlitchText(c, text, x, y, size = 12) { const glitchOffset = Math.random() * 4 - 2; c.font = `bold ${size}px 'Share Tech Mono'`; c.fillStyle = "rgba(255, 0, 0, 0.7)"; c.fillText(text, x + glitchOffset, y); c.fillStyle = "rgba(0, 255, 255, 0.7)"; c.fillText(text, x - glitchOffset, y); c.fillStyle = "#ffffff"; c.fillText(text, x, y); }
+    function resize() {
+    // Mantener siempre 1920x1080 para que las coordenadas del canvas no se rompan
+    const w = 1920;
+    const h = 1080;
     
-    function drawCanvasScanBoxes(c, w, h) {
-        const now = Date.now(); canvasScanBoxes = canvasScanBoxes.filter(box => now - box.startTime < 800);
-        canvasScanBoxes.forEach(box => {
-            const age = now - box.startTime, alpha = 1 - (age / 800), scale = 1.3 - (age / 800) * 0.5;
-            c.save(); c.translate(box.x + box.size/2, box.y + box.size/2); c.scale(scale, scale); c.translate(-(box.x + box.size/2), -(box.y + box.size/2));
-            c.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.9})`; c.lineWidth = 2; c.strokeRect(box.x, box.y, box.size, box.size);
-            c.shadowBlur = 10; c.shadowColor = `rgba(255, 0, 0, ${alpha * 0.6})`; c.strokeRect(box.x, box.y, box.size, box.size); c.restore();
-        });
-    }
+    el.canvas.width = w;
+    el.canvas.height = h;
+    el.lidarCanvas.width = w;
+    el.lidarCanvas.height = h;
+    el.audioCanvas.width = w;
+    el.audioCanvas.height = h;
+    
+    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+}
 
-    function drawAIBurnIn(c, w, h, scale) {
+function fixCanvasSize() {
+    // 🔒 Declaración explícita de vW y vH para evitar "is not defined"
+    const vW = el.video.videoWidth || 1920;
+    const vH = el.video.videoHeight || 1080;
+    
+    // 🔒 CRÍTICO: Redimensionar TODOS los canvas
+    el.canvas.width = vW;
+    el.canvas.height = vH;
+    el.lidarCanvas.width = vW;
+    el.lidarCanvas.height = vH;
+    el.audioCanvas.width = vW;
+    el.audioCanvas.height = vH;
+    
+    // Ajustar CSS para que llenen la pantalla
+    el.canvas.style.width = "100vw";
+    el.canvas.style.height = "100vh";
+    el.lidarCanvas.style.width = "100vw";
+    el.lidarCanvas.style.height = "100vh";
+    el.audioCanvas.style.width = "100vw";
+    el.audioCanvas.style.height = "100vh";
+    
+    // Forzar recálculo
+    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+}
+
+window.addEventListener("resize", fixCanvasSize);
+
+function drawFallbackSilhouette() { 
+    audioLayerCtx.globalAlpha = 0.12; 
+    audioLayerCtx.fillStyle = "#00ffff"; 
+    audioLayerCtx.fillRect(0, 0, el.audioCanvas.width, el.audioCanvas.height); 
+    audioLayerCtx.globalAlpha = 1; 
+}
+
+function updateProgress(p, t) { 
+    document.getElementById('progress-bar').style.width = p + '%'; 
+    document.getElementById('progress-text').innerText = t; 
+}
+
+function drawBurnInHUD(ctx, width, height, scale) {
     if(scale <= 0.01) return;
+    
+    // 🔒 DETECTAR ORIENTACIÓN
+    const isPortrait = window.innerHeight > window.innerWidth;
+    
+    // Ajustar tamaño según orientación
+    const HUD_TAMANO = isPortrait ? 2.2 : 1.35;
+    const HUD_IZQUIERDA = isPortrait ? 30 : 50;
+    const HUD_ARRIBA = isPortrait ? 30 : 50;
+    
+    ctx.save(); 
+    ctx.globalAlpha = Math.max(0, Math.min(1, scale)); 
+    ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA); 
+    ctx.scale(HUD_TAMANO, HUD_TAMANO); 
+    ctx.shadowColor = "black"; 
+    ctx.shadowBlur = 4;
+    
+    if(logoImg.complete && logoImg.naturalWidth > 0) {
+        ctx.drawImage(logoImg, 0, 0, 80, 80); 
+    }
+    
+    ctx.fillStyle = "white"; 
+    ctx.font = "bold 16px 'Orbitron', sans-serif"; 
+    ctx.fillText("EXPLORACIONES OBR", 90, 30); 
+    
+    if (DOM_CACHE && DOM_CACHE.clock) {
+        ctx.fillStyle = "#ff3333"; 
+        ctx.font = "16px 'Share Tech Mono', monospace"; 
+        ctx.fillText(DOM_CACHE.clock.innerText, 90, 52); 
+    }
+    
+    ctx.restore(); 
+    
+    // Indicador SLS ACTIVO (solo en horizontal para no saturar)
+    if(state.isSLS && !isPortrait) {
+        ctx.save(); 
+        ctx.globalAlpha = Math.max(0, Math.min(1, scale)); 
+        ctx.translate(width / 2, 80); 
+        ctx.scale(HUD_TAMANO * 1.3, HUD_TAMANO * 1.3);
+        const bx = -40, by = 0; 
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; 
+        ctx.fillRect(bx, by, 80, 20); 
+        ctx.strokeStyle = "#d946ef"; 
+        ctx.lineWidth = 1; 
+        ctx.strokeRect(bx, by, 80, 20);
+        ctx.fillStyle = "#d946ef"; 
+        ctx.font = "10px monospace"; 
+        ctx.textAlign = "center"; 
+        ctx.fillText("● SLS ACTIVO", 0, by + 13); 
+        ctx.restore();
+    }
+}
+
+function drawGlitchText(c, text, x, y, size = 12) { 
+    const glitchOffset = Math.random() * 4 - 2; 
+    c.font = `bold ${size}px 'Share Tech Mono'`; 
+    c.fillStyle = "rgba(255, 0, 0, 0.7)"; 
+    c.fillText(text, x + glitchOffset, y); 
+    c.fillStyle = "rgba(0, 255, 255, 0.7)"; 
+    c.fillText(text, x - glitchOffset, y); 
+    c.fillStyle = "#ffffff"; 
+    c.fillText(text, x, y); 
+}
+
+function drawCanvasScanBoxes(c, w, h) {
+    const now = Date.now(); 
+    canvasScanBoxes = canvasScanBoxes.filter(box => now - box.startTime < 800);
+    canvasScanBoxes.forEach(box => {
+        const age = now - box.startTime, alpha = 1 - (age / 800), scale = 1.3 - (age / 800) * 0.5;
+        c.save(); 
+        c.translate(box.x + box.size/2, box.y + box.size/2); 
+        c.scale(scale, scale); 
+        c.translate(-(box.x + box.size/2), -(box.y + box.size/2));
+        c.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.9})`; 
+        c.lineWidth = 2; 
+        c.strokeRect(box.x, box.y, box.size, box.size);
+        c.shadowBlur = 10; 
+        c.shadowColor = `rgba(255, 0, 0, ${alpha * 0.6})`; 
+        c.strokeRect(box.x, box.y, box.size, box.size); 
+        c.restore();
+    });
+}
+
+function drawAIBurnIn(c, w, h, scale) {
+    if(scale <= 0.01) return;
+    
+    // 🔒 DETECTAR ORIENTACIÓN
+    const isPortrait = window.innerHeight > window.innerWidth;
     
     c.save();
     const smoothScale = 1 - Math.pow(1 - scale, 3);
     c.globalAlpha = Math.max(0, Math.min(1, scale * 1.5));
     
-    const bx = 14, by = 14, panelW = 320;
+    // Posición y tamaño adaptativos
+    const bx = 14, by = 14;
+    const panelW = isPortrait ? 280 : 320;
     let displayTxt = currentAiText, isScanning = !(currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0);
     
     if (isScanning && !displayTxt) {
@@ -3581,15 +3924,14 @@ function drawLidarEffect(c, width, height, currentFrame) {
     
     let borderColor = isScanning ? "#ff0000" : "#ff3333";
     let bgColor = isScanning ? "rgba(0,0,0,0)" : "rgba(10, 0, 0, 0.90)";
-    let imgH = isScanning ? 150 : 240;
+    let imgH = isScanning ? (isPortrait ? 120 : 150) : (isPortrait ? 180 : 240);
     
-    // 🎨 MARCO DE COLOR SEGÚN PROVEEDOR
     if (!isScanning) {
         if (CURRENT_AI_PROVIDER === 'groq') {
-            borderColor = "#ff8c00"; // Naranja para Groq
+            borderColor = "#ff8c00";
             bgColor = "rgba(20, 10, 0, 0.90)";
         } else if (CURRENT_AI_PROVIDER === 'gemini') {
-            borderColor = "#00bfff"; // Azul para Gemini
+            borderColor = "#00bfff";
             bgColor = "rgba(0, 10, 20, 0.90)";
         }
     }
@@ -3611,7 +3953,8 @@ function drawLidarEffect(c, width, height, currentFrame) {
     if(imgH > 0) {
         if (isScanning) {
             c.save();
-            const radarRadiusBase = 50, radarCx = bx + radarRadiusBase + 10, radarCy = by + radarRadiusBase + 10;
+            const radarRadiusBase = isPortrait ? 40 : 50;
+            const radarCx = bx + radarRadiusBase + 10, radarCy = by + radarRadiusBase + 10;
             c.translate(radarCx, radarCy);
             c.strokeStyle = "rgba(0, 255, 100, 0.15)"; c.lineWidth = 1;
             for(let r=10; r<=radarRadiusBase; r+=10) { c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.stroke(); }
@@ -3787,11 +4130,29 @@ function drawLidarEffect(c, width, height, currentFrame) {
         
         if (vW && vH) {
             if (vW !== lastVW || vH !== lastVH || cW !== lastCW || cH !== lastCH) {
-                const vRatio = vW / vH, cRatio = cW / cH; let dW, dH, dX, dY;
-                if (cRatio > vRatio) { dW = cW; dH = cW / vRatio; dX = 0; dY = (cH - dH) / 2; } else { dW = cH * vRatio; dH = cH; dX = (cW - dW) / 2; dY = 0; }
-                window.drawCoords = { dW, dH, dX, dY, vW, vH };
-                lastVW = vW; lastVH = vH; lastCW = cW; lastCH = cH;
-            }
+    const vRatio = vW / vH, cRatio = cW / cH; 
+    let dW, dH, dX, dY;
+    
+    // 🔒 CRÍTICO: Calcular dimensiones correctas según orientación
+    if (cRatio > vRatio) {
+        // Canvas más ancho que el video (letterbox vertical)
+        dW = cW;
+        dH = cW / vRatio;
+        dX = 0;
+        dY = (cH - dH) / 2;
+    } else {
+        // Canvas más alto que el video (pillarbox horizontal)
+        dW = cH * vRatio;
+        dH = cH;
+        dX = (cW - dW) / 2;
+        dY = 0;
+    }
+    
+    window.drawCoords = { dW, dH, dX, dY, vW, vH };
+    lastVW = vW; lastVH = vH; lastCW = cW; lastCH = cH;
+    
+    console.log(`[CANVAS] Video: ${vW}x${vH}, Canvas: ${cW}x${cH}, Draw: ${dW.toFixed(0)}x${dH.toFixed(0)} @ (${dX.toFixed(0)},${dY.toFixed(0)})`);
+}
             
             if (state.isLidar) { 
                 audioLayerCtx.fillStyle = 'rgba(0,0,0,0.25)'; 
