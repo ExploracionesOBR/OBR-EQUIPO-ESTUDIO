@@ -122,8 +122,8 @@
         #zoom-target-indicator.active { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 
     #map-container-slot {
-    position: absolute; left: 30px; bottom: 15px; z-index: 85;
-    width: 150px; height: 150px;
+position: absolute; left: 30px; bottom: 15px; z-index: 85;
+width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     border: none; background: transparent;
     transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.5s ease-out;
     transform-origin: center center;
@@ -135,8 +135,16 @@
         #map-container-slot.map-hidden { transform: scale(0); opacity: 0; pointer-events: none; }
         #map-container-slot.map-visible { transform: scale(1); opacity: 1; pointer-events: auto; }
 
-        #mini-map { height: 100%; width: 100%; filter: brightness(85%) contrast(110%) saturate(95%); transform: scale(1.15); transform-origin: center; background: transparent; }
-        .map-pulse { width: 10px; height: 10px; background: red; border-radius: 50%; position: relative; }
+        #mini-map { height: 100%; width: 100%; filter: brightness(100%) contrast(100%) saturate(100%); transform: scale(1.0); transform-origin: center; background: transparent; }
+.map-pulse { 
+    width: 18px; /* 🔒 Más grande (era 10px) */
+    height: 18px; 
+    background: rgba(255, 0, 0, 0.8); 
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 50%; 
+    position: relative; 
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.6);
+}
         .map-pulse::after { content: ""; position: absolute; width: 100%; height: 100%; border-radius: 50%; background: red; animation: mapPulseAnim 1.5s infinite; opacity: 0.6; }
         @keyframes mapPulseAnim { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(3.5); opacity: 0; } }
 
@@ -257,7 +265,7 @@
             <div style="position: relative; width: 100%; height: 100%;">
                 <div id="map-loading" style="position: absolute; top: 45%; width: 100%; text-align: center; color: rgba(255,0,0,0.8); font-family: 'Share Tech Mono'; font-size: 12px; z-index: 5;">BUSCANDO SATÉLITES...</div>
                 <div id="mini-map"></div>
-                <div id="mini-map-tint" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; background: rgba(0, 15, 35, 0.45); mix-blend-mode: multiply;"></div>
+                <div id="mini-map-tint" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; background: rgba(0, 15, 35, 0.15); mix-blend-mode: normal;"></div>
                 <div id="mini-map-overlay"></div>
                 <div id="mini-map-glitch"></div>
             </div>
@@ -2332,103 +2340,185 @@ setInterval(() => {
     let mapPath = [];
     window._currentGPS = null;
 
-    function initMiniMap() {
-        let glitchEl = document.getElementById("mini-map-glitch");
-        let loadingEl = document.getElementById("map-loading");
-
-        if (typeof L === 'undefined') {
-            console.warn("Leaflet no cargó a tiempo para el mini mapa.");
-            if (loadingEl) loadingEl.innerText = "ERROR LIBRERÍA";
-            return;
-        }
-
-        if (!("geolocation" in navigator)) {
-            if (loadingEl) loadingEl.innerText = "GPS NO SOPORTADO";
-            return;
-        }
-
-        let pulseIcon = L.divIcon({
-            html: '<div class="map-pulse"></div>',
-            iconSize: [10, 10], 
-            className: ''
-        });
-
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                startMapWatcher(pulseIcon, glitchEl, loadingEl);
-            },
-            (err) => {
-                console.warn("Error inicial GPS:", err);
-                if (loadingEl) loadingEl.innerText = "GPS DENEGADO (Requiere HTTPS o desbloqueo en navegador)";
-                showToast("GPS DENEGADO: REVISA EL CANDADO O USA HTTPS", true);
-            },
-            { enableHighAccuracy: true }
-        );
+    
+function initMiniMap() {
+    let glitchEl = document.getElementById("mini-map-glitch");
+    let loadingEl = document.getElementById("map-loading");
+    
+    if (typeof L === 'undefined') {
+        console.warn("Leaflet no cargó a tiempo para el mini mapa.");
+        if (loadingEl) loadingEl.innerText = "ERROR LIBRERÍA";
+        return;
     }
-
-    function startMapWatcher(pulseIcon, glitchEl, loadingEl) {
-        navigator.geolocation.watchPosition((pos) => {
-            let lat = pos.coords.latitude;
-            let lon = pos.coords.longitude;
-            let point = [lat, lon];
-            window._currentGPS = { lat, lon };
-
-            if (!miniMapInstance) {
-                if (loadingEl) loadingEl.style.display = 'none';
-
-                miniMapInstance = L.map('mini-map', {
-                    zoomControl: false,
-                    dragging: false,
-                    scrollWheelZoom: false,
-                    doubleClickZoom: false,
-                    touchZoom: false,
-                    attributionControl: false 
-                }).setView(point, 19);
-
-                L.tileLayer(
-                    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                    { maxZoom: 19 }
-                ).addTo(miniMapInstance);
-
-                mapMarker = L.marker(point, { icon: pulseIcon }).addTo(miniMapInstance);
-
-                mapPolyline = L.polyline([], {
-                    color: '#00ffff', 
-                    weight: 4,
-                    opacity: 0.3      
-                }).addTo(miniMapInstance);
-                
-                setTimeout(() => { miniMapInstance.invalidateSize(); }, 500);
+    
+    if (!("geolocation" in navigator)) {
+        if (loadingEl) loadingEl.innerText = "GPS NO SOPORTADO";
+        return;
+    }
+    
+    // Crear ícono personalizado con emojis animados
+    const createGhostIcon = () => {
+        const emojis = ['🫨', '👻', '😬', '🤫'];
+        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+        
+        return L.divIcon({
+            html: `<div class="ghost-marker" style="
+                font-size: 18px;
+                animation: ghostPulse 2s ease-in-out infinite;
+                text-shadow: 0 0 6px rgba(255,0,0,0.5), 0 0 12px rgba(255,0,0,0.3);
+                filter: drop-shadow(0 0 5px rgba(255,100,100,0.5));
+            ">${randomEmoji}</div>`,
+            iconSize: [24, 24],
+            className: '',
+            iconAnchor: [12, 12]
+        });
+    };
+    
+    // Agregar animación CSS dinámica
+    if (!document.getElementById('ghost-animation-style')) {
+        const style = document.createElement('style');
+        style.id = 'ghost-animation-style';
+        style.innerHTML = `
+            @keyframes ghostPulse {
+                0%, 100% { transform: scale(1); opacity: 1; }
+                25% { transform: scale(1.3); opacity: 0.9; }
+                50% { transform: scale(1); opacity: 1; }
+                75% { transform: scale(1.4); opacity: 0.8; }
             }
+            @keyframes ghostExplode {
+                0% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(2.5); opacity: 0.5; }
+                100% { transform: scale(3); opacity: 0; }
+            }
+            .ghost-exploding {
+                animation: ghostExplode 0.8s ease-out forwards !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            startMapWatcher(createGhostIcon, glitchEl, loadingEl);
+        },
+        (err) => {
+            console.warn("Error inicial GPS:", err);
+            if (loadingEl) loadingEl.innerText = "GPS DENEGADO (Requiere HTTPS)";
+            showToast("GPS DENEGADO: REVISA EL CANDADO O USA HTTPS", true);
+        },
+        { enableHighAccuracy: true }
+    );
+}
 
-            miniMapInstance.setView(point, 19);
+function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
+    // 🔒 CRÍTICO: Cambiar emoji cada 2 minutos aunque el usuario no se mueva
+    if (!window._emojiChangeInterval) {
+        window._emojiChangeInterval = setInterval(() => {
+            if (mapMarker && !mapMarker._isExploding) {
+                mapMarker.setIcon(createGhostIcon());
+                console.log('[MAPA] Emoji cambiado por tiempo (2 min)');
+            }
+        }, 120000); // 2 minutos = 120000 ms
+    }
+    
+    navigator.geolocation.watchPosition((pos) => {
+        let lat = pos.coords.latitude;
+        let lon = pos.coords.longitude;
+        let point = [lat, lon];
+        window._currentGPS = { lat, lon };
+        
+        if (!miniMapInstance) {
+            if (loadingEl) loadingEl.style.display = 'none';
+            
+            // 🔒 ZOOM OUT: Cambiado de 19 a 14 (vista más amplia tipo atlas)
+            miniMapInstance = L.map('mini-map', {
+                zoomControl: false,
+                dragging: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                touchZoom: false,
+                attributionControl: false
+            }).setView(point, 14);
+            
+            // 🔒 MAPA TIPO RELIEF/ATLAS (OpenStreetMap estándar - más claro)
+            L.tileLayer(
+                'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                { 
+                    maxZoom: 18,
+                    attribution: '© OpenStreetMap'
+                }
+            ).addTo(miniMapInstance);
+            
+            // 🔒 MARKER CON EMOJI (usando la función global)
+            mapMarker = L.marker(point, { icon: createGhostIcon() }).addTo(miniMapInstance);
+            
+            // Línea de recorrido más visible
+            mapPolyline = L.polyline([], {
+                color: '#00ffff',
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '10, 10'
+            }).addTo(miniMapInstance);
+            
+            setTimeout(() => { miniMapInstance.invalidateSize(); }, 500);
+        }
+        
+        // 🔒 MANTENER ZOOM 14 (vista amplia)
+        miniMapInstance.setView(point, 14);
+        
+        // Actualizar marker con animación de explosión
+        if (mapMarker) {
+            const oldLatLng = mapMarker.getLatLng();
+            const distance = oldLatLng.distanceTo(point);
+            
+            // Si se movió más de 5 metros, hacer explosión y cambiar emoji
+            if (distance > 5) {
+                const markerElement = document.querySelector('.ghost-marker');
+                if (markerElement) {
+                    markerElement.classList.add('ghost-exploding');
+                    mapMarker._isExploding = true;
+                    setTimeout(() => {
+                        mapMarker.setIcon(createGhostIcon());
+                        mapMarker._isExploding = false;
+                        const newElement = document.querySelector('.ghost-marker');
+                        if (newElement) newElement.classList.remove('ghost-exploding');
+                    }, 800);
+                }
+            }
+            
             mapMarker.setLatLng(point);
+        } else {
+            mapMarker = L.marker(point, { icon: createGhostIcon() }).addTo(miniMapInstance);
+        }
+        
+        // Actualizar polyline
+        mapPath.push(point);
+        mapPolyline.setLatLngs(mapPath);
+        if (mapPath.length > 60) mapPath.shift();
+        
+        // Efecto glitch
+        if (glitchEl) {
+            let pixel = miniMapInstance.latLngToContainerPoint(point);
+            glitchEl.style.setProperty('--map-x', pixel.x + 'px');
+            glitchEl.style.setProperty('--map-y', pixel.y + 'px');
+        }
+    }, (err) => {
+        console.warn("Error Geolocation Mini Mapa:", err);
+    }, {
+        enableHighAccuracy: true
+    });
+    
+    // Glitch aleatorio
+    setInterval(() => {
+        if (glitchEl && Math.random() < 0.12) {
+            glitchEl.classList.add("hard");
+            setTimeout(() => {
+                glitchEl.classList.remove("hard");
+            }, 150 + Math.random() * 200);
+        }
+    }, 2500);
+}
 
-            mapPath.push(point);
-            mapPolyline.setLatLngs(mapPath);
-            if (mapPath.length > 60) mapPath.shift();
-
-            if (glitchEl) {
-                let pixel = miniMapInstance.latLngToContainerPoint(point);
-                glitchEl.style.setProperty('--map-x', pixel.x + 'px');
-                glitchEl.style.setProperty('--map-y', pixel.y + 'px');
-            }
-
-        }, (err) => {
-            console.warn("Error Geolocation Mini Mapa:", err);
-        }, {
-            enableHighAccuracy: true
-        });
-
-        setInterval(() => {
-            if (glitchEl && Math.random() < 0.12) {
-                glitchEl.classList.add("hard");
-                setTimeout(() => {
-                    glitchEl.classList.remove("hard");
-                }, 150 + Math.random() * 200);
-            }
-        }, 2500);
-    }
 
     async function initApp() {
     unlockAudioContext(); 
@@ -3796,7 +3886,6 @@ function updateSettingsIndicator() {
 
 function telemetryLoop() {
     if (!DOM_CACHE) initDOMCache();
-    
     const now = performance.now();
     const elapsed = now - lastTime;
     if (elapsed >= 1000) {
@@ -3804,7 +3893,6 @@ function telemetryLoop() {
         frameCount = 0;
         lastTime = now;
     }
-    
     updateClock();
     if (currentFps < 15) performanceLagging = true;
     else if (currentFps >= 25) performanceLagging = false;
@@ -3884,6 +3972,7 @@ function telemetryLoop() {
     const telemetryContainer = document.getElementById('telemetry-container');
     if (telemetryContainer) {
         telemetryContainer.style.transition = 'opacity 1s ease-in-out';
+        telemetryContainer.style.opacity = '0.8'; // 🔒 FORZAR VISIBILIDAD
     }
 }
 
