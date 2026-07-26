@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>CAMARA OBR PRO v7.2 (AGORA UNIFICADO)</title>
     
-    <link rel="icon" type="image/png" href="obr-logo.png">
-    <link rel="apple-touch-icon" href="obr-logo.png">
-    <meta name="theme-color" content="#000000">
-    <link rel="manifest" href="data:application/manifest+json,{}">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    
+<!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
+<link rel="icon" type="image/png" href="obr-logo.png?v=1">
+<link rel="apple-touch-icon" href="obr-logo.png?v=1">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OBR CAM">
+<!-- El manifest se genera dinámicamente con JS (ver abajo) -->    
     <script src="https://cdn.tailwindcss.com"></script>
        <!-- Librerías de IA desde CDN (sin fallbacks problemáticos) -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
@@ -530,6 +531,45 @@
     </div>
 
 <script>
+
+// ==========================================================
+// MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
+// ==========================================================
+const ASSET_VERSION = '1'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+
+(function generateDynamicManifest() {
+    const manifest = {
+        name: 'OBR CAM PRO',
+        short_name: 'OBR CAM',
+        description: 'Cámara de Exploraciones OBR - Modo Paranormal',
+        start_url: './?v=' + ASSET_VERSION,
+        scope: './',
+        display: 'fullscreen', // 🔒 Pantalla completa (sin barra de estado)
+        orientation: 'landscape',
+        background_color: '#000000',
+        theme_color: '#000000',
+        icons: [
+            {
+                src: 'obr-logo.png?v=' + ASSET_VERSION,
+                sizes: 'any',
+                type: 'image/png',
+                purpose: 'any maskable'
+            }
+        ]
+    };
+    
+    const blob = new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'});
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = url;
+    document.head.appendChild(link);
+})();
+
+
+
+
 // ==========================================================
 // CONFIGURACIÓN EXTERNA Y CLAVES POR DEFECTO
 // ==========================================================
@@ -733,86 +773,202 @@ function setTTSMode(mode) {
     window.openChatView = openChatView;
     window.closeChatView = closeChatView;
 
-        if ('serviceWorker' in navigator) {
+ if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE_NAME = 'obr-cam-v9-offline-robust';
-    const URLS = [
-      './',
-      'obr-logo.png',
-      'https://cdn.tailwindcss.com',
-      'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-      'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
-      'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0',
-      'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3',
-      'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
-      'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
-      'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
-      'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
-      'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
-      'https://cdn.agora.io/sdk/release/AgoraRTM.js',
-      'https://unpkg.com/leaflet/dist/leaflet.js',
-      'https://unpkg.com/leaflet/dist/leaflet.css',
-      './barrido.mp3',
-      './respuesta.mp3',
-      './INTRO_1.mp4',
-      './FIN_DIRECTO.mp4',
-      './BANNER_1.mp4'
-    ];
+const CACHE_NAME = 'obr-cam-v' + (typeof ASSET_VERSION !== 'undefined' ? ASSET_VERSION : '10') + '-offline-robust';
+const VERSION = CACHE_NAME; // Para logging
 
-    self.addEventListener('install', e => {
-      e.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-          return cache.addAll(URLS).catch(err => console.warn('SW: Error precacheando', err));
-        }).then(() => self.skipWaiting())
-      );
-    });
+const URLS = [
+  './',
+  'obr-logo.png?v=' + (typeof ASSET_VERSION !== 'undefined' ? ASSET_VERSION : '1'),
+  'https://cdn.tailwindcss.com',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
+  'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0',
+  'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
+  'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
+  'https://cdn.agora.io/sdk/release/AgoraRTM.js',
+  'https://unpkg.com/leaflet/dist/leaflet.js',
+  'https://unpkg.com/leaflet/dist/leaflet.css',
+  './barrido.mp3',
+  './respuesta.mp3',
+  './INTRO_1.mp4',
+  './FIN_DIRECTO.mp4',
+  './BANNER_1.mp4'
+];
 
-    self.addEventListener('activate', e => {
-      e.waitUntil(
-        caches.keys().then(keys => {
-          return Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
-        }).then(() => self.clients.claim())
-      );
-    });
+console.log('[SW] Versión:', VERSION);
 
-    self.addEventListener('fetch', e => {
-      if (e.request.method !== 'GET') return;
-      
-      const url = e.request.url;
-      const allowedCDNs = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net', 'unpkg.com', 'cdn.agora.io', 'tfhub.dev'];
-      const isLocal = url.startsWith(self.location.origin);
-      const isCDN = allowedCDNs.some(cdn => url.includes(cdn));
-      
-      if (!isLocal && !isCDN) return; // Ignorar llamadas a APIs externas (Gemini/Groq) para no cachear errores
+// INSTALACIÓN: Precachear todos los recursos
+self.addEventListener('install', e => {
+  console.log('[SW] Instalando...', VERSION);
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('[SW] Precacheando recursos...');
+      return cache.addAll(URLS).then(() => {
+        console.log('[SW] Precaché completado:', URLS.length, 'recursos');
+      }).catch(err => {
+        console.warn('[SW] Error precacheando algunos recursos:', err);
+        // No fallamos la instalación si algunos recursos fallan
+      });
+    }).then(() => {
+      console.log('[SW] Saltando a waiting...');
+      self.skipWaiting();
+    })
+  );
+});
 
-      e.respondWith(
-        caches.match(e.request).then(cached => {
-          if (cached) return cached; // 1. Devolver de caché inmediatamente (Offline first)
-          
-          // 2. Si no está, ir a red y guardar para la próxima
-          return fetch(e.request).then(netResp => {
-            if (netResp && netResp.status === 200) {
-              const clone = netResp.clone();
-              caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-            }
-            return netResp;
-          }).catch(() => {
-            // 3. Si falla la red y es la navegación principal, devolver el HTML cacheado
-            if (e.request.mode === 'navigate' || e.request.url.endsWith('/')) {
-              return caches.match('./');
-            }
-            return new Response('Offline', {status: 503});
-          });
+// ACTIVACIÓN: Limpiar cachés viejas
+self.addEventListener('activate', e => {
+  console.log('[SW] Activando...', VERSION);
+  e.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys.filter(k => k !== CACHE_NAME).map(k => {
+          console.log('[SW] Eliminando caché vieja:', k);
+          return caches.delete(k);
         })
       );
-    });
+    }).then(() => {
+      console.log('[SW] Tomando control de clientes...');
+      return self.clients.claim();
+    })
+  );
+});
+
+// MENSAJES: Forzar actualización
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') {
+    console.log('[SW] Recibido SKIP_WAITING, actualizando...');
+    self.skipWaiting();
+  }
+});
+
+// FETCH: Estrategia Cache First, luego Network
+self.addEventListener('fetch', e => {
+  // Ignorar métodos que no sean GET
+  if (e.request.method !== 'GET') return;
+  
+  const url = e.request.url;
+  
+  // Lista de CDNs permitidos
+  const allowedCDNs = [
+    'cdn.tailwindcss.com',
+    'cdnjs.cloudflare.com',
+    'fonts.googleapis.com',
+    'fonts.gstatic.com',
+    'cdn.jsdelivr.net',
+    'unpkg.com',
+    'cdn.agora.io',
+    'tfhub.dev'
+  ];
+  
+  const isLocal = url.startsWith(self.location.origin);
+  const isCDN = allowedCDNs.some(cdn => url.includes(cdn));
+  
+  // Ignorar APIs externas (Gemini/Groq/ElevenLabs/VoiceRSS) para no cachear errores
+  if (!isLocal && !isCDN) {
+    // console.log('[SW] Ignorando API externa:', url);
+    return;
+  }
+  
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      // 1. Si está en caché, devolver inmediatamente (OFFLINE FIRST)
+      if (cached) {
+        // console.log('[SW] Sirviendo desde caché:', url);
+        
+        // Actualizar en segundo plano (stale-while-revalidate)
+        fetch(e.request).then(netResp => {
+          if (netResp && netResp.status === 200) {
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(e.request, netResp.clone());
+            });
+          }
+        }).catch(() => {
+          // Silenciar errores de red en segundo plano
+        });
+        
+        return cached;
+      }
+      
+      // 2. Si no está en caché, ir a red
+      return fetch(e.request).then(netResp => {
+        // Si la respuesta es válida, guardar en caché
+        if (netResp && netResp.status === 200) {
+          const clone = netResp.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(e.request, clone);
+          });
+        }
+        return netResp;
+      }).catch(err => {
+        console.warn('[SW] Fetch falló:', url, err);
+        
+        // 3. Si falla la red y es navegación, devolver HTML cacheado
+        if (e.request.mode === 'navigate' || e.request.url.endsWith('/')) {
+          return caches.match('./').then(html => {
+            if (html) return html;
+            return new Response('Offline - No hay HTML cacheado', {
+              status: 503,
+              headers: {'Content-Type': 'text/html'}
+            });
+          });
+        }
+        
+        // 4. Para otros recursos, devolver error Offline
+        return new Response('Offline', {
+          status: 503,
+          statusText: 'Service Worker Offline',
+          headers: {'Content-Type': 'text/plain'}
+        });
+      });
+    })
+  );
+});
   `;
+  
   try {
     const blob = new Blob([swCode], {type:'application/javascript'});
     const url = URL.createObjectURL(blob);
-    navigator.serviceWorker.register(url, {scope:'/'}).catch(err => console.warn('SW register error', err));
+    
+    navigator.serviceWorker.register(url, {scope:'/'}).then(registration => {
+      console.log('[APP] SW registrado:', registration.scope);
+      
+      // Forzar actualización si hay un SW esperando
+      if (registration.waiting) {
+        console.log('[APP] Hay SW waiting, activando...');
+        registration.waiting.postMessage({type: 'SKIP_WAITING'});
+      }
+      
+      // Escuchar actualizaciones
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        console.log('[APP] Nueva versión del SW encontrada');
+        
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('[APP] Nueva versión lista. Recargando...');
+            if (confirm('Nueva versión disponible. ¿Recargar?')) {
+              if (newWorker.waiting) {
+                newWorker.waiting.postMessage({type: 'SKIP_WAITING'});
+              }
+              window.location.reload();
+            }
+          }
+        });
+      });
+      
+    }).catch(err => {
+      console.warn('[APP] Error registrando SW:', err);
+    });
+    
   } catch(e) {
-    console.warn('SW blob error', e);
+    console.warn('[APP] Error creando blob del SW:', e);
   }
 }
 
