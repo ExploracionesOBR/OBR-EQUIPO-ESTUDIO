@@ -243,7 +243,8 @@
     }
     #menu-left .menu-label { display: none !important; }
     
-    /* 6. Botón Media: Arriba de telemetría - FUNCIONAL */
+    
+/* 6. Botón Media: Más visible, sin efecto rojo */
 #btn-media-toggle {
     position: absolute !important;
     display: flex !important;
@@ -252,43 +253,93 @@
     width: 38px !important;
     height: 38px !important;
     z-index: 90 !important;
-    opacity: 0.9 !important;
-    pointer-events: auto !important; /* 🔒 CRÍTICO: Permite clickear */
-    cursor: pointer !important;
-    background: rgba(0,0,0,0.88) !important;
+    opacity: 0.6 !important; /* 🔒 Aumentado de 0.25 a 0.6 */
+    background: rgba(255,255,255,0.15) !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    color: rgba(255,255,255,0.7) !important;
+    border-radius: 50% !important;
+    transition: all 0.3s ease !important;
+    pointer-events: auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+#btn-media-toggle:active {
+    transform: scale(0.92) !important;
+    /*  ELIMINADO: fondo rojo al presionar */
+}
+
+/* 🔒 Animación de rotación cuando está activo */
+#btn-media-toggle.media-active {
+    opacity: 0.8 !important;
+    background: rgba(255,51,51,0.3) !important;
+    border-color: rgba(255,51,51,0.6) !important;
+    color: white !important;
+    transform: rotate(180deg) scale(1.1) !important;
+}
+
+/* 7. Controles de Media: Apilados CORRECTAMENTE sobre el botón */
+#local-media-controls {
+    position: absolute !important;
+    bottom: 75px !important; /* 🔒 MISMA posición que el botón Media */
+    right: 10px !important;  /* 🔒 MISMA posición que el botón Media */
+    width: 38px !important;
+    height: 38px !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease !important;
+    z-index: 91 !important;
+}
+#local-media-controls.media-visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+/* 🔒 Cada botón se posiciona ABSOLUTO dentro del contenedor */
+#local-media-controls .media-btn {
+    position: absolute !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 14px !important;
+    background: rgba(0,0,0,0.85) !important;
     border: 2px solid var(--hud-primary) !important;
     border-radius: 50% !important;
     color: var(--hud-primary) !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 14px !important;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+    opacity: 0;
+    transform: scale(0.5) rotate(-90deg) !important;
 }
-#btn-media-toggle:active {
-    transform: scale(0.88) !important;
-    background: rgba(255,51,51,0.25) !important;
+/* 🔒 Botón INTRO - base (se transforma del botón Media) */
+#local-media-controls.media-visible .media-btn:nth-child(1) {
+    opacity: 1 !important;
+    transform: scale(1) rotate(0deg) !important;
+    z-index: 3 !important;
 }
-    
-    /* 7. Controles de Media */
-    #local-media-controls {
-        position: absolute !important;
-        bottom: 120px !important;
-        right: 10px !important;
-        flex-direction: column-reverse !important;
-        gap: 6px !important;
-        opacity: 0;
-        pointer-events: none;
-        transition: all 0.3s !important;
-        z-index: 100 !important;
-    }
-    #local-media-controls.media-visible {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-    }
-    .media-btn {
-        width: 36px !important;
-        height: 36px !important;
-        font-size: 14px !important;
-    }
+/* 🔒 Botón BANNER - apilado con ligera rotación */
+#local-media-controls.media-visible .media-btn:nth-child(2) {
+    opacity: 0.85 !important;
+    transform: scale(0.92) rotate(12deg) translate(-2px, -2px) !important;
+    z-index: 2 !important;
+}
+/* 🔒 Botón OUTRO - apilado con más rotación */
+#local-media-controls.media-visible .media-btn:nth-child(3) {
+    opacity: 0.7 !important;
+    transform: scale(0.85) rotate(24deg) translate(-4px, -4px) !important;
+    z-index: 1 !important;
+}
+/* 🔒 Al hacer hover, se separan un poco */
+#local-media-controls.media-visible:hover .media-btn:nth-child(1) {
+    transform: scale(1) rotate(0deg) translate(0, 0) !important;
+    opacity: 1 !important;
+}
+#local-media-controls.media-visible:hover .media-btn:nth-child(2) {
+    transform: scale(0.92) rotate(12deg) translate(-8px, -8px) !important;
+    opacity: 1 !important;
+}
+#local-media-controls.media-visible:hover .media-btn:nth-child(3) {
+    transform: scale(0.85) rotate(24deg) translate(-16px, -16px) !important;
+    opacity: 1 !important;
+}
     
     /* 8. Telemetría: Esquina inferior derecha */
     #telemetry-container {
@@ -483,9 +534,15 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 </button>
 
 <div id="local-media-controls">
-    <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO"><i class="fas fa-play"></i></button>
-    <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER"><i class="fas fa-film"></i></button>
-    <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO"><i class="fas fa-stop"></i></button>
+    <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO">
+        <i class="fas fa-play"></i>
+    </button>
+    <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER">
+        <i class="fas fa-film"></i>
+    </button>
+    <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO">
+        <i class="fas fa-stop"></i>
+    </button>
 </div>
 
 
@@ -775,7 +832,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '2'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '3'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -2389,6 +2446,7 @@ if (!isPortrait) {
     }
 
 let mediaPanelVisible = false;
+let mediaAutoHideTimer = null;
 
 function toggleMediaPanel() {
     const controls = document.getElementById('local-media-controls');
@@ -2399,17 +2457,18 @@ function toggleMediaPanel() {
         controls.classList.toggle('media-visible', mediaPanelVisible);
     }
     
-    // Ocultar el botón Media cuando se despliega el panel
+    // 🔒 Ocultar el botón Media cuando se despliega el panel
     if (btn) {
-        btn.style.opacity = mediaPanelVisible ? '0' : '1';
+        btn.style.opacity = mediaPanelVisible ? '0' : '0.6';
         btn.style.pointerEvents = mediaPanelVisible ? 'none' : 'auto';
     }
     
-    // Auto-ocultar después de 8 segundos
+    // Auto-ocultar después de 6 segundos
     if (mediaPanelVisible) {
-        setTimeout(() => {
+        clearTimeout(mediaAutoHideTimer);
+        mediaAutoHideTimer = setTimeout(() => {
             if (mediaPanelVisible) toggleMediaPanel();
-        }, 8000);
+        }, 6000);
     }
 }
 
