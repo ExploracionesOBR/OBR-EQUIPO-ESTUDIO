@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <title>CAMARA OBR PRO v7.2 (AGORA UNIFICADO)</title>
     
 <!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
@@ -144,33 +144,54 @@
 
 
 /* === DISEÑO VERTICAL ADAPTATIVO === */
-@media (orientation: portrait) {
+@media (orientation: portrait), .portrait-mode {
     /* 1. HUD más grande y legible */
     #hud-layer { 
-        transform: scale(0.8); /* 🔒 Aumentado de 0.65 a 0.8 */
-        transform-origin: top left; 
+        transform: scale(0.8) !important;
+        transform-origin: top left !important; 
     }
     #hud-logo { 
         width: 50px !important; 
         height: 50px !important; 
     }
     #hud-title { 
-        font-size: 14px !important; /* 🔒 Aumentado de 10px a 14px */
+        font-size: 14px !important;
         font-weight: 900 !important;
     }
     #hud-time { 
-        font-size: 16px !important; /* 🔒 Aumentado de 12px a 16px */
+        font-size: 16px !important;
         font-weight: bold !important;
     }
     
     /* 2. Video sin estirarse - mantener proporción */
-    #shared-video-element, #sls-canvas, #audio-canvas { 
+    #shared-video-element { 
         width: 100% !important; 
         height: 100% !important; 
         object-fit: cover !important; 
     }
+    
+    /* 🔒 CRÍTICO: SLS y LIDAR - Escalar para llenar pantalla vertical */
+    #sls-canvas, #lidar-canvas { 
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        object-fit: cover !important;
+        transform: scale(1.78) !important; /* 🔒 1920/1080 ≈ 1.78 */
+        transform-origin: center center !important;
+    }
+    
+    #audio-canvas { 
+        width: 100% !important; 
+        height: 100% !important; 
+        object-fit: cover !important; 
+        transform: scale(0.7) !important;
+        transform-origin: top left !important;
+    }
+    
     #main-view-area { 
-        position: absolute !important; 
+        position: fixed !important; 
         inset: 0 !important; 
         overflow: hidden !important; 
     }
@@ -181,7 +202,7 @@
         height: 100% !important; 
     }
     
-    /* 3. Mapa: abajo IZQUIERDA (pequeño, alineado con telemetría) */
+    /* 3. Mapa: abajo IZQUIERDA */
     #map-container-slot { 
         width: 90px !important; 
         height: 90px !important; 
@@ -192,7 +213,7 @@
         transform-origin: bottom left !important;
     }
     
-    /* 4. FILTROS: abajo CENTRO, entre mapa y telemetría */
+    /* 4. FILTROS: abajo CENTRO */
     #menu-left { 
         top: auto !important; 
         bottom: 12px !important; 
@@ -209,12 +230,12 @@
     }
     #menu-left .menu-label { display: none !important; }
     
-    /* 5.  BOTÓN MEDIA: arriba de telemetría (esquina inferior derecha) */
+    /* 5. BOTÓN MEDIA: arriba de telemetría */
     #btn-media-toggle { 
         display: flex !important; 
         position: absolute !important;
-        bottom: 75px !important; /* 🔒 Arriba de telemetría */
-        right: 10px !important;  /* 🔒 Alineado a la derecha */
+        bottom: 75px !important;
+        right: 10px !important;
         left: auto !important;
         transform: none !important;
         width: 38px !important;
@@ -223,13 +244,13 @@
         opacity: 0.9 !important;
     }
     
-    /* 6. Controles de media (intro/banner/outro): se despliegan hacia arriba */
+    /* 6. Controles de media */
     #local-media-controls { 
         bottom: 120px !important; 
         right: 10px !important; 
         left: auto !important;
         transform: none !important;
-        flex-direction: column-reverse !important; /* 🔒 Se despliegan hacia arriba */
+        flex-direction: column-reverse !important;
         gap: 6px !important;
         opacity: 0; 
         pointer-events: none; 
@@ -245,7 +266,7 @@
         font-size: 14px !important; 
     }
     
-    /* 7. Telemetría: abajo DERECHA (alineada con mapa) */
+    /* 7. Telemetría: abajo DERECHA */
     #telemetry-container { 
         bottom: 8px !important; 
         right: 8px !important; 
@@ -256,7 +277,7 @@
         opacity: 1 !important;
     }
     
-    /* 8. MENÚ DERECHO (herramientas): MITAD DE PANTALLA */
+    /* 8. MENÚ DERECHO: MITAD DE PANTALLA */
     #menu-right { 
         top: 50% !important;
         right: 8px !important; 
@@ -273,7 +294,7 @@
     }
     #menu-right .menu-label { display: none !important; }
     
-    /* 9. ENGRANAJE: arriba derecha, AISLADO */
+    /* 9. ENGRANAJE: arriba derecha */
     #top-right-group { 
         top: 10px !important; 
         right: 10px !important;
@@ -292,19 +313,9 @@
     /* 11. Toast notifications */
     #toast-container { top: 60px !important; }
     
-    /* 12. Tally border más delgado */
-    #tally-border.preview { 
-        border-width: 3px !important; 
-    }
-    #tally-border.online { 
-        border-width: 4px !important; 
-    }
-    
-    /* 13. 🔒 PANEL IA VISION: Escalar para que quepa en vertical */
-    #audio-canvas {
-        transform: scale(0.7) !important; /* 🔒 Reduce el panel de IA */
-        transform-origin: top left !important;
-    }
+    /* 12. Tally border */
+    #tally-border.preview { border-width: 3px !important; }
+    #tally-border.online { border-width: 4px !important; }
 }
 
 
@@ -735,7 +746,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '2'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '3'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -5499,6 +5510,33 @@ async function refreshTTSCredits() {
     window.startRemoteMic = startRemoteMicAgora;
     window.stopRemoteMic = stopRemoteMicAgora;
     window.toggleLocalMic = toggleLocalMic;
+
+
+// 🔒 CRÍTICO: Detectar orientación real y aplicar estilos manualmente
+function applyPortraitStyles() {
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const root = document.documentElement;
+    
+    if (isPortrait) {
+        root.classList.add('portrait-mode');
+        root.classList.remove('landscape-mode');
+        console.log('[ORIENTACIÓN] Vertical detectado:', window.innerWidth, 'x', window.innerHeight);
+    } else {
+        root.classList.add('landscape-mode');
+        root.classList.remove('portrait-mode');
+        console.log('[ORIENTACIÓN] Horizontal detectado:', window.innerWidth, 'x', window.innerHeight);
+    }
+}
+
+// Aplicar al cargar y en cada cambio
+window.addEventListener('load', applyPortraitStyles);
+window.addEventListener('resize', applyPortraitStyles);
+window.addEventListener('orientationchange', () => {
+    setTimeout(applyPortraitStyles, 300);
+});
+
+// Forzar detección inicial
+setTimeout(applyPortraitStyles, 100);
 
 </script>
 </body>
