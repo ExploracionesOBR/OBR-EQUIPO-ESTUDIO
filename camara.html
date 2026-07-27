@@ -244,7 +244,7 @@
     #menu-left .menu-label { display: none !important; }
     
     
-/* 6. Botón Media: Más visible, sin efecto rojo */
+/* 6. Botón Media: Traslúcido */
 #btn-media-toggle {
     position: absolute !important;
     display: flex !important;
@@ -253,10 +253,10 @@
     width: 38px !important;
     height: 38px !important;
     z-index: 90 !important;
-    opacity: 0.6 !important; /* 🔒 Aumentado de 0.25 a 0.6 */
-    background: rgba(255,255,255,0.15) !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    color: rgba(255,255,255,0.7) !important;
+    opacity: 0.5 !important;
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    color: rgba(255,255,255,0.4) !important;
     border-radius: 50% !important;
     transition: all 0.3s ease !important;
     pointer-events: auto !important;
@@ -265,80 +265,48 @@
 }
 #btn-media-toggle:active {
     transform: scale(0.92) !important;
-    /*  ELIMINADO: fondo rojo al presionar */
 }
 
-/* 🔒 Animación de rotación cuando está activo */
-#btn-media-toggle.media-active {
-    opacity: 0.8 !important;
-    background: rgba(255,51,51,0.3) !important;
-    border-color: rgba(255,51,51,0.6) !important;
-    color: white !important;
-    transform: rotate(180deg) scale(1.1) !important;
-}
-
-/* 7. Controles de Media: Apilados CORRECTAMENTE sobre el botón */
+/* 7. Controles de Media: Se despliegan HACIA ABAJO */
 #local-media-controls {
     position: absolute !important;
-    bottom: 75px !important; /* 🔒 MISMA posición que el botón Media */
-    right: 10px !important;  /* 🔒 MISMA posición que el botón Media */
-    width: 38px !important;
-    height: 38px !important;
+    bottom: 120px !important;
+    right: 10px !important;
+    left: auto !important;              /* 🔒 ANULA el left: 50% del CSS base */
+    transform: none !important;         /* 🔒 ANULA el translateX(-50%) del CSS base */
+    display: flex !important;           /* 🔒 Fuerza flexbox */
+    flex-direction: column-reverse !important;
+    gap: 6px !important;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s ease !important;
-    z-index: 91 !important;
+    transition: all 0.3s !important;
+    width: 38px !important;             /* 🔒 Ancho fijo = ancho del botón */
+    align-items: flex-end !important;   /* 🔒 Alinea botones a la derecha */
 }
 #local-media-controls.media-visible {
     opacity: 1 !important;
     pointer-events: auto !important;
+    transform: translateY(0) !important; /* 🔒 Se desliza hacia arriba al abrirse */
 }
-/* 🔒 Cada botón se posiciona ABSOLUTO dentro del contenedor */
-#local-media-controls .media-btn {
-    position: absolute !important;
-    bottom: 0 !important;
-    right: 0 !important;
-    width: 38px !important;
-    height: 38px !important;
+
+/* Botones sin color, translúcidos como el botón Media */
+.media-btn {
+    width: 36px !important;
+    height: 36px !important;
     font-size: 14px !important;
-    background: rgba(0,0,0,0.85) !important;
-    border: 2px solid var(--hud-primary) !important;
+    background: rgba(255,255,255,0.08) !important; /* 🔒 Traslúcido */
+    border: 1px solid rgba(255,255,255,0.15) !important; /* 🔒 Borde sutil */
+    color: rgba(255,255,255,0.4) !important; /* 🔒 Icono translúcido */
     border-radius: 50% !important;
-    color: var(--hud-primary) !important;
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
-    opacity: 0;
-    transform: scale(0.5) rotate(-90deg) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    pointer-events: auto !important;
+    transition: all 0.2s ease !important;
 }
-/* 🔒 Botón INTRO - base (se transforma del botón Media) */
-#local-media-controls.media-visible .media-btn:nth-child(1) {
-    opacity: 1 !important;
-    transform: scale(1) rotate(0deg) !important;
-    z-index: 3 !important;
-}
-/* 🔒 Botón BANNER - apilado con ligera rotación */
-#local-media-controls.media-visible .media-btn:nth-child(2) {
-    opacity: 0.85 !important;
-    transform: scale(0.92) rotate(12deg) translate(-2px, -2px) !important;
-    z-index: 2 !important;
-}
-/* 🔒 Botón OUTRO - apilado con más rotación */
-#local-media-controls.media-visible .media-btn:nth-child(3) {
-    opacity: 0.7 !important;
-    transform: scale(0.85) rotate(24deg) translate(-4px, -4px) !important;
-    z-index: 1 !important;
-}
-/* 🔒 Al hacer hover, se separan un poco */
-#local-media-controls.media-visible:hover .media-btn:nth-child(1) {
-    transform: scale(1) rotate(0deg) translate(0, 0) !important;
-    opacity: 1 !important;
-}
-#local-media-controls.media-visible:hover .media-btn:nth-child(2) {
-    transform: scale(0.92) rotate(12deg) translate(-8px, -8px) !important;
-    opacity: 1 !important;
-}
-#local-media-controls.media-visible:hover .media-btn:nth-child(3) {
-    transform: scale(0.85) rotate(24deg) translate(-16px, -16px) !important;
-    opacity: 1 !important;
+.media-btn:active {
+    transform: scale(0.9) !important;
+    background: rgba(255,255,255,0.15) !important;
 }
     
     /* 8. Telemetría: Esquina inferior derecha */
@@ -832,7 +800,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '3'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '2'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -842,7 +810,7 @@ const ASSET_VERSION = '3'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-log
         start_url: './?v=' + ASSET_VERSION,
         scope: './',
         display: 'fullscreen', // 🔒 Pantalla completa (sin barra de estado)
-        orientation: 'landscape',
+        orientation: 'any', // 🔒 Permite cualquier orientación (vertical u horizontal)
         background_color: '#000000',
         theme_color: '#000000',
         icons: [
@@ -2457,9 +2425,9 @@ function toggleMediaPanel() {
         controls.classList.toggle('media-visible', mediaPanelVisible);
     }
     
-    // 🔒 Ocultar el botón Media cuando se despliega el panel
+    // Ocultar el botón Media cuando se despliega el panel
     if (btn) {
-        btn.style.opacity = mediaPanelVisible ? '0' : '0.6';
+        btn.style.opacity = mediaPanelVisible ? '0' : '0.5';
         btn.style.pointerEvents = mediaPanelVisible ? 'none' : 'auto';
     }
     
@@ -3916,13 +3884,13 @@ function updateProgress(p, t) {
 function drawBurnInHUD(ctx, width, height, scale) {
     if(scale <= 0.01) return;
     
-    // 🔒 CRÍTICO: No dibujar HUD en canvas si estamos en vertical (usamos HTML)
+    // 🔒 DETECTAR ORIENTACIÓN
     const isPortrait = window.innerHeight > window.innerWidth;
-    if (isPortrait) return; // 🔒 Salir temprano en vertical
     
-    const HUD_TAMANO = 1.35;
-    const HUD_IZQUIERDA = 50;
-    const HUD_ARRIBA = 50;
+    // 🔒 AJUSTES PARA VERTICAL
+    const HUD_TAMANO = isPortrait ? 0.9 : 1.35;
+    const HUD_IZQUIERDA = isPortrait ? 20 : 50;
+    const HUD_ARRIBA = isPortrait ? 20 : 50;
     
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, scale));
@@ -3931,24 +3899,41 @@ function drawBurnInHUD(ctx, width, height, scale) {
     ctx.shadowColor = "black";
     ctx.shadowBlur = 4;
     
-    if(logoImg.complete && logoImg.naturalWidth > 0) {
-        ctx.drawImage(logoImg, 0, 0, 80, 80);
+    // 🔒 CRÍTICO: Verificar que el logo esté cargado antes de dibujar
+    if(logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+        // 🔒 Logo más pequeño en vertical
+        const logoSize = isPortrait ? 50 : 80;
+        ctx.drawImage(logoImg, 0, 0, logoSize, logoSize);
+        
+        // Debug: dibujar un borde rojo si el logo falla
+        if (logoImg.naturalWidth === 0) {
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, logoSize, logoSize);
+        }
+    } else {
+        // 🔒 Si el logo no está cargado, dibujar un placeholder
+        ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
+        ctx.fillRect(0, 0, 50, 50);
+        ctx.fillStyle = "white";
+        ctx.font = "10px monospace";
+        ctx.fillText("LOGO", 10, 30);
     }
     
     ctx.fillStyle = "white";
-    ctx.font = "bold 16px 'Orbitron', sans-serif";
-    ctx.fillText("EXPLORACIONES OBR", 90, 30);
+    ctx.font = `bold ${isPortrait ? 12 : 16}px 'Orbitron', sans-serif`;
+    ctx.fillText("EXPLORACIONES OBR", 60, 25);
     
     if (DOM_CACHE && DOM_CACHE.clock) {
         ctx.fillStyle = "#ff3333";
-        ctx.font = "16px 'Share Tech Mono', monospace";
-        ctx.fillText(DOM_CACHE.clock.innerText, 90, 52);
+        ctx.font = `${isPortrait ? 12 : 16}px 'Share Tech Mono', monospace`;
+        ctx.fillText(DOM_CACHE.clock.innerText, 60, 42);
     }
     
     ctx.restore();
     
     // Indicador SLS ACTIVO (solo en horizontal)
-    if(state.isSLS) {
+    if(state.isSLS && !isPortrait) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, scale));
         ctx.translate(width / 2, 80);
@@ -5626,6 +5611,52 @@ window.addEventListener('orientationchange', () => {
 // Forzar detección inicial
 setTimeout(applyPortraitStyles, 100);
 
+
+// 🔒 CRÍTICO: Forzar detección de orientación después de que todo esté cargado
+// 🔒 CRÍTICO: Forzar detección de orientación después de que todo esté cargado
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        applyPortraitStyles();
+        // Verificar si el logo está cargado
+        if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+            console.log('[LOGO] Logo cargado correctamente:', logoImg.naturalWidth, 'x', logoImg.naturalHeight);
+            // Forzar redraw inmediato si el logo ya está cargado
+            if (typeof drawBurnInHUD === 'function') {
+                const vW = el.video.videoWidth || 1920;
+                const vH = el.video.videoHeight || 1080;
+                drawBurnInHUD(audioLayerCtx, vW, vH, 1.0);
+            }
+        } else {
+            console.warn('[LOGO] Logo no cargado, reintentando...');
+            logoImg = new Image();
+            logoImg.onload = () => {
+                console.log('[LOGO] Logo recargado:', logoImg.naturalWidth, 'x', logoImg.naturalHeight);
+                //  CRÍTICO: Forzar redraw cuando el logo cargue
+                if (typeof drawBurnInHUD === 'function') {
+                    setTimeout(() => {
+                        const vW = el.video.videoWidth || 1920;
+                        const vH = el.video.videoHeight || 1080;
+                        drawBurnInHUD(audioLayerCtx, vW, vH, 1.0);
+                    }, 100);
+                }
+            };
+            logoImg.onerror = () => {
+                console.error('[LOGO] Error al cargar obr-logo.png');
+            };
+            logoImg.src = 'obr-logo.png';
+        }
+    }, 500);
+});
+
+// 🔒 CRÍTICO: Listener más robusto para orientationchange
+let orientationTimeout;
+window.addEventListener('orientationchange', () => {
+    clearTimeout(orientationTimeout);
+    orientationTimeout = setTimeout(() => {
+        applyPortraitStyles();
+        console.log('[ORIENTACIÓN] Cambio detectado:', window.innerWidth, 'x', window.innerHeight);
+    }, 300);
+});
 </script>
 </body>
 </html>
