@@ -145,179 +145,208 @@
 
 /* === DISEÑO VERTICAL ADAPTATIVO === */
 @media (orientation: portrait), .portrait-mode {
-    /* 1. HUD más grande y legible */
-    #hud-layer { 
-        transform: scale(0.8) !important;
-        transform-origin: top left !important; 
-    }
-    #hud-logo { 
-        width: 50px !important; 
-        height: 50px !important; 
-    }
-    #hud-title { 
-        font-size: 14px !important;
-        font-weight: 900 !important;
-    }
-    #hud-time { 
-        font-size: 16px !important;
-        font-weight: bold !important;
+    /* 🔒 CRÍTICO: Mostrar HUD HTML (está oculto por hud-burn-hidden) */
+    #hud-layer.hud-burn-hidden {
+        display: block !important;
     }
     
-    /* 2. Video sin estirarse - mantener proporción */
-    #shared-video-element { 
-        width: 100% !important; 
-        height: 100% !important; 
-        object-fit: cover !important; 
+    /* 1. HUD: Acomodado en 2 líneas pero bien alineado */
+#hud-layer {
+    position: absolute !important;
+    top: 10px !important;
+    left: 10px !important;
+    transform: scale(0.7) !important; /* 🔒 Más pequeño para que quepa */
+    transform-origin: top left !important;
+    z-index: 100 !important;
+}
+#hud-logo {
+    width: 40px !important;
+    height: 40px !important;
+    position: absolute !important;
+    top: 5px !important;
+    left: 5px !important;
+}
+#hud-text-container {
+    position: absolute !important;
+    top: 5px !important;
+    left: 50px !important; /* 🔒 Pegado al logo (40px + 10px gap) */
+    white-space: nowrap !important; /* 🔒 Evita que se parta en 2 líneas */
+}
+#hud-title {
+    font-size: 11px !important;
+    font-weight: 900 !important;
+    line-height: 1.2 !important;
+}
+#hud-time {
+    font-size: 13px !important;
+    font-weight: bold !important;
+    line-height: 1.2 !important;
+}
+    
+    /* 2. Video: Mantener proporción natural */
+    #shared-video-element {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
     }
     
-    /* 🔒 CRÍTICO: SLS y LIDAR - Escalar para llenar pantalla vertical */
-    #sls-canvas, #lidar-canvas { 
+    /* 3. CANVAS SLS/LIDAR: Posicionar dentro del contenedor */
+    #sls-canvas, #lidar-canvas, #audio-canvas {
         position: absolute !important;
         top: 0 !important;
         left: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
+        width: 100% !important;
+        height: 100% !important;
         object-fit: cover !important;
-        transform: scale(1.78) !important; /* 🔒 1920/1080 ≈ 1.78 */
-        transform-origin: center center !important;
     }
     
-    #audio-canvas { 
-        width: 100% !important; 
-        height: 100% !important; 
-        object-fit: cover !important; 
-        transform: scale(0.7) !important;
-        transform-origin: top left !important;
+    #main-view-area {
+        position: fixed !important;
+        inset: 0 !important;
+        overflow: hidden !important;
+    }
+    #zoom-container {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
     }
     
-    #main-view-area { 
-        position: fixed !important; 
-        inset: 0 !important; 
-        overflow: hidden !important; 
-    }
-    #zoom-container { 
-        position: absolute !important; 
-        inset: 0 !important; 
-        width: 100% !important; 
-        height: 100% !important; 
-    }
-    
-    /* 3. Mapa: abajo IZQUIERDA */
-    #map-container-slot { 
-        width: 90px !important; 
-        height: 90px !important; 
-        left: 8px !important; 
-        bottom: 8px !important; 
-        top: auto !important;
+    /* 4. Mapa: Esquina inferior izquierda */
+    #map-container-slot {
+        position: absolute !important;
+        width: 90px !important;
+        height: 90px !important;
+        left: 8px !important;
+        bottom: 8px !important;
         transform: scale(0.9) !important;
         transform-origin: bottom left !important;
+        z-index: 100 !important;
     }
     
-    /* 4. FILTROS: abajo CENTRO */
-    #menu-left { 
-        top: auto !important; 
-        bottom: 12px !important; 
-        left: 50% !important; 
-        right: auto !important; 
-        transform: translateX(-50%) !important; 
-        flex-direction: row !important; 
+    /* 5. Filtros: Centro inferior */
+    #menu-left {
+        position: absolute !important;
+        top: auto !important;
+        bottom: 12px !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+        flex-direction: row !important;
         gap: 6px !important;
+        z-index: 100 !important;
     }
-    #menu-left .menu-btn { 
-        width: 42px !important; 
-        height: 42px !important; 
-        font-size: 1rem !important; 
+    #menu-left .menu-btn {
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 1rem !important;
     }
     #menu-left .menu-label { display: none !important; }
     
-    /* 5. BOTÓN MEDIA: arriba de telemetría */
-    #btn-media-toggle { 
-        display: flex !important; 
-        position: absolute !important;
-        bottom: 75px !important;
-        right: 10px !important;
-        left: auto !important;
-        transform: none !important;
-        width: 38px !important;
-        height: 38px !important;
-        z-index: 90 !important;
-        opacity: 0.9 !important;
-    }
+    /* 6. Botón Media: Arriba de telemetría - FUNCIONAL */
+#btn-media-toggle {
+    position: absolute !important;
+    display: flex !important;
+    bottom: 75px !important;
+    right: 10px !important;
+    width: 38px !important;
+    height: 38px !important;
+    z-index: 90 !important;
+    opacity: 0.9 !important;
+    pointer-events: auto !important; /* 🔒 CRÍTICO: Permite clickear */
+    cursor: pointer !important;
+    background: rgba(0,0,0,0.88) !important;
+    border: 2px solid var(--hud-primary) !important;
+    border-radius: 50% !important;
+    color: var(--hud-primary) !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+}
+#btn-media-toggle:active {
+    transform: scale(0.88) !important;
+    background: rgba(255,51,51,0.25) !important;
+}
     
-    /* 6. Controles de media */
-    #local-media-controls { 
-        bottom: 120px !important; 
-        right: 10px !important; 
-        left: auto !important;
-        transform: none !important;
+    /* 7. Controles de Media */
+    #local-media-controls {
+        position: absolute !important;
+        bottom: 120px !important;
+        right: 10px !important;
         flex-direction: column-reverse !important;
         gap: 6px !important;
-        opacity: 0; 
-        pointer-events: none; 
+        opacity: 0;
+        pointer-events: none;
         transition: all 0.3s !important;
+        z-index: 100 !important;
     }
-    #local-media-controls.media-visible { 
-        opacity: 1 !important; 
-        pointer-events: auto !important; 
+    #local-media-controls.media-visible {
+        opacity: 1 !important;
+        pointer-events: auto !important;
     }
-    .media-btn { 
-        width: 36px !important; 
-        height: 36px !important; 
-        font-size: 14px !important; 
+    .media-btn {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 14px !important;
     }
     
-    /* 7. Telemetría: abajo DERECHA */
-    #telemetry-container { 
-        bottom: 8px !important; 
-        right: 8px !important; 
-        top: auto !important; 
-        left: auto !important; 
-        transform: scale(0.85) !important; 
+    /* 8. Telemetría: Esquina inferior derecha */
+    #telemetry-container {
+        position: absolute !important;
+        bottom: 8px !important;
+        right: 8px !important;
+        transform: scale(0.85) !important;
         transform-origin: bottom right !important;
         opacity: 1 !important;
+        z-index: 100 !important;
     }
     
-    /* 8. MENÚ DERECHO: MITAD DE PANTALLA */
-    #menu-right { 
+    /* 9. Menú derecho: Centro derecho */
+    #menu-right {
+        position: absolute !important;
         top: 50% !important;
-        right: 8px !important; 
-        bottom: auto !important; 
-        left: auto !important; 
-        transform: translateY(-50%) !important; 
-        flex-direction: column !important; 
+        right: 8px !important;
+        transform: translateY(-50%) !important;
+        flex-direction: column !important;
         gap: 8px !important;
+        z-index: 100 !important;
     }
-    #menu-right .menu-btn { 
-        width: 46px !important; 
-        height: 46px !important; 
-        font-size: 1.1rem !important; 
+    #menu-right .menu-btn {
+        width: 46px !important;
+        height: 46px !important;
+        font-size: 1.1rem !important;
     }
     #menu-right .menu-label { display: none !important; }
     
-    /* 9. ENGRANAJE: arriba derecha */
-    #top-right-group { 
-        top: 10px !important; 
+    /* 10. Engranaje: Esquina superior derecha */
+    #top-right-group {
+        position: absolute !important;
+        top: 10px !important;
         right: 10px !important;
+        z-index: 100 !important;
     }
-    #settings-gear-icon { 
-        font-size: 1.4rem !important; 
-    }
-    
-    /* 10. Indicadores de estado */
-    #status-indicators { 
-        bottom: 105px !important; 
-        left: 10px !important; 
-        top: auto !important;
+    #settings-gear-icon {
+        font-size: 1.4rem !important;
     }
     
-    /* 11. Toast notifications */
-    #toast-container { top: 60px !important; }
+    /* 11. Indicadores de estado */
+    #status-indicators {
+        position: absolute !important;
+        bottom: 105px !important;
+        left: 10px !important;
+        z-index: 100 !important;
+    }
     
-    /* 12. Tally border */
+    /* 12. Toast notifications */
+    #toast-container { 
+        top: 60px !important; 
+        z-index: 200 !important;
+    }
+    
+    /* 13. Bordes Tally */
     #tally-border.preview { border-width: 3px !important; }
     #tally-border.online { border-width: 4px !important; }
 }
-
 
         #progress-bar { height: 100%; width: 0%; background: var(--hud-primary); transition: width 0.3s; }
         
@@ -746,7 +775,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '3'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '2'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -3269,7 +3298,6 @@ function executeAudioScanDeactivation(btnMenu) {
 function drawAudioVisualizer(c, w, h) {
     if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
     
-    // 🔒 CRÍTICO: Sin throttle de 66ms para movimiento continuo y sin parpadeo
     audioAnalyser.getByteTimeDomainData(audioDataArray);
     const bufferLength = audioAnalyser.frequencyBinCount;
     
@@ -3316,12 +3344,17 @@ function drawAudioVisualizer(c, w, h) {
     cumulativeEVPEnergy *= 0.93;
     cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
     
-    // 🔥 OPTIMIZACIÓN: Reducir bins en móvil (64) y en PC (128) para ahorrar recursos
-    const isMobile = window.innerWidth < 600;
-    const visualBins = isMobile ? 64 : 128;
+    // 🔒 DETECTAR ORIENTACIÓN
+    const isPortrait = window.innerHeight > window.innerWidth;
+    
+    // 🔒 EN VERTICAL: Usamos coordenadas fijas del canvas base (1920x1080)
+    // porque el CSS ya se encarga de escalarlo para llenar la pantalla.
+    const baseW = 1920;
+    const visualBins = isPortrait ? 64 : (window.innerWidth < 600 ? 64 : 128);
     const step = Math.floor(bufferLength / visualBins);
-    const displayWidth = w * 0.465; // Ancho al 50%
-    const startX = (w - displayWidth) / 2;
+    
+    const displayWidth = isPortrait ? baseW * 0.50 : w * 0.465; // 50% del ancho en vertical
+    const startX = (baseW - displayWidth) / 2;
     const sliceW = displayWidth / visualBins;
     const nowAnim = performance.now();
     
@@ -3352,19 +3385,21 @@ function drawAudioVisualizer(c, w, h) {
     
     c.save();
     
-    const screenScale = Math.max(1.2, Math.min(4, 1920 / (window.innerWidth || 1920)));
-    const waveHeight = 55 * screenScale; 
-    const bottomY = h * 0.88; // Base baja
-    const sensitivity = Math.min(5.0, 4.5 / screenScale * 2.0);
+    // 🔒 ESCALA: En vertical es 1.0 (el CSS lo escala), en horizontal usamos screenScale
+    const screenScale = isPortrait ? 1.0 : Math.max(1.2, Math.min(4, 1920 / (window.innerWidth || 1920)));
+    
+    const waveHeight = isPortrait ? 35 : 55 * screenScale;
+    const bottomY = isPortrait ? 1000 : h * 0.88; // 1000 está cerca del fondo (1080)
+    const sensitivity = isPortrait ? 3.5 : Math.min(5.0, 4.5 / screenScale * 2.0);
     const clampH = waveHeight * 0.95;
     const clampY = (val) => Math.max(-clampH, Math.min(clampH, val));
-    const textFS = Math.round(23 * screenScale);
+    
+    // 🔒 TEXTO: Tamaño fijo y pequeño en vertical
+    const textFS = isPortrait ? 14 : Math.round(23 * screenScale);
     
     // ==========================================
-    // 🔥 NUEVO DISEÑO DEL GRÁFICO (SIN SOMBRAS Y CON DISOLUCIÓN)
+    // DIBUJO DEL GRÁFICO
     // ==========================================
-    
-    // 1. Pre-cálculo y Suavizado de los valores Y de la onda
     const rawYValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         let v = (audioDataArray[i * step] / 128.0) - 1;
@@ -3379,27 +3414,22 @@ function drawAudioVisualizer(c, w, h) {
         const prev = i > 0 ? rawYValues[i-1] : 0;
         const next = i < visualBins - 1 ? rawYValues[i+1] : 0;
         let smoothed = (prev * 0.1 + rawYValues[i] * 0.8 + next * 0.1); 
-        
-        // 🔥 NUEVO: Factor de "Disolver y Crecer" en los extremos
-        // Esto hace que en i=0 y i=final, el valor sea exactamente 0.
         const fadeFactor = Math.pow(Math.sin((i / (visualBins - 1)) * Math.PI), 0.8);
         yValues[i] = smoothed * fadeFactor;
     }
 
-    // 🔥 OPTIMIZACIÓN: Apagar sombras globalmente para el canvas (mejora el FPS drásticamente)
     c.shadowBlur = 0;
     c.shadowColor = 'transparent';
 
-    // 2. Relleno de fondo con degradado (El "cuerpo" de la onda)
     c.beginPath();
     let x = startX;
-    c.moveTo(startX, bottomY); // Nace desde el centro en el extremo izquierdo
+    c.moveTo(startX, bottomY);
     for (let i = 0; i < visualBins; i++) {
         const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity);
         c.lineTo(x, y);
         x += sliceW;
     }
-    c.lineTo(startX + displayWidth, bottomY); // Muere en el centro en el extremo derecho
+    c.lineTo(startX + displayWidth, bottomY);
     c.closePath();
 
     const grd = c.createLinearGradient(0, bottomY - waveHeight, 0, bottomY + waveHeight);
@@ -3411,12 +3441,10 @@ function drawAudioVisualizer(c, w, h) {
     c.fillStyle = grd;
     c.fill();
 
-    // 3. Efecto de capas de tubo (Sin sombras, 2 capas optimizadas)
-    const numLayers = 2; // 🔥 Reducido a 2 capas para un rendimiento excelente
+    const numLayers = 2;
     for (let l = numLayers - 1; l >= 0; l--) {
         const scale = 1.0 - (l / numLayers) * 0.3;
         const alpha = 0.3 + (l / numLayers) * 0.7;
-        
         c.beginPath();
         x = startX;
         for (let i = 0; i < visualBins; i++) {
@@ -3426,11 +3454,10 @@ function drawAudioVisualizer(c, w, h) {
             x += sliceW;
         }
         c.strokeStyle = `rgba(0, 200, 255, ${alpha})`;
-        c.lineWidth = 1.0 + (l * 2.0); // Capa gruesa exterior, capa fina interior
+        c.lineWidth = 1.0 + (l * 2.0);
         c.stroke();
     }
 
-    // 4. Línea central blanca brillante (Sin sombra)
     c.beginPath();
     x = startX;
     for (let i = 0; i < visualBins; i++) {
@@ -3444,10 +3471,8 @@ function drawAudioVisualizer(c, w, h) {
     c.stroke();
 
     // ==========================================
-    // FIN DEL NUEVO DISEÑO DEL GRÁFICO
+    // TEXTO DEL USUARIO
     // ==========================================
-    
-    // 🔒 TEXTO DEL USUARIO (Optimizado para no perder palabras al transcribir)
     if (window._liveUserText && window._liveUserLastUpdate) {
         const timeSinceUpdate = Date.now() - window._liveUserLastUpdate;
         if (timeSinceUpdate < 3000) { 
@@ -3457,8 +3482,10 @@ function drawAudioVisualizer(c, w, h) {
             let displayUserText = window._liveUserText;
             const userWords = displayUserText.split(' ');
             
-            // 🔥 CORRECCIÓN: Cortar de forma inmediata a las últimas 8 palabras visibles
-            if (userWords.length > 8) {
+            // 🔒 En vertical: máximo 4 palabras
+            if (isPortrait && userWords.length > 4) {
+                displayUserText = userWords.slice(-4).join(' ');
+            } else if (userWords.length > 8) {
                 displayUserText = userWords.slice(-8).join(' ');
             }
             
@@ -3499,17 +3526,19 @@ function drawAudioVisualizer(c, w, h) {
                     window._lastRenderedUserText = userLabel;
                 }
                 
-                const uY = bottomY - 80 * screenScale; 
+                // 🔒 Y fija en vertical para que quede arriba del gráfico
+                const uY = isPortrait ? 920 : bottomY - 80 * screenScale;
                 c.drawImage(uCanv, (w / 2) - (reqW / 2), uY - (reqH / 2));
             }
             c.restore();
         }
     }
     
-    // 🔒 TEXTO EVP
+    // ==========================================
+    // TEXTO EVP
+    // ==========================================
     if (lastSpokenText) {
         const label = lastSpokenText.toUpperCase();
-        
         c.save();
         c.globalAlpha = 0.85;
         
@@ -3568,7 +3597,8 @@ function drawAudioVisualizer(c, w, h) {
                 window._lastRenderedEvpText = label;
             }
             
-            const evpY = bottomY - 30 * screenScale; 
+            // 🔒 Y fija en vertical para que quede encima del gráfico
+            const evpY = isPortrait ? 960 : bottomY - 30 * screenScale;
             c.drawImage(tCanv, (w / 2) - (reqW / 2), evpY - (reqH / 2));
         }
         c.restore();
@@ -3576,7 +3606,7 @@ function drawAudioVisualizer(c, w, h) {
     
     c.restore();
     
-    // Lógica de trigger EVP (sin cambios en la detección)
+    // Lógica de trigger EVP (sin cambios)
     const now_evp = Date.now();
     const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
     const isSilent = micActive && currentMaxVolume < (dynamicThreshold * 1.5) && !isUserTalkingNow;
@@ -3629,7 +3659,6 @@ function drawAudioVisualizer(c, w, h) {
             }
         }
         
-        // 🔥 CORRECCIÓN: Si el EVP lanza varias frases, seleccionar una sola al azar
         if (evpText && evpText.trim() !== '') {
             const palabrasEvp = evpText.split(' ');
             if (palabrasEvp.length > 1) {
@@ -3637,7 +3666,6 @@ function drawAudioVisualizer(c, w, h) {
             }
             speakSpooky(evpText);
         }
-        
         cumulativeEVPEnergy = -30;
     }
 }
@@ -3829,53 +3857,53 @@ function updateProgress(p, t) {
 function drawBurnInHUD(ctx, width, height, scale) {
     if(scale <= 0.01) return;
     
-    // 🔒 DETECTAR ORIENTACIÓN
+    // 🔒 CRÍTICO: No dibujar HUD en canvas si estamos en vertical (usamos HTML)
     const isPortrait = window.innerHeight > window.innerWidth;
+    if (isPortrait) return; // 🔒 Salir temprano en vertical
     
-    // Ajustar tamaño según orientación
-    const HUD_TAMANO = isPortrait ? 2.2 : 1.35;
-    const HUD_IZQUIERDA = isPortrait ? 30 : 50;
-    const HUD_ARRIBA = isPortrait ? 30 : 50;
+    const HUD_TAMANO = 1.35;
+    const HUD_IZQUIERDA = 50;
+    const HUD_ARRIBA = 50;
     
-    ctx.save(); 
-    ctx.globalAlpha = Math.max(0, Math.min(1, scale)); 
-    ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA); 
-    ctx.scale(HUD_TAMANO, HUD_TAMANO); 
-    ctx.shadowColor = "black"; 
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, scale));
+    ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA);
+    ctx.scale(HUD_TAMANO, HUD_TAMANO);
+    ctx.shadowColor = "black";
     ctx.shadowBlur = 4;
     
     if(logoImg.complete && logoImg.naturalWidth > 0) {
-        ctx.drawImage(logoImg, 0, 0, 80, 80); 
+        ctx.drawImage(logoImg, 0, 0, 80, 80);
     }
     
-    ctx.fillStyle = "white"; 
-    ctx.font = "bold 16px 'Orbitron', sans-serif"; 
-    ctx.fillText("EXPLORACIONES OBR", 90, 30); 
+    ctx.fillStyle = "white";
+    ctx.font = "bold 16px 'Orbitron', sans-serif";
+    ctx.fillText("EXPLORACIONES OBR", 90, 30);
     
     if (DOM_CACHE && DOM_CACHE.clock) {
-        ctx.fillStyle = "#ff3333"; 
-        ctx.font = "16px 'Share Tech Mono', monospace"; 
-        ctx.fillText(DOM_CACHE.clock.innerText, 90, 52); 
+        ctx.fillStyle = "#ff3333";
+        ctx.font = "16px 'Share Tech Mono', monospace";
+        ctx.fillText(DOM_CACHE.clock.innerText, 90, 52);
     }
     
-    ctx.restore(); 
+    ctx.restore();
     
-    // Indicador SLS ACTIVO (solo en horizontal para no saturar)
-    if(state.isSLS && !isPortrait) {
-        ctx.save(); 
-        ctx.globalAlpha = Math.max(0, Math.min(1, scale)); 
-        ctx.translate(width / 2, 80); 
+    // Indicador SLS ACTIVO (solo en horizontal)
+    if(state.isSLS) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, scale));
+        ctx.translate(width / 2, 80);
         ctx.scale(HUD_TAMANO * 1.3, HUD_TAMANO * 1.3);
-        const bx = -40, by = 0; 
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; 
-        ctx.fillRect(bx, by, 80, 20); 
-        ctx.strokeStyle = "#d946ef"; 
-        ctx.lineWidth = 1; 
+        const bx = -40, by = 0;
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(bx, by, 80, 20);
+        ctx.strokeStyle = "#d946ef";
+        ctx.lineWidth = 1;
         ctx.strokeRect(bx, by, 80, 20);
-        ctx.fillStyle = "#d946ef"; 
-        ctx.font = "10px monospace"; 
-        ctx.textAlign = "center"; 
-        ctx.fillText("● SLS ACTIVO", 0, by + 13); 
+        ctx.fillStyle = "#d946ef";
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("● SLS ACTIVO", 0, by + 13);
         ctx.restore();
     }
 }
@@ -3920,9 +3948,9 @@ function drawAIBurnIn(c, w, h, scale) {
     const smoothScale = 1 - Math.pow(1 - scale, 3);
     c.globalAlpha = Math.max(0, Math.min(1, scale * 1.5));
     
-    // Posición y tamaño adaptativos
-    const bx = 14, by = 14;
-    const panelW = isPortrait ? 280 : 320;
+    // 🔒 AJUSTES VERTICALES: Panel más pequeño
+    const bx = 10, by = 10;
+    const panelW = isPortrait ? 200 : 320; // 🔒 Reducido de 280 a 200
     let displayTxt = currentAiText, isScanning = !(currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0);
     
     if (isScanning && !displayTxt) {
@@ -3935,7 +3963,7 @@ function drawAIBurnIn(c, w, h, scale) {
     
     let borderColor = isScanning ? "#ff0000" : "#ff3333";
     let bgColor = isScanning ? "rgba(0,0,0,0)" : "rgba(10, 0, 0, 0.90)";
-    let imgH = isScanning ? (isPortrait ? 120 : 150) : (isPortrait ? 180 : 240);
+    let imgH = isScanning ? (isPortrait ? 80 : 150) : (isPortrait ? 120 : 240); // 🔒 Reducido
     
     if (!isScanning) {
         if (CURRENT_AI_PROVIDER === 'groq') {
@@ -3953,7 +3981,7 @@ function drawAIBurnIn(c, w, h, scale) {
     c.translate(-centerX, -centerY);
     
     if (!isScanning) {
-        let txtH = currentAiText ? Math.ceil(currentAiText.length / 25) * 18 + 20 : 40;
+        let txtH = currentAiText ? Math.ceil(currentAiText.length / 25) * 14 + 15 : 30; // 🔒 Reducido
         const totalH = imgH + txtH;
         c.fillStyle = bgColor;
         c.fillRect(bx, by, panelW, totalH);
@@ -3964,7 +3992,7 @@ function drawAIBurnIn(c, w, h, scale) {
     if(imgH > 0) {
         if (isScanning) {
             c.save();
-            const radarRadiusBase = isPortrait ? 40 : 50;
+            const radarRadiusBase = isPortrait ? 30 : 50; // 🔒 Reducido
             const radarCx = bx + radarRadiusBase + 10, radarCy = by + radarRadiusBase + 10;
             c.translate(radarCx, radarCy);
             c.strokeStyle = "rgba(0, 255, 100, 0.15)"; c.lineWidth = 1;
@@ -3984,8 +4012,8 @@ function drawAIBurnIn(c, w, h, scale) {
             };
             drawBlade(0); drawBlade(Math.PI); c.restore();
             const txtX = radarCx + radarRadiusBase + 15, txtY = radarCy;
-            if (displayTxt.includes('\n')) { const lines = displayTxt.split('\n'); let lineY = txtY - 15; lines.forEach((l, idx) => { drawGlitchText(c, l.toLowerCase(), txtX, lineY + (idx*14), 11); }); }
-            else { drawGlitchText(c, displayTxt.toLowerCase(), txtX, txtY + 5, 12); }
+            if (displayTxt.includes('\n')) { const lines = displayTxt.split('\n'); let lineY = txtY - 15; lines.forEach((l, idx) => { drawGlitchText(c, l.toLowerCase(), txtX, lineY + (idx*12), 9); }); } // 🔒 Texto más pequeño
+            else { drawGlitchText(c, displayTxt.toLowerCase(), txtX, txtY + 5, 10); } // 🔒 Texto más pequeño
         } else {
             c.save();
             try {
@@ -4016,12 +4044,13 @@ function drawAIBurnIn(c, w, h, scale) {
             c.strokeStyle = borderColor; c.lineWidth = 1; c.strokeRect(bx, by, panelW, imgH);
             if (currentAiText) {
                 c.fillStyle = "rgba(0,0,0,0.85)";
-                let txtH = Math.ceil(currentAiText.length / 25) * 18 + 15;
+                let txtH = Math.ceil(currentAiText.length / 25) * 14 + 10; // 🔒 Reducido
                 c.fillRect(bx + 4, by + imgH, panelW - 4, txtH);
-                c.fillStyle = "#ffffff"; c.font = "bold 15px 'Share Tech Mono'"; c.shadowColor = "#ff0000"; c.shadowBlur = 8;
-                let line = ''; let ly = by + imgH + 20; const resWords = currentAiText.split(' ');
-                for(let n = 0; n < resWords.length; n++) { let testLine = line + resWords[n] + ' '; if (c.measureText(testLine).width > (panelW - 20) && n > 0) { c.fillText(line.toLowerCase(), bx + 12, ly); line = resWords[n] + ' '; ly += 18; } else { line = testLine; } }
-                c.fillText(line.toLowerCase(), bx + 12, ly);
+                c.fillStyle = "#ffffff"; c.font = "bold 11px 'Share Tech Mono'"; // 🔒 Texto más pequeño
+                c.shadowColor = "#ff0000"; c.shadowBlur = 6;
+                let line = ''; let ly = by + imgH + 14; const resWords = currentAiText.split(' ');
+                for(let n = 0; n < resWords.length; n++) { let testLine = line + resWords[n] + ' '; if (c.measureText(testLine).width > (panelW - 15) && n > 0) { c.fillText(line.toLowerCase(), bx + 8, ly); line = resWords[n] + ' '; ly += 14; } else { line = testLine; } }
+                c.fillText(line.toLowerCase(), bx + 8, ly);
                 c.shadowBlur = 0;
             }
         }
