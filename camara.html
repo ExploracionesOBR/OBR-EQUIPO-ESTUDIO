@@ -145,52 +145,14 @@
 
 /* === DISEÑO VERTICAL ADAPTATIVO === */
 @media (orientation: portrait), .portrait-mode {
-    /* 🔒 CRÍTICO: Mostrar HUD HTML (está oculto por hud-burn-hidden) */
-    #hud-layer.hud-burn-hidden {
-        display: block !important;
-    }
-    
-    /* 1. HUD: Acomodado en 2 líneas pero bien alineado */
-#hud-layer {
-    position: absolute !important;
-    top: 10px !important;
-    left: 10px !important;
-    transform: scale(0.7) !important; /* 🔒 Más pequeño para que quepa */
-    transform-origin: top left !important;
-    z-index: 100 !important;
-}
-#hud-logo {
-    width: 40px !important;
-    height: 40px !important;
-    position: absolute !important;
-    top: 5px !important;
-    left: 5px !important;
-}
-#hud-text-container {
-    position: absolute !important;
-    top: 5px !important;
-    left: 50px !important; /* 🔒 Pegado al logo (40px + 10px gap) */
-    white-space: nowrap !important; /* 🔒 Evita que se parta en 2 líneas */
-}
-#hud-title {
-    font-size: 11px !important;
-    font-weight: 900 !important;
-    line-height: 1.2 !important;
-}
-#hud-time {
-    font-size: 13px !important;
-    font-weight: bold !important;
-    line-height: 1.2 !important;
-}
-    
-    /* 2. Video: Mantener proporción natural */
+    /* Video sin estirarse */
     #shared-video-element {
         width: 100% !important;
         height: 100% !important;
         object-fit: cover !important;
     }
-    
-    /* 3. CANVAS SLS/LIDAR: Posicionar dentro del contenedor */
+
+    /* Canvas SLS/LIDAR */
     #sls-canvas, #lidar-canvas, #audio-canvas {
         position: absolute !important;
         top: 0 !important;
@@ -199,36 +161,37 @@
         height: 100% !important;
         object-fit: cover !important;
     }
-    
+
     #main-view-area {
         position: fixed !important;
         inset: 0 !important;
         overflow: hidden !important;
     }
+
     #zoom-container {
         position: absolute !important;
         inset: 0 !important;
         width: 100% !important;
         height: 100% !important;
     }
-    
-    /* 4. Mapa: Esquina inferior izquierda */
+
+    /* Mapa: abajo izquierda */
     #map-container-slot {
         position: absolute !important;
-        width: 90px !important;
-        height: 90px !important;
+        width: 80px !important;
+        height: 80px !important;
         left: 8px !important;
         bottom: 8px !important;
-        transform: scale(0.9) !important;
+        transform: scale(0.85) !important;
         transform-origin: bottom left !important;
         z-index: 100 !important;
     }
-    
-    /* 5. Filtros: Centro inferior */
+
+    /* Filtros: centro inferior */
     #menu-left {
         position: absolute !important;
         top: auto !important;
-        bottom: 12px !important;
+        bottom: 10px !important;
         left: 50% !important;
         right: auto !important;
         transform: translateX(-50%) !important;
@@ -236,14 +199,15 @@
         gap: 6px !important;
         z-index: 100 !important;
     }
+
     #menu-left .menu-btn {
-        width: 42px !important;
-        height: 42px !important;
-        font-size: 1rem !important;
+        width: 40px !important;
+        height: 40px !important;
+        font-size: 0.9rem !important;
     }
+
     #menu-left .menu-label { display: none !important; }
-    
-    
+
 /* 6. Botón Media: Traslúcido */
 #btn-media-toggle {
     position: absolute !important;
@@ -308,63 +272,83 @@
     transform: scale(0.9) !important;
     background: rgba(255,255,255,0.15) !important;
 }
-    
-    /* 8. Telemetría: Esquina inferior derecha */
+
+    /* Telemetría: abajo derecha */
     #telemetry-container {
         position: absolute !important;
         bottom: 8px !important;
         right: 8px !important;
-        transform: scale(0.85) !important;
+        transform: scale(0.8) !important;
         transform-origin: bottom right !important;
         opacity: 1 !important;
         z-index: 100 !important;
     }
-    
-    /* 9. Menú derecho: Centro derecho */
+
+    /* Menú derecho: centro */
     #menu-right {
         position: absolute !important;
         top: 50% !important;
-        right: 8px !important;
+        right: 6px !important;
         transform: translateY(-50%) !important;
         flex-direction: column !important;
-        gap: 8px !important;
+        gap: 6px !important;
         z-index: 100 !important;
     }
+
     #menu-right .menu-btn {
-        width: 46px !important;
-        height: 46px !important;
-        font-size: 1.1rem !important;
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 1rem !important;
     }
+
     #menu-right .menu-label { display: none !important; }
-    
-    /* 10. Engranaje: Esquina superior derecha */
+
+    /* Engranaje: arriba derecha */
     #top-right-group {
         position: absolute !important;
-        top: 10px !important;
-        right: 10px !important;
+        top: 8px !important;
+        right: 8px !important;
         z-index: 100 !important;
     }
+
     #settings-gear-icon {
-        font-size: 1.4rem !important;
+        font-size: 1.3rem !important;
     }
-    
-    /* 11. Indicadores de estado */
+
+    /* Indicadores de estado */
     #status-indicators {
         position: absolute !important;
-        bottom: 105px !important;
-        left: 10px !important;
+        bottom: 95px !important;
+        left: 8px !important;
         z-index: 100 !important;
     }
-    
-    /* 12. Toast notifications */
-    #toast-container { 
-        top: 60px !important; 
-        z-index: 200 !important;
-    }
-    
-    /* 13. Bordes Tally */
+
+    /* Toast */
+    #toast-container { top: 50px !important; }
+
+    /* Tally */
     #tally-border.preview { border-width: 3px !important; }
     #tally-border.online { border-width: 4px !important; }
+}
+
+/* Pantallas MUY pequeñas en vertical */
+.small-screen-portrait #hud-layer {
+    transform: scale(0.65) !important;
+    top: 5px !important;
+    left: 5px !important;
+}
+
+.small-screen-portrait #hud-logo {
+    width: 40px !important;
+    height: 40px !important;
+}
+
+.small-screen-portrait #hud-title {
+    font-size: 12px !important;
+}
+
+.small-screen-portrait #hud-time {
+    font-size: 10px !important;
 }
 
         #progress-bar { height: 100%; width: 0%; background: var(--hud-primary); transition: width 0.3s; }
@@ -460,9 +444,41 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
 }
     
+    /* Filtros de video - Nitidez */
+#shared-video-element.filter-sharp-low {
+    filter: contrast(1.1) saturate(1.1) url('#sharpen-low');
+}
+#shared-video-element.filter-sharp-medium {
+    filter: contrast(1.15) saturate(1.15) url('#sharpen-medium');
+}
+#shared-video-element.filter-sharp-high {
+    filter: contrast(1.2) saturate(1.2) url('#sharpen-high');
+}
+
+/* SVG Filters ocultos para sharpening */
+.svg-filters {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
     </style>
 </head>
 <body>
+  <!-- SVG Filters para sharpening -->
+<svg class="svg-filters">
+    <defs>
+        <filter id="sharpen-low">
+            <feConvolveMatrix order="3" kernelMatrix="0 -0.5 0 -0.5 3 -0.5 0 -0.5 0" />
+        </filter>
+        <filter id="sharpen-medium">
+            <feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" />
+        </filter>
+        <filter id="sharpen-high">
+            <feConvolveMatrix order="3" kernelMatrix="-1 -1 -1 -1 9 -1 -1 -1 -1" />
+        </filter>
+    </defs>
+</svg>
     <div id="main-view-area">
         <div id="zoom-container">
             <video id="shared-video-element" autoplay playsinline muted></video>
@@ -749,6 +765,22 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 </button>
 </button>
         </div>
+        <!-- BLOQUE 3: NITIDEZ DE CÁMARA -->
+<div class="bg-black/50 p-5 rounded border border-yellow-500 shadow-[0_0_15px_rgba(255,255,0,0.1)] flex flex-col">
+    <h3 class="text-[12px] font-bold text-yellow-400 mb-4 border-b border-yellow-900/60 pb-2 uppercase tracking-wider text-center"> NITIDEZ CÁMARA</h3>
+    <div class="flex flex-col gap-3">
+        <div class="text-[11px] font-mono text-gray-400">Ajusta el nivel de enfoque del video</div>
+        <input type="range" id="sharpness-slider" min="0" max="3" step="1" value="0" 
+               class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-yellow-500">
+        <div class="flex justify-between text-[10px] font-mono text-gray-500">
+            <span>OFF</span>
+            <span>BAJA</span>
+            <span>MEDIA</span>
+            <span>ALTA</span>
+        </div>
+        <div id="sharpness-value" class="text-center text-[11px] font-bold text-yellow-400">DESACTIVADO</div>
+    </div>
+</div>
     </div>
 </div>
 
@@ -800,7 +832,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '4'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '6'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -984,6 +1016,7 @@ document.getElementById('connect-modal').addEventListener('show', preventAutoRel
     let scanInterval = null;
     let radarAngle = 0; // para el radar de visión IA
     let streamVideoTrack = null;
+    let currentSharpness = parseInt(localStorage.getItem('obr_sharpness') || '0');
 
     function updateTTSStatusUI() {
     const engineEl = document.getElementById('tts-engine-status');
@@ -2453,15 +2486,15 @@ window.addEventListener('resize', checkOrientation);
 window.addEventListener('orientationchange', checkOrientation);
 window.addEventListener('load', checkOrientation);
 
-// === FIX: Redimensionar correctamente al rotar ===
 function handleOrientationChange() {
     // Esperar a que el navegador termine de rotar
     setTimeout(() => {
-        fixCanvasSize();
-        resize();
+        resize();                         // Redimensionar canvas
         if (miniMapInstance) {
-            miniMapInstance.invalidateSize();
+            miniMapInstance.invalidateSize(); // Actualizar mapa
         }
+        applyPortraitStyles();            // Aplicar clases CSS (ya existe)
+        checkSmallScreen();               // Ajustar para pantallas muy pequeñas
         console.log('[ORIENTACIÓN] Ajustado a:', window.innerWidth, 'x', window.innerHeight);
     }, 300);
 }
@@ -2570,6 +2603,28 @@ setInterval(() => {
   }
 }, 120000); // Cada 2 minutos
 
+function applySharpness(level) {
+    const video = el.video;
+    if (!video) return;
+    
+    // Remover clases anteriores
+    video.classList.remove('filter-sharp-low', 'filter-sharp-medium', 'filter-sharp-high');
+    
+    // Aplicar nueva clase según nivel
+    if (level === 1) video.classList.add('filter-sharp-low');
+    else if (level === 2) video.classList.add('filter-sharp-medium');
+    else if (level === 3) video.classList.add('filter-sharp-high');
+    
+    // Actualizar texto
+    const labels = ['DESACTIVADO', 'BAJA', 'MEDIA', 'ALTA'];
+    const valueEl = document.getElementById('sharpness-value');
+    if (valueEl) valueEl.innerText = labels[level] || 'DESACTIVADO';
+    
+    // Guardar
+    localStorage.setItem('obr_sharpness', level);
+    currentSharpness = level;
+}
+
     window.onload = () => {
     // 1. Consultar créditos reales de ElevenLabs al iniciar (protegido)
     if (ELEVENLABS_API_KEY) {
@@ -2619,7 +2674,20 @@ setInterval(() => {
     
     // 6. Actualizar UI de TTS
     updateTTSStatusUI();
+
+    resize();
 };
+
+// Configurar slider de nitidez
+const sharpSlider = document.getElementById('sharpness-slider');
+if (sharpSlider) {
+    sharpSlider.value = currentSharpness;
+    sharpSlider.addEventListener('input', (e) => {
+        applySharpness(parseInt(e.target.value));
+    });
+    // Aplicar nivel guardado al iniciar
+    applySharpness(currentSharpness);
+}
 
     function showCamError(title, msg, steps) {
         const panel = document.getElementById('cam-error-panel'); 
@@ -3715,109 +3783,95 @@ function drawAudioVisualizer(c, w, h) {
 
 
 function drawLidarEffect(c, width, height, currentFrame) {
-  const maskToUse = lidarMask || lastLidarMask; 
-  
-  // 1. Decaimiento rápido si no hay máscara (los puntos desaparecen rápido al irse el objeto)
-  if (!maskToUse) {
-    for(let i = 0; i < lidarActivityGrid.length; i++) {
-      lidarActivityGrid[i] *= 0.70; // Decaimiento agresivo para limpiar la pantalla
-    }
-  } else {
-    // 2. Analizar la máscara en una cuadrícula de MUY baja resolución (24x18) para máximo rendimiento
-    lidarACtx.drawImage(maskToUse, 0, 0, 24, 18);
-    const px = lidarACtx.getImageData(0, 0, 24, 18).data;
+    const maskToUse = lidarMask || lastLidarMask;
     
-    const gridW = 24, gridH = 18;
-
+    // 🔒 CRÍTICO: Grid más pequeño para menos círculos (16x12 en lugar de 24x18)
+    const gridW = 16, gridH = 12;
+    
+    // 1. Decaimiento rápido si no hay máscara
+    if (!maskToUse) {
+        for(let i = 0; i < lidarActivityGrid.length; i++) {
+            lidarActivityGrid[i] *= 0.60; // 🔒 Más agresivo (era 0.70)
+        }
+    } else {
+        // 2. Analizar la máscara en grid de baja resolución
+        lidarACtx.drawImage(maskToUse, 0, 0, gridW, gridH);
+        const px = lidarACtx.getImageData(0, 0, gridW, gridH).data;
+        
+        for (let y = 0; y < gridH; y++) {
+            for (let x = 0; x < gridW; x++) {
+                const idx = (y * gridW + x) * 4 + 3;
+                const presence = px[idx] > 120 ? 1.0 : 0.0;
+                const gridIdx = y * gridW + x;
+                
+                if (presence) {
+                    lidarActivityGrid[gridIdx] = Math.min(1.0, lidarActivityGrid[gridIdx] + 0.35);
+                } else {
+                    lidarActivityGrid[gridIdx] *= 0.70; // 🔒 Más agresivo (era 0.80)
+                }
+            }
+        }
+    }
+    
+    // 3. Dibujar efecto LiDAR
+    lidarCtx.clearRect(0, 0, width, height);
+    lidarCtx.save();
+    const time = performance.now() * 0.002;
+    const cellW = width / gridW;
+    const cellH = height / gridH;
+    
     for (let y = 0; y < gridH; y++) {
-      for (let x = 0; x < gridW; x++) {
-        const idx = (y * gridW + x) * 4 + 3; // Canal Alpha
-        const presence = px[idx] > 120 ? 1.0 : 0.0; // Umbral un poco más alto para evitar ruido
-        const gridIdx = y * gridW + x;
-        
-        // Acumular actividad con decaimiento natural
-        if (presence) {
-          lidarActivityGrid[gridIdx] = Math.min(1.0, lidarActivityGrid[gridIdx] + 0.35);
-        } else {
-          lidarActivityGrid[gridIdx] *= 0.80; // Decaimiento rápido cuando el objeto se mueve o desaparece
+        for (let x = 0; x < gridW; x++) {
+            const activity = lidarActivityGrid[y * gridW + x];
+            //  Umbral más alto para menos círculos (0.25 en lugar de 0.15)
+            if (activity > 0.25) {
+                const cx = x * cellW + (cellW / 2);
+                const cy = y * cellH + (cellH / 2);
+                const pulse = (Math.sin(time + (x * 0.3) + (y * 0.3)) + 1) / 2;
+                const radius = (cellW * 0.6) * activity * (0.8 + pulse * 0.4);
+                const alpha = Math.min(0.85, activity * 1.2);
+                const lightness = 40 + (activity * 50);
+                
+                lidarCtx.beginPath();
+                lidarCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+                lidarCtx.fillStyle = `hsla(190, 100%, ${lightness}%, ${alpha})`;
+                
+                if (activity > 0.45) {
+                    lidarCtx.shadowBlur = radius * 1.5;
+                    lidarCtx.shadowColor = `hsla(190, 100%, 70%, ${alpha * 0.8})`;
+                } else {
+                    lidarCtx.shadowBlur = 0;
+                }
+                lidarCtx.fill();
+            }
         }
-      }
     }
-  }
-
-  // 3. Dibujar efecto LiDAR profesional
-  lidarCtx.clearRect(0, 0, width, height); // CRÍTICO: Limpiar frame anterior para evitar saturación visual
-  lidarCtx.save();
-  
-  const time = performance.now() * 0.002;
-  const gridW = 24, gridH = 18;
-  const cellW = width / gridW;
-  const cellH = height / gridH;
-
-  // Dibujar solo puntos con actividad significativa
-  for (let y = 0; y < gridH; y++) {
-    for (let x = 0; x < gridW; x++) {
-      const activity = lidarActivityGrid[y * gridW + x];
-      if (activity > 0.15) { // Umbral de visualización
-        const cx = x * cellW + (cellW / 2);
-        const cy = y * cellH + (cellH / 2);
-        
-        // Pulso suave orgánico
-        const pulse = (Math.sin(time + (x * 0.3) + (y * 0.3)) + 1) / 2;
-        const radius = (cellW * 0.6) * activity * (0.8 + pulse * 0.4);
-        
-        // Color profesional: Azul cian (baja actividad) a Blanco/Azul brillante (alta actividad)
-        const alpha = Math.min(0.85, activity * 1.2);
-        const lightness = 40 + (activity * 50);
-        
-        lidarCtx.beginPath();
-        lidarCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-        lidarCtx.fillStyle = `hsla(190, 100%, ${lightness}%, ${alpha})`;
-        
-        // Glow (shadowBlur) SOLO en puntos de alta actividad para ahorrar GPU masivamente
-        if (activity > 0.45) {
-          lidarCtx.shadowBlur = radius * 1.5;
-          lidarCtx.shadowColor = `hsla(190, 100%, 70%, ${alpha * 0.8})`;
-        } else {
-          lidarCtx.shadowBlur = 0;
-        }
-        lidarCtx.fill();
-      }
-    }
-  }
-  
-  // 4. Línea de escaneo (Scanline) profesional y realista (Barrido vertical de izquierda a derecha)
-  const scanX = (time * 250) % (width + 200) - 100;
-  
-  // Gradiente de la línea de barrido suave
-  const scanGrad = lidarCtx.createLinearGradient(scanX - 100, 0, scanX + 100, 0);
-  scanGrad.addColorStop(0, 'rgba(0, 255, 255, 0)');
-  scanGrad.addColorStop(0.4, 'rgba(0, 255, 255, 0.08)');
-  scanGrad.addColorStop(0.5, 'rgba(0, 255, 255, 0.5)'); // Línea central brillante
-  scanGrad.addColorStop(0.6, 'rgba(0, 255, 255, 0.08)');
-  scanGrad.addColorStop(1, 'rgba(0, 255, 255, 0)');
-  
-  lidarCtx.fillStyle = scanGrad;
-  lidarCtx.fillRect(scanX - 100, 0, 200, height);
-  
-  // Línea vertical delgada y nítida en el centro del barrido
-  lidarCtx.beginPath();
-  lidarCtx.moveTo(scanX, 0);
-  lidarCtx.lineTo(scanX, height);
-  lidarCtx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
-  lidarCtx.lineWidth = 2;
-  lidarCtx.shadowBlur = 15;
-  lidarCtx.shadowColor = 'rgba(0, 255, 255, 0.9)';
-  lidarCtx.stroke();
-
-  lidarCtx.restore();
-
-  // Aplicar al canvas principal
-  c.globalCompositeOperation = 'screen';
-  c.drawImage(el.lidarCanvas, 0, 0, width, height);
-  c.globalCompositeOperation = 'source-over';
-  
-  lastLidarMask = maskToUse;
+    
+    // 4. Línea de escaneo
+    const scanX = (time * 250) % (width + 200) - 100;
+    const scanGrad = lidarCtx.createLinearGradient(scanX - 100, 0, scanX + 100, 0);
+    scanGrad.addColorStop(0, 'rgba(0, 255, 255, 0)');
+    scanGrad.addColorStop(0.4, 'rgba(0, 255, 255, 0.08)');
+    scanGrad.addColorStop(0.5, 'rgba(0, 255, 255, 0.5)');
+    scanGrad.addColorStop(0.6, 'rgba(0, 255, 255, 0.08)');
+    scanGrad.addColorStop(1, 'rgba(0, 255, 255, 0)');
+    lidarCtx.fillStyle = scanGrad;
+    lidarCtx.fillRect(scanX - 100, 0, 200, height);
+    
+    lidarCtx.beginPath();
+    lidarCtx.moveTo(scanX, 0);
+    lidarCtx.lineTo(scanX, height);
+    lidarCtx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
+    lidarCtx.lineWidth = 2;
+    lidarCtx.shadowBlur = 15;
+    lidarCtx.shadowColor = 'rgba(0, 255, 255, 0.9)';
+    lidarCtx.stroke();
+    lidarCtx.restore();
+    
+    c.globalCompositeOperation = 'screen';
+    c.drawImage(el.lidarCanvas, 0, 0, width, height);
+    c.globalCompositeOperation = 'source-over';
+    lastLidarMask = maskToUse;
 }
 
     function initScanlines(w, h) {
@@ -3828,46 +3882,45 @@ function drawLidarEffect(c, width, height, currentFrame) {
     }
 
     function resize() {
-    // Mantener siempre 1920x1080 para que las coordenadas del canvas no se rompan
-    const w = 1920;
-    const h = 1080;
-    
+    // Obtener dimensiones reales de la ventana
+    const w = window.innerWidth;
+    const h = window.innerHeight;
     el.canvas.width = w;
     el.canvas.height = h;
     el.lidarCanvas.width = w;
     el.lidarCanvas.height = h;
     el.audioCanvas.width = w;
     el.audioCanvas.height = h;
-    
+    // Resetear caché de coordenadas para forzar recálculo en renderLoop
     lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
 }
 
-function fixCanvasSize() {
+//function fixCanvasSize() {
     // 🔒 Declaración explícita de vW y vH para evitar "is not defined"
-    const vW = el.video.videoWidth || 1920;
-    const vH = el.video.videoHeight || 1080;
+  //  const vW = el.video.videoWidth || 1920;
+    //const vH = el.video.videoHeight || 1080;
     
     // 🔒 CRÍTICO: Redimensionar TODOS los canvas
-    el.canvas.width = vW;
-    el.canvas.height = vH;
-    el.lidarCanvas.width = vW;
-    el.lidarCanvas.height = vH;
-    el.audioCanvas.width = vW;
-    el.audioCanvas.height = vH;
+    //el.canvas.width = vW;
+    //el.canvas.height = vH;
+    //el.lidarCanvas.width = vW;
+    //el.lidarCanvas.height = vH;
+    //el.audioCanvas.width = vW;
+    //el.audioCanvas.height = vH;
     
     // Ajustar CSS para que llenen la pantalla
-    el.canvas.style.width = "100vw";
-    el.canvas.style.height = "100vh";
-    el.lidarCanvas.style.width = "100vw";
-    el.lidarCanvas.style.height = "100vh";
-    el.audioCanvas.style.width = "100vw";
-    el.audioCanvas.style.height = "100vh";
+    //el.canvas.style.width = "100vw";
+    //el.canvas.style.height = "100vh";
+    //el.lidarCanvas.style.width = "100vw";
+    //el.lidarCanvas.style.height = "100vh";
+    //el.audioCanvas.style.width = "100vw";
+    //el.audioCanvas.style.height = "100vh";
     
     // Forzar recálculo
-    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
-}
+    //lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+//}
 
-window.addEventListener("resize", fixCanvasSize);
+//window.addEventListener("resize", fixCanvasSize);
 
 function drawFallbackSilhouette() { 
     audioLayerCtx.globalAlpha = 0.12; 
@@ -3882,62 +3935,57 @@ function updateProgress(p, t) {
 }
 
 function drawBurnInHUD(ctx, width, height, scale) {
-    if(scale <= 0.01) return;
+    if (scale <= 0.01) return;
     
-    // 🔒 DETECTAR ORIENTACIÓN
     const isPortrait = window.innerHeight > window.innerWidth;
     
-    // 🔒 AJUSTES PARA VERTICAL
-    const HUD_TAMANO = isPortrait ? 0.9 : 1.35;
-    const HUD_IZQUIERDA = isPortrait ? 20 : 50;
-    const HUD_ARRIBA = isPortrait ? 20 : 50;
+    // Factores de escala para reducciones
+    const verticalYFactor = 0.864;   // Sube un 10% en vertical (0.96 * 0.9)
+    const horizontalSizeFactor = 0.95; // Reduce 5% en horizontal
+    
+    // Configuración adaptativa
+    const config = {
+        logoX: isPortrait ? width * 0.03 : 20 * horizontalSizeFactor,
+        logoY: isPortrait ? height * 0.03 * verticalYFactor : 20 * horizontalSizeFactor,
+        logoSize: isPortrait ? Math.min(width * 0.10, 70) : Math.min(width * 0.03, 50) * horizontalSizeFactor,
+        titleSize: isPortrait ? Math.min(width * 0.025, 24) : Math.min(width * 0.012, 18) * horizontalSizeFactor,
+        titleY: isPortrait ? 40 * verticalYFactor : 20 * horizontalSizeFactor,
+        clockSize: isPortrait ? Math.min(width * 0.02, 20) : Math.min(width * 0.01, 16) * horizontalSizeFactor,
+        clockY: isPortrait ? (78 * verticalYFactor) - 18 : 45 * horizontalSizeFactor,
+        titleOffset: isPortrait ? 15 : 10 * horizontalSizeFactor,
+        shadowBlur: isPortrait ? 6 : 4
+    };
     
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, scale));
-    ctx.translate(HUD_IZQUIERDA, HUD_ARRIBA);
-    ctx.scale(HUD_TAMANO, HUD_TAMANO);
     ctx.shadowColor = "black";
-    ctx.shadowBlur = 4;
-    
-    // 🔒 CRÍTICO: Verificar que el logo esté cargado antes de dibujar
-    if(logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-        // 🔒 Logo más pequeño en vertical
-        const logoSize = isPortrait ? 50 : 80;
-        ctx.drawImage(logoImg, 0, 0, logoSize, logoSize);
-        
-        // Debug: dibujar un borde rojo si el logo falla
-        if (logoImg.naturalWidth === 0) {
-            ctx.strokeStyle = "red";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(0, 0, logoSize, logoSize);
-        }
-    } else {
-        // 🔒 Si el logo no está cargado, dibujar un placeholder
-        ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-        ctx.fillRect(0, 0, 50, 50);
-        ctx.fillStyle = "white";
-        ctx.font = "10px monospace";
-        ctx.fillText("LOGO", 10, 30);
+    ctx.shadowBlur = config.shadowBlur;
+
+    if (logoImg.complete && logoImg.naturalWidth > 0) {
+        ctx.drawImage(logoImg, config.logoX, config.logoY, config.logoSize, config.logoSize);
     }
-    
+
     ctx.fillStyle = "white";
-    ctx.font = `bold ${isPortrait ? 12 : 16}px 'Orbitron', sans-serif`;
-    ctx.fillText("EXPLORACIONES OBR", 60, 25);
-    
+    ctx.font = `bold ${config.titleSize}px 'Orbitron', sans-serif`;
+    ctx.fillText("EXPLORACIONES OBR", config.logoX + config.logoSize + config.titleOffset, config.logoY + config.titleY);
+
     if (DOM_CACHE && DOM_CACHE.clock) {
         ctx.fillStyle = "#ff3333";
-        ctx.font = `${isPortrait ? 12 : 16}px 'Share Tech Mono', monospace`;
-        ctx.fillText(DOM_CACHE.clock.innerText, 60, 42);
+        ctx.font = `${isPortrait ? 'bold ' : ''}${config.clockSize}px 'Share Tech Mono', monospace`;
+        if (isPortrait) {
+            ctx.shadowColor = "rgba(0,0,0,0.9)";
+            ctx.shadowBlur = 8;
+        }
+        ctx.fillText(DOM_CACHE.clock.innerText, config.logoX + config.logoSize + config.titleOffset, config.logoY + config.clockY);
     }
-    
     ctx.restore();
-    
-    // Indicador SLS ACTIVO (solo en horizontal)
-    if(state.isSLS && !isPortrait) {
+
+    // Indicador SLS (solo horizontal)
+    if (state.isSLS && !isPortrait) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, scale));
         ctx.translate(width / 2, 80);
-        ctx.scale(HUD_TAMANO * 1.3, HUD_TAMANO * 1.3);
+        ctx.scale(1.3, 1.3);
         const bx = -40, by = 0;
         ctx.fillStyle = "rgba(0,0,0,0.6)";
         ctx.fillRect(bx, by, 80, 20);
@@ -3983,32 +4031,35 @@ function drawCanvasScanBoxes(c, w, h) {
 }
 
 function drawAIBurnIn(c, w, h, scale) {
-    if(scale <= 0.01) return;
-    
-    // 🔒 DETECTAR ORIENTACIÓN
+    if (scale <= 0.01) return;
     const isPortrait = window.innerHeight > window.innerWidth;
-    
     c.save();
     const smoothScale = 1 - Math.pow(1 - scale, 3);
     c.globalAlpha = Math.max(0, Math.min(1, scale * 1.5));
+
+    // Factores de reducción
+    const verticalFactor = 0.9;    // Reduce 10% en vertical
+    const horizontalFactor = 0.63; // 0.7 (reducción previa) * 0.9 (10% adicional) = 0.63
     
-    // 🔒 AJUSTES VERTICALES: Panel más pequeño
-    const bx = 10, by = 10;
-    const panelW = isPortrait ? 200 : 320; // 🔒 Reducido de 280 a 200
-    let displayTxt = currentAiText, isScanning = !(currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0);
+    const margin = Math.min(w, h) * 0.025;
     
-    if (isScanning && !displayTxt) {
-        aiScannerTimer++;
-        if(aiScannerTimer > 150) { aiScannerState = (aiScannerState + 1) % 3; aiScannerTimer = 0; }
-        if(aiScannerState === 0) displayTxt = "Analizando Entorno...";
-        else if(aiScannerState === 1) displayTxt = `raw data: 0x${Math.floor(Math.random()*16777215).toString(16)}`;
-        else if(aiScannerState === 2) displayTxt = "sensores:\nlidar: on\ntemp: 14c\nprox: 98%";
-    }
-    
+    // Tamaños del panel
+    const panelW = isPortrait ? w * 0.45 * verticalFactor : 320 * horizontalFactor;
+    const imgH = isPortrait ? h * 0.30 * verticalFactor : 240 * horizontalFactor;
+    const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFactor;
+    const finalImgH = Math.min(imgH, maxPanelH);
+    const finalPanelW = Math.min(panelW, w * 0.60);
+
+    const bx = margin;
+    const by = margin;
+    const panelW_ = finalPanelW;
+    const imgH_ = finalImgH;
+
+    let displayTxt = currentAiText;
+    let isScanning = !(currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0);
+
     let borderColor = isScanning ? "#ff0000" : "#ff3333";
     let bgColor = isScanning ? "rgba(0,0,0,0)" : "rgba(10, 0, 0, 0.90)";
-    let imgH = isScanning ? (isPortrait ? 80 : 150) : (isPortrait ? 120 : 240); // 🔒 Reducido
-    
     if (!isScanning) {
         if (CURRENT_AI_PROVIDER === 'groq') {
             borderColor = "#ff8c00";
@@ -4018,85 +4069,158 @@ function drawAIBurnIn(c, w, h, scale) {
             bgColor = "rgba(0, 10, 20, 0.90)";
         }
     }
-    
-    const centerX = bx + panelW/2, centerY = by + imgH/2 + 20;
-    c.translate(centerX, centerY);
-    c.scale(smoothScale, smoothScale);
-    c.translate(-centerX, -centerY);
-    
+
+    // --- Fondo y borde (solo cuando hay imagen) ---
     if (!isScanning) {
-        let txtH = currentAiText ? Math.ceil(currentAiText.length / 25) * 14 + 15 : 30; // 🔒 Reducido
-        const totalH = imgH + txtH;
+        // En vertical no hay texto, por lo que el fondo solo cubre la imagen
+        // En horizontal, el fondo cubre imagen + texto
+        let totalH = imgH_;
+        if (!isPortrait) {
+            // En horizontal, reservamos espacio para el texto
+            const txtLines = currentAiText ? Math.ceil(currentAiText.length / 25) : 0;
+            const txtH = txtLines * 12 + 10;
+            totalH = imgH_ + txtH;
+        }
         c.fillStyle = bgColor;
-        c.fillRect(bx, by, panelW, totalH);
+        c.fillRect(bx, by, panelW_, totalH);
         c.fillStyle = borderColor;
         c.fillRect(bx, by, 4, totalH);
     }
-    
-    if(imgH > 0) {
-        if (isScanning) {
+
+    // --- MODO ESCANEO (radar) ---
+    if (isScanning) {
+        const radarScale = isPortrait ? 0.8 : 1.0;
+        const radarRadiusBase = Math.min(panelW_ * 0.25, 60) * radarScale;
+        const radarCx = bx + radarRadiusBase + 15;
+        const radarCy = by + radarRadiusBase + 15;
+        c.save();
+        c.translate(radarCx, radarCy);
+        // Círculos concéntricos
+        c.strokeStyle = "rgba(0, 255, 100, 0.15)";
+        c.lineWidth = 1;
+        for (let r = 10; r <= radarRadiusBase; r += 10) {
+            c.beginPath();
+            c.arc(0, 0, r, 0, Math.PI * 2);
+            c.stroke();
+        }
+        c.beginPath();
+        c.moveTo(-radarRadiusBase, 0);
+        c.lineTo(radarRadiusBase, 0);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(0, -radarRadiusBase);
+        c.lineTo(0, radarRadiusBase);
+        c.stroke();
+        // Barrido
+        const pulse = (Math.sin(performance.now() * 0.003) + 1) / 2;
+        const currentRadius = radarRadiusBase * (0.6 + pulse * 0.4);
+        radarAngle += 0.04;
+        c.rotate(radarAngle);
+        const drawBlade = (angleOffset) => {
             c.save();
-            const radarRadiusBase = isPortrait ? 30 : 50; // 🔒 Reducido
-            const radarCx = bx + radarRadiusBase + 10, radarCy = by + radarRadiusBase + 10;
-            c.translate(radarCx, radarCy);
-            c.strokeStyle = "rgba(0, 255, 100, 0.15)"; c.lineWidth = 1;
-            for(let r=10; r<=radarRadiusBase; r+=10) { c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.stroke(); }
-            c.beginPath(); c.moveTo(-radarRadiusBase, 0); c.lineTo(radarRadiusBase, 0); c.stroke();
-            c.beginPath(); c.moveTo(0, -radarRadiusBase); c.lineTo(0, radarRadiusBase); c.stroke();
-            const pulse = (Math.sin(performance.now() * 0.003) + 1) / 2, currentRadius = radarRadiusBase * (0.6 + (pulse * 0.4));
-            radarAngle += 0.04; c.rotate(radarAngle);
-            const drawBlade = (angleOffset) => {
-                c.save(); c.rotate(angleOffset); c.beginPath(); c.moveTo(0,0);
-                c.arc(0, 0, currentRadius, -0.4, 0.4); c.lineTo(0,0);
-                const grad = c.createRadialGradient(0, 0, 0, 0, 0, currentRadius);
-                grad.addColorStop(0, "rgba(0,0,0,0)");
-                if (pulse > 0.7) { grad.addColorStop(0.5, "rgba(255, 100, 0, 0.3)"); grad.addColorStop(1, "rgba(255, 0, 0, 0.6)"); }
-                else { grad.addColorStop(0.5, "rgba(0, 150, 0, 0.3)"); grad.addColorStop(1, "rgba(200, 200, 0, 0.5)"); }
-                c.fillStyle = grad; c.fill(); c.restore();
-            };
-            drawBlade(0); drawBlade(Math.PI); c.restore();
-            const txtX = radarCx + radarRadiusBase + 15, txtY = radarCy;
-            if (displayTxt.includes('\n')) { const lines = displayTxt.split('\n'); let lineY = txtY - 15; lines.forEach((l, idx) => { drawGlitchText(c, l.toLowerCase(), txtX, lineY + (idx*12), 9); }); } // 🔒 Texto más pequeño
-            else { drawGlitchText(c, displayTxt.toLowerCase(), txtX, txtY + 5, 10); } // 🔒 Texto más pequeño
-        } else {
-            c.save();
-            try {
-                if (!currentAiImgEl || !currentAiImgEl.complete || currentAiImgEl.naturalWidth === 0) {
-                    throw new Error("Imagen invalida en buffer");
-                }
-                if (!window._aiImageCache || window._lastAiImageSrc !== currentAiImgEl.src) {
-                    const tmpC = document.createElement('canvas');
-                    tmpC.width = panelW; tmpC.height = imgH;
-                    const tmpCtx = tmpC.getContext('2d');
-                    let sW = currentAiImgEl.naturalWidth, sH = currentAiImgEl.naturalHeight;
-                    let ratio = Math.max(panelW / sW, imgH / sH);
-                    let cW = panelW / ratio, cH = imgH / ratio;
-                    let cx = (sW - cW) / 2, cy = (sH - cH) / 2;
-                    tmpCtx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
-                    tmpCtx.drawImage(currentAiImgEl, cx, cy, cW, cH, 0, 0, panelW, imgH);
-                    tmpCtx.filter = 'none';
-                    window._aiImageCache = tmpC;
-                    window._lastAiImageSrc = currentAiImgEl.src;
-                }
-                c.drawImage(window._aiImageCache, bx, by, panelW, imgH);
-            } catch(e) {
-                if (currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0) {
-                    try { c.drawImage(currentAiImgEl, bx, by, panelW, imgH); } catch(err){}
-                }
+            c.rotate(angleOffset);
+            c.beginPath();
+            c.moveTo(0, 0);
+            c.arc(0, 0, currentRadius, -0.4, 0.4);
+            c.lineTo(0, 0);
+            const grad = c.createRadialGradient(0, 0, 0, 0, 0, currentRadius);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            if (pulse > 0.7) {
+                grad.addColorStop(0.5, "rgba(255, 100, 0, 0.3)");
+                grad.addColorStop(1, "rgba(255, 0, 0, 0.6)");
+            } else {
+                grad.addColorStop(0.5, "rgba(0, 150, 0, 0.3)");
+                grad.addColorStop(1, "rgba(200, 200, 0, 0.5)");
             }
+            c.fillStyle = grad;
+            c.fill();
             c.restore();
-            c.strokeStyle = borderColor; c.lineWidth = 1; c.strokeRect(bx, by, panelW, imgH);
-            if (currentAiText) {
-                c.fillStyle = "rgba(0,0,0,0.85)";
-                let txtH = Math.ceil(currentAiText.length / 25) * 14 + 10; // 🔒 Reducido
-                c.fillRect(bx + 4, by + imgH, panelW - 4, txtH);
-                c.fillStyle = "#ffffff"; c.font = "bold 11px 'Share Tech Mono'"; // 🔒 Texto más pequeño
-                c.shadowColor = "#ff0000"; c.shadowBlur = 6;
-                let line = ''; let ly = by + imgH + 14; const resWords = currentAiText.split(' ');
-                for(let n = 0; n < resWords.length; n++) { let testLine = line + resWords[n] + ' '; if (c.measureText(testLine).width > (panelW - 15) && n > 0) { c.fillText(line.toLowerCase(), bx + 8, ly); line = resWords[n] + ' '; ly += 14; } else { line = testLine; } }
-                c.fillText(line.toLowerCase(), bx + 8, ly);
-                c.shadowBlur = 0;
+        };
+        drawBlade(0);
+        drawBlade(Math.PI);
+        c.restore();
+        // Texto de escaneo (se mantiene en ambas orientaciones)
+        const txtX = radarCx + radarRadiusBase + 20;
+        const txtY = radarCy;
+        if (displayTxt && displayTxt.includes('\n')) {
+            const lines = displayTxt.split('\n');
+            let lineY = txtY - 15;
+            lines.forEach((l, idx) => {
+                drawGlitchText(c, l.toLowerCase(), txtX, lineY + (idx * 12), 9);
+            });
+        } else if (displayTxt) {
+            drawGlitchText(c, displayTxt.toLowerCase(), txtX, txtY + 5, 10);
+        }
+        c.restore();
+        return;
+    }
+
+    // --- MODO RESPUESTA (imagen + texto solo en horizontal) ---
+    if (!isScanning) {
+        c.save();
+        try {
+            if (!currentAiImgEl || !currentAiImgEl.complete || currentAiImgEl.naturalWidth === 0) {
+                throw new Error("Imagen inválida");
             }
+            if (!window._aiImageCache || window._lastAiImageSrc !== currentAiImgEl.src) {
+                const tmpC = document.createElement('canvas');
+                tmpC.width = panelW_;
+                tmpC.height = imgH_;
+                const tmpCtx = tmpC.getContext('2d');
+                let sW = currentAiImgEl.naturalWidth;
+                let sH = currentAiImgEl.naturalHeight;
+                let ratio = Math.max(panelW_ / sW, imgH_ / sH);
+                let cW = panelW_ / ratio;
+                let cH = imgH_ / ratio;
+                let cx = (sW - cW) / 2;
+                let cy = (sH - cH) / 2;
+                tmpCtx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
+                tmpCtx.drawImage(currentAiImgEl, cx, cy, cW, cH, 0, 0, panelW_, imgH_);
+                tmpCtx.filter = 'none';
+                window._aiImageCache = tmpC;
+                window._lastAiImageSrc = currentAiImgEl.src;
+            }
+            c.drawImage(window._aiImageCache, bx, by, panelW_, imgH_);
+        } catch (e) {
+            if (currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0) {
+                c.drawImage(currentAiImgEl, bx, by, panelW_, imgH_);
+            }
+        }
+        c.restore();
+
+        // Borde
+        c.strokeStyle = borderColor;
+        c.lineWidth = 1;
+        c.strokeRect(bx, by, panelW_, imgH_);
+
+        // === TEXTO SOLO EN HORIZONTAL ===
+        if (!isPortrait && currentAiText) {
+            c.save();
+            c.fillStyle = "rgba(0,0,0,0.85)";
+            let txtH = Math.ceil(currentAiText.length / 25) * 12 + 10;
+            c.fillRect(bx + 4, by + imgH_, panelW_ - 4, txtH);
+            
+            c.fillStyle = "#ffffff";
+            c.font = "bold 10px 'Share Tech Mono'";
+            c.shadowColor = "#ff0000";
+            c.shadowBlur = 6;
+            
+            let line = '';
+            let ly = by + imgH_ + 12;
+            const resWords = currentAiText.split(' ');
+            for (let n = 0; n < resWords.length; n++) {
+                let testLine = line + resWords[n] + ' ';
+                if (c.measureText(testLine).width > (panelW_ - 15) && n > 0) {
+                    c.fillText(line.toLowerCase(), bx + 8, ly);
+                    line = resWords[n] + ' ';
+                    ly += 12;
+                } else {
+                    line = testLine;
+                }
+            }
+            c.fillText(line.toLowerCase(), bx + 8, ly);
+            c.shadowBlur = 0;
+            c.restore();
         }
     }
     c.restore();
@@ -4254,10 +4378,10 @@ function drawAIBurnIn(c, w, h, scale) {
             }
         }
         
-        const speed = 0.4; animState.hudScale += (animState.hudTarget - animState.hudScale) * speed; animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
+        const speed = 0.25; animState.hudScale += (animState.hudTarget - animState.hudScale) * speed; animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
         drawBurnInHUD(audioLayerCtx, cW, cH, animState.hudScale); 
         
-        if (state.isPareidolia) { drawCanvasScanBoxes(audioLayerCtx, cW, cH); } 
+         
         
         if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) { drawAIBurnIn(audioLayerCtx, cW, cH, animState.aiScale); } 
         
@@ -5452,6 +5576,11 @@ return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
         if (rawIp) { state.studioId = rawIp; localStorage.setItem('obr_studio_id', state.studioId); } 
         const camN = document.getElementById('stream-name').value.trim();
         if (camN) { state.cameraName = camN; localStorage.setItem('obr_camera_name', state.cameraName); }
+        // Guardar nitidez
+const sharpSlider = document.getElementById('sharpness-slider');
+if (sharpSlider) {
+    localStorage.setItem('obr_sharpness', sharpSlider.value);
+}
         
         saveTTSFilters(); 
         initRemoteMicReceiverAgora();
@@ -5657,6 +5786,24 @@ window.addEventListener('orientationchange', () => {
         console.log('[ORIENTACIÓN] Cambio detectado:', window.innerWidth, 'x', window.innerHeight);
     }, 300);
 });
+
+// 🔒 DETECCIÓN DE TAMAÑO DE PANTALLA PEQUEÑA
+function checkSmallScreen() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const isSmallPortrait = (w < 450 && h > w);
+    
+    if (isSmallPortrait) {
+        document.documentElement.classList.add('small-screen-portrait');
+        console.log('[PANTALLA] Modo pequeño detectado:', w, 'x', h);
+    } else {
+        document.documentElement.classList.remove('small-screen-portrait');
+    }
+}
+
+// Llamar al iniciar y en resize
+window.addEventListener('load', checkSmallScreen);
+window.addEventListener('resize', checkSmallScreen);
 </script>
 </body>
 </html>
