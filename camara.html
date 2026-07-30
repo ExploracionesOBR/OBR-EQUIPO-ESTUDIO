@@ -832,7 +832,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 
 <!-- ✅ NUEVO: Contenedor raíz para captura/grabación -->
 <!-- Contiene TODO lo que el usuario ve, EXCEPTO la capa de gestos -->
-<div id="capture-root">
+<div id="capture-root" style="position:relative; width:100vw; height:100vh; overflow:hidden;">
     <div id="main-view-area">
         <div id="zoom-container">
             <video id="shared-video-element" autoplay playsinline muted></video>
@@ -922,7 +922,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 <!-- ✅ FIN de #capture-root -->
 
 <!-- ⚠️ FUERA de #capture-root: Capa de gestos (transparente, no interfiere con grabación) -->
-<div id="touch-surface" class="absolute inset-0 z-10 interactive"></div>
+<div id="touch-surface" class="absolute inset-0 z-10 interactive" style="display:none;"></div>
 
 
 
@@ -1194,7 +1194,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '6'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '3'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -3343,11 +3343,14 @@ const constraintSets = [
         
         initDOMCache();
         if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
-        setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
+setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
+initRTM();
+initRemoteMicReceiverAgora();
 
-        initRTM();
-        initRemoteMicReceiverAgora();
-    }, 800);
+// ✅ Mostrar touch-surface solo cuando la cámara esté lista
+document.getElementById('touch-surface').style.display = 'block';
+
+}, 800);
 }
     
     async function detectionLoop() {
@@ -6075,7 +6078,6 @@ async function refreshTTSCredits() {
     window.stopRemoteMic = stopRemoteMicAgora;
     window.toggleLocalMic = toggleLocalMic;
 
-
 // ==========================================================
 //  GESTOS UNIFICADOS: LÍNEA = 📸 (Captura) | "V" = 📽️ (Grabación)
 //  + CAPTURA SOLO DEL CONTENIDO INTERNO (EXCLUYE BOTONES)
@@ -6083,7 +6085,7 @@ async function refreshTTSCredits() {
 //  + DETECCIÓN ROBUSTA PARA USO EN MOVIMIENTO
 // ==========================================================
 
-// ---- 0. INYECCIÓN DE CSS PARA OCULTAR SOLO LOS BOTONES DURANTE CAPTURA/GRABACIÓN ----
+// ---- 0. CSS PARA OCULTAR BOTONES DURANTE CAPTURA/GRABACIÓN ----
 if (!document.getElementById('capture-hide-style')) {
   const style = document.createElement('style');
   style.id = 'capture-hide-style';
@@ -6098,7 +6100,6 @@ if (!document.getElementById('capture-hide-style')) {
       opacity: 0 !important;
       pointer-events: none !important;
     }
-    /* CRÍTICO: La superficie táctil DEBE seguir visible y activa para detectar el gesto "V" y detener la grabación */
     .capture-ui-hidden #touch-surface {
       display: block !important;
       pointer-events: auto !important;
@@ -6118,6 +6119,7 @@ let recordStartTime = 0;
 let timerInterval = null;
 let recordAudioCtx = null;
 let recordMicStream = null;
+let isGestureActive = false;
 
 // ---- ELEMENTOS UI ----
 const gearIcon = document.getElementById('settings-gear-icon');
@@ -6130,8 +6132,9 @@ if (!statusTimer) {
   gearIcon.parentNode.appendChild(statusTimer);
 }
 
-// ---- INDICADORES CON EMOJIS ----
+// ---- INDICADORES CON EMOJIS (PROTEGIDOS) ----
 function setStatusIcon(emoji, timerText = null) {
+  isGestureActive = true;
   gearIcon.className = 'text-3xl transition-all';
   gearIcon.textContent = emoji;
   gearIcon.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.6))';
@@ -6148,6 +6151,7 @@ function setStatusIcon(emoji, timerText = null) {
 }
 
 function restoreGear() {
+  isGestureActive = false;
   gearIcon.className = 'fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform';
   gearIcon.textContent = '';
   gearIcon.style.filter = '';
@@ -6156,37 +6160,45 @@ function restoreGear() {
   gearIcon.onclick = openSettings;
 }
 
-// ---- CAPTURA 📸 (Descarga silenciosa SOLO del contenido interno, SIN botones) ----
+//  Proteger updateSettingsIndicator
+const _originalUpdateSettings = window.updateSettingsIndicator;
+window.updateSettingsIndicator = function() {
+  if (isGestureActive) return;
+  if (_originalUpdateSettings) _originalUpdateSettings();
+};
+
+// ---- CAPTURA  (LÍNEA) ----
 async function takeScreenshot() {
   if (isCapturing) return;
   isCapturing = true;
-
   setStatusIcon('📸');
 
   try {
-    // ✅ CAPTURAMOS SOLO #capture-root (todo lo que el usuario ve, SIN los botones del menú)
+    // ✅ Capturar SOLO #capture-root (contenido sin botones)
     const target = document.getElementById('capture-root');
     if (!target) {
-      console.error('[CAPTURE] capture-root no encontrado. Usando body como fallback.');
-      throw new Error('capture-root no encontrado. Revisa el HTML.');
+      console.error('[CAPTURE] capture-root no encontrado');
+      return;
     }
 
     const canvas = await html2canvas(target, {
       useCORS: true,
       allowTaint: true,
-      scale: 2, // Mejor calidad
+      scale: 2,
       backgroundColor: '#000',
-      logging: false
+      logging: false,
+      width: target.offsetWidth,
+      height: target.offsetHeight
     });
 
-    // Flash visual (feedback sutil)
+    // Flash visual
     const flash = document.createElement('div');
     flash.style.cssText = 'position:fixed;inset:0;background:white;opacity:0.25;pointer-events:none;z-index:9999;transition:opacity 0.3s;';
     document.body.appendChild(flash);
     setTimeout(() => { flash.style.opacity = '0'; }, 50);
     setTimeout(() => flash.remove(), 400);
 
-    // Descarga automática silenciosa
+    // Descarga automática
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -6202,19 +6214,17 @@ async function takeScreenshot() {
     }, 'image/png');
 
     if (navigator.vibrate) navigator.vibrate(30);
-
   } catch (err) {
     console.error('[CAPTURE] Error:', err);
   }
 
-  // Restaurar engranaje después de 1.8s
   setTimeout(() => {
     restoreGear();
     isCapturing = false;
   }, 1800);
 }
 
-// ---- GRABACIÓN 📽️ (Mezcla de audio + Captura SOLO del contenido interno) ----
+// ---- GRABACIÓN 📽️ (V) ----
 async function toggleRecording() {
   if (isRecording) {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -6226,11 +6236,11 @@ async function toggleRecording() {
   let displayStream = null;
 
   try {
-    // ✅ 1. Ocultar SOLO los botones/controles ANTES de iniciar la grabación
+    // ✅ Ocultar botones ANTES de iniciar grabación
     document.body.classList.add('capture-ui-hidden');
-    await new Promise(r => setTimeout(r, 100)); // Esperar a que el DOM se actualice
+    await new Promise(r => setTimeout(r, 100));
 
-    // ✅ 2. Obtener video de la pestaña (capturará TODO lo visible, pero los botones ya están ocultos)
+    // ✅ Capturar pestaña (los botones ya están ocultos)
     displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: { displaySurface: 'browser', frameRate: 30 },
       audio: true,
@@ -6238,17 +6248,17 @@ async function toggleRecording() {
       selfBrowserSurface: 'include'
     });
 
-    // ✅ 3. Obtener audio del MICRÓFONO
+    // ✅ Obtener audio del MICRÓFONO
     recordMicStream = null;
     try {
       recordMicStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
       });
     } catch (micErr) {
-      console.warn('[RECORD] Micrófono no disponible, grabando solo video+audio sistema');
+      console.warn('[RECORD] Micrófono no disponible');
     }
 
-    // ✅ 4. MEZCLAR audio (sistema + micrófono) usando AudioContext
+    // ✅ MEZCLAR audio (sistema + micrófono)
     let finalStream;
     if (recordMicStream) {
       recordAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -6275,7 +6285,7 @@ async function toggleRecording() {
       finalStream = displayStream;
     }
 
-    // ✅ 5. Configurar MediaRecorder
+    // ✅ Configurar MediaRecorder
     const mimeTypes = [
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
@@ -6286,7 +6296,7 @@ async function toggleRecording() {
 
     mediaRecorder = new MediaRecorder(finalStream, {
       mimeType,
-      videoBitsPerSecond: 4000000 // 4 Mbps para buena calidad
+      videoBitsPerSecond: 4000000
     });
 
     recordedChunks = [];
@@ -6295,7 +6305,7 @@ async function toggleRecording() {
     };
 
     mediaRecorder.onstop = () => {
-      // Descargar automáticamente SIN diálogo
+      // Descargar automáticamente
       const blob = new Blob(recordedChunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -6307,7 +6317,6 @@ async function toggleRecording() {
       link.click();
       document.body.removeChild(link);
 
-      // Limpieza de recursos
       setTimeout(() => URL.revokeObjectURL(url), 2000);
       displayStream.getTracks().forEach(t => t.stop());
       if (recordMicStream) recordMicStream.getTracks().forEach(t => t.stop());
@@ -6315,23 +6324,21 @@ async function toggleRecording() {
         recordAudioCtx.close().catch(() => {});
       }
 
-      // ✅ 6. Restaurar UI al detener
+      // ✅ Restaurar UI
       document.body.classList.remove('capture-ui-hidden');
-
       isRecording = false;
       clearInterval(timerInterval);
       restoreGear();
       if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
     };
 
-    // ✅ 7. Iniciar grabación
+    // ✅ Iniciar grabación
     mediaRecorder.start(1000);
     isRecording = true;
     recordStartTime = Date.now();
     setStatusIcon('📽️', '00:00');
     if (navigator.vibrate) navigator.vibrate(50);
 
-    // Temporizador debajo del emoji
     timerInterval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
       const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
@@ -6339,14 +6346,12 @@ async function toggleRecording() {
       statusTimer.textContent = `● ${m}:${s}`;
     }, 1000);
 
-    // Si el usuario cierra la pestaña de compartir, detener automáticamente
     displayStream.getVideoTracks()[0].onended = () => {
       if (isRecording) toggleRecording();
     };
 
   } catch (err) {
     console.error('[RECORD] Error:', err);
-    // ✅ Asegurar que la UI se restaura incluso si hay error o cancelación
     document.body.classList.remove('capture-ui-hidden');
     if (displayStream) {
       displayStream.getTracks().forEach(t => t.stop());
@@ -6355,13 +6360,7 @@ async function toggleRecording() {
   }
 }
 
-// ==========================================================
-//  ALGORITMO DE DETECCIÓN: LÍNEA vs V
-//  - LÍNEA: alta linealidad, sin vértices
-//  - V: exactamente 1 vértice con ángulo agudo (< 150°)
-// ==========================================================
-
-// ---- Douglas-Peucker (simplifica el trazo eliminando ruido) ----
+// ---- ALGORITMO DE DETECCIÓN: LÍNEA vs V ----
 function perpendicularDistance(point, lineStart, lineEnd) {
   let dx = lineEnd.x - lineStart.x, dy = lineEnd.y - lineStart.y;
   let mag = Math.hypot(dx, dy);
@@ -6388,10 +6387,9 @@ function simplifyPath(points, tolerance) {
   return [start, end];
 }
 
-// ---- Función principal de análisis ----
 function analyzeGesture(points) {
-  // 🔒 MÍNIMO DE PUNTOS: un trazo rápido genera ~30 puntos
-  if (points.length < 25) return null;
+  // 🔒 MÍNIMO DE PUNTOS
+  if (points.length < 20) return null;
 
   // 1. LONGITUD TOTAL DEL TRAZO
   let totalLength = 0;
@@ -6399,8 +6397,8 @@ function analyzeGesture(points) {
     totalLength += Math.hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y);
   }
 
-  // 🔒 MÍNIMO DE LONGITUD: 150px (evita toques accidentales)
-  if (totalLength < 150) return null;
+  // 🔒 MÍNIMO DE LONGITUD: 100px (más permisivo para uso en movimiento)
+  if (totalLength < 100) return null;
 
   // 2. LÍNEA RECTA entre inicio y final
   let straightDist = Math.hypot(
@@ -6408,24 +6406,24 @@ function analyzeGesture(points) {
     points[points.length - 1].y - points[0].y
   );
 
-  // 3. LINEALIDAD: qué tan cerca está el trazo de ser una línea recta
+  // 3. LINEALIDAD
   let linearity = straightDist / totalLength;
 
-  // 4. DESVIACIÓN PROMEDIO: distancia promedio de cada punto a la línea recta
+  // 4. DESVIACIÓN PROMEDIO
   let sumDev = 0;
   const p1 = points[0], p2 = points[points.length - 1];
   for (let p of points) {
     sumDev += perpendicularDistance(p, p1, p2);
   }
-  let avgDeviation = sumDev / points.length; // ✅ CORREGIDO: era avgDev
-  let normalizedDev = avgDeviation / totalLength; // ✅ CORREGIDO: era avgDev
+  let avgDeviation = sumDev / points.length;
+  let normalizedDev = avgDeviation / totalLength;
 
-  // 5. SIMPLIFICAR CURVA para detectar vértices
-  let simplified = simplifyPath(points, totalLength * 0.04);
+  // 5. SIMPLIFICAR CURVA
+  let simplified = simplifyPath(points, totalLength * 0.06);
 
-  // 6. DETECTAR VÉRTICES (cambios bruscos de dirección > 45°)
+  // 6. DETECTAR VÉRTICES (cambios bruscos de dirección > 40°)
   let vertices = [];
-  let angleThreshold = Math.PI * 0.25; // 45 grados
+  let angleThreshold = Math.PI * 0.22; // 40 grados (más permisivo)
   for (let i = 1; i < simplified.length - 1; i++) {
     let a1 = Math.atan2(
       simplified[i].y - simplified[i - 1].y,
@@ -6464,16 +6462,16 @@ function analyzeGesture(points) {
   // CLASIFICACIÓN FINAL
   // ============================================
 
-  // 📸 LÍNEA: muy alta linealidad (> 0.85) Y baja desviación (< 0.08) Y sin vértices
-  if (linearity > 0.85 && normalizedDev < 0.08 && vertices.length < 2) {
+  // 📸 LÍNEA: alta linealidad (> 0.75) Y baja desviación (< 0.12) Y sin vértices
+  if (linearity > 0.75 && normalizedDev < 0.12 && vertices.length < 2) {
     return 'line';
   }
 
-  // 📽️ V: exactamente 1 vértice con ángulo entre 30° y 150° (agudo)
+  // 📽️ V: exactamente 1 vértice con ángulo entre 25° y 155° (muy permisivo)
   if (vertices.length === 1 &&
-      vertexAngle > (Math.PI * 0.17) &&  // > 30°
-      vertexAngle < (Math.PI * 0.83) &&  // < 150°
-      segmentRatio > 0.3 &&
+      vertexAngle > (Math.PI * 0.14) &&  // > 25°
+      vertexAngle < (Math.PI * 0.86) &&  // < 155°
+      segmentRatio > 0.2 &&              // segmentos similares (muy permisivo)
       linearity < 0.85) {
     return 'v-shape';
   }
@@ -6481,7 +6479,7 @@ function analyzeGesture(points) {
   return null;
 }
 
-// ---- LISTENERS DE GESTOS (Convive con el Zoom) ----
+// ---- LISTENERS UNIFICADOS (ZOOM + GESTOS) ----
 const surface = document.getElementById('touch-surface');
 let gesturePoints = [];
 let isPointerDown = false;
@@ -6491,8 +6489,12 @@ let gestureTimer = null;
 let zoomTimer = null;
 let hasMoved = false;
 
-surface.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
+// 🔒 ELIMINAR listeners previos para evitar duplicados
+surface.replaceWith(surface.cloneNode(true));
+const newSurface = document.getElementById('touch-surface');
+
+newSurface.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 && e.pointerType === 'mouse') return;
 
   gesturePoints = [{ x: e.clientX, y: e.clientY }];
   isPointerDown = true;
@@ -6503,9 +6505,10 @@ surface.addEventListener('pointerdown', (e) => {
   clearTimeout(gestureTimer);
   clearTimeout(zoomTimer);
 
-  // Timer de zoom (solo se activa si NO hay movimiento)
+  // Timer de zoom (500ms sin movimiento)
   zoomTimer = setTimeout(() => {
     if (!hasMoved && isPointerDown) {
+      console.log('[ZOOM] Presión larga detectada');
       state.zoom = state.zoom === 1 ? 2.5 : 1;
       let hardwareZoomSuccess = false;
       const track = videoStream?.getVideoTracks()[0];
@@ -6535,12 +6538,12 @@ surface.addEventListener('pointerdown', (e) => {
         setTimeout(() => ind.classList.remove('active'), 500);
       }
       if (navigator.vibrate) navigator.vibrate(50);
-      isPointerDown = false; // Cancelar gesto después del zoom
+      isPointerDown = false;
     }
   }, 500);
 });
 
-surface.addEventListener('pointermove', (e) => {
+newSurface.addEventListener('pointermove', (e) => {
   if (!isPointerDown) return;
 
   const last = gesturePoints[gesturePoints.length - 1];
@@ -6554,7 +6557,7 @@ surface.addEventListener('pointermove', (e) => {
   }
 });
 
-surface.addEventListener('pointerup', (e) => {
+newSurface.addEventListener('pointerup', (e) => {
   if (!isPointerDown) return;
   isPointerDown = false;
   clearTimeout(zoomTimer);
@@ -6566,8 +6569,10 @@ surface.addEventListener('pointerup', (e) => {
     gesturePoints[numPoints - 1].y - pointerStartPos.y
   );
 
+  console.log(`[GESTO] PointerUp: moved=${moved.toFixed(0)}px, points=${numPoints}`);
+
   // Si apenas se movió = clic (mostrar menús)
-  if (moved < 30 || numPoints < 20) {
+  if (moved < 30 || numPoints < 15) {
     gesturePoints = [];
     showMenus();
     return;
@@ -6575,7 +6580,7 @@ surface.addEventListener('pointerup', (e) => {
 
   // Analizar gesto
   const shape = analyzeGesture(gesturePoints);
-  console.log('[GESTO] Forma detectada:', shape, '| Puntos:', numPoints, '| Tiempo:', elapsed.toFixed(0), 'ms');
+  console.log('[GESTO] Forma detectada:', shape);
 
   if (shape === 'line') {
     takeScreenshot();
@@ -6587,12 +6592,15 @@ surface.addEventListener('pointerup', (e) => {
   gestureTimer = setTimeout(() => { gesturePoints = []; }, 500);
 });
 
-surface.addEventListener('pointercancel', () => {
+newSurface.addEventListener('pointercancel', () => {
   isPointerDown = false;
   clearTimeout(zoomTimer);
   gesturePoints = [];
 });
-    
+
+// 🔒 Re-vincular click para showMenus
+newSurface.addEventListener('click', showMenus);
+
 
 // 🔒 CRÍTICO: Detectar orientación real y aplicar estilos manualmente
 function applyPortraitStyles() {
