@@ -19,8 +19,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <!-- AGORA SDKs (RTC + RTM) -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
     <!-- SDK de Agora RTM (corregido) -->
@@ -462,10 +463,359 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     height: 0;
     pointer-events: none;
 }
-    </style>
+
+/* =============================================
+   NUEVA CAPA GLASS (solo controles)
+   ============================================= */
+#glass-controls {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;   /* Deja pasar eventos al video y UI inferior */
+  z-index: 90;
+}
+
+#glass-controls > * {
+  pointer-events: auto;
+}
+
+/* ===== TELEMETRÍA Y ENGRANAJE (sin glass) ===== */
+#glass-controls #telemetry-container {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+  background: transparent;  /* Sin fondo glass */
+  backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+#glass-controls #telemetry-container .stat-row {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: rgba(0, 255, 0, 0.7);
+  text-shadow: 1px 1px 0px black;
+  background: rgba(0,0,0,0.3);
+  padding: 1px 4px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#glass-controls #top-right-group {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 50;
+  pointer-events: auto;
+  background: transparent;
+  backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* ===== MENÚS LATERALES (SIN FONDO, SOLO BOTONES) ===== */
+.menu-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;                 /* Reducimos separación */
+  background: transparent;  /* Sin fondo */
+  backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;               /* Sin padding */
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.menu-container.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-container.left-side {
+  position: absolute;
+  left: 16px;
+  top: 42%;                 /* Bajamos para centrar mejor */
+  transform: translateY(-50%);
+}
+
+.menu-container.right-side {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.menu-btn {
+  width: 40px;              /* Reducido un 10% (44px -> 40px) */
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5); /* Fondo oscuro sutil para contraste */
+  backdrop-filter: blur(4px);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.menu-btn:active {
+  transform: scale(0.9);
+  background: rgba(255, 255, 255, 0.15);
+}
+.menu-btn.active-state {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+.menu-label {
+  display: none;
+}
+
+/* ===== BOTÓN MEDIA Y CONTROLES ===== */
+#btn-media-toggle {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+#btn-media-toggle:active { transform: scale(0.9); }
+
+#local-media-controls {
+  position: absolute;
+  bottom: 130px;
+  right: 20px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s;
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(8px);
+  border-radius: 20px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+#local-media-controls.media-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.media-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.media-btn:active { transform: scale(0.85); background: rgba(255, 255, 255, 0.15); }
+
+/* ===== INDICADORES DE ESTADO (con glass ligero) ===== */
+#status-indicators {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(6px);
+  border-radius: 12px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+/* =============================================
+   MODO VERTICAL
+   ============================================= */
+@media (orientation: portrait) {
+  /* Menú izquierdo: fila horizontal abajo, SIN FONDO */
+  #menu-left {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    gap: 4px;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  #menu-left .menu-btn {
+    width: 29px;   /* Reducido 10% (32px -> 29px) */
+    height: 29px;
+    font-size: 0.7rem;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  /* Menú derecho: columna a la derecha, SIN FONDO */
+  #menu-right {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    gap: 4px;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  #menu-right .menu-btn {
+    width: 29px;
+    height: 29px;
+    font-size: 0.7rem;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  /* Telemetría y engranaje en vertical */
+  #glass-controls #telemetry-container {
+    bottom: 70px;
+    right: 8px;
+    transform: scale(0.8);
+    transform-origin: bottom right;
+  }
+  #glass-controls #top-right-group {
+    top: 12px;
+    right: 12px;
+  }
+  #glass-controls #top-right-group i {
+    font-size: 1.2rem;
+  }
+
+  /* Botón media */
+  #btn-media-toggle {
+    display: flex;
+    bottom: 70px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+  }
+
+  #local-media-controls {
+    bottom: 105px;
+    right: 8px;
+    padding: 4px;
+    background: rgba(0,0,0,0.3);
+  }
+  .media-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 10px;
+  }
+
+  /* Indicadores de estado */
+  #status-indicators {
+    bottom: 70px;
+    left: 8px;
+    padding: 2px 6px;
+    font-size: 9px;
+    background: rgba(0,0,0,0.3);
+  }
+}
+
+/* =============================================
+   MODO HORIZONTAL (ajuste menú izquierdo)
+   ============================================= */
+@media (orientation: landscape) {
+  #menu-left {
+    top: 42%;  /* Subimos el menú izquierdo para que no tape el mapa */
+  }
+}
+
+/* =============================================
+   PANTALLAS MUY PEQUEÑAS
+   ============================================= */
+@media (max-width: 400px) and (orientation: portrait) {
+  #menu-left .menu-btn { width: 28px; height: 28px; font-size: 0.65rem; }
+  #menu-right .menu-btn { width: 28px; height: 28px; font-size: 0.65rem; }
+}
+
+/* ===== INDICADORES DE ESTADO (engranaje) ===== */
+#status-indicator-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  backdrop-filter: none;
+  border: none;
+  padding: 0;
+}
+#status-indicator-container .status-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+#status-indicator-container .status-timer {
+  font-size: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  background: rgba(0,0,0,0.5);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  color: #ff4444;
+  display: none;
+}
+#status-indicator-container .status-timer.active {
+  display: block;
+}
+
+/* Ajuste para el botón de grabación (cambia icono) */
+#btn-record .fa-circle {
+  transition: all 0.3s;
+}
+#btn-record.recording .fa-circle {
+  color: #ff0000;
+  text-shadow: 0 0 10px #ff0000;
+}
+#btn-record .fa-circle::before {
+  content: "\f111"; /* circle */
+}
+#btn-record.recording .fa-circle::before {
+  content: "\f04d"; /* play (triángulo) en modo grabación, para detener */
+}
+
+</style>
 </head>
 <body>
-  <!-- SVG Filters para sharpening -->
+
+<!-- SVG Filters para sharpening -->
 <svg class="svg-filters">
     <defs>
         <filter id="sharpen-low">
@@ -479,6 +829,10 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
         </filter>
     </defs>
 </svg>
+
+<!-- ✅ NUEVO: Contenedor raíz para captura/grabación -->
+<!-- Contiene TODO lo que el usuario ve, EXCEPTO la capa de gestos -->
+<div id="capture-root">
     <div id="main-view-area">
         <div id="zoom-container">
             <video id="shared-video-element" autoplay playsinline muted></video>
@@ -491,7 +845,6 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     <canvas id="heatmap-buffer"></canvas>
     <canvas id="lidar-buffer"></canvas>
     
-    <div id="touch-surface" class="absolute inset-0 z-10 interactive"></div>
     <div id="zoom-target-indicator"></div>
 
     <div id="ui-layer">
@@ -512,28 +865,30 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
             <div id="tts-warning" class="transition-opacity duration-500 text-yellow-500 font-mono text-xs bg-black/60 px-1.5 py-0.5 rounded border border-yellow-700 items-center gap-1" style="opacity: 0; display: none;">⚠️ <span class="text-[9px]">RED/TTS</span></div>
         </div>
         
-<!-- Botón Media agrupador (SOLO visible en vertical) -->
-<button id="btn-media-toggle" onclick="toggleMediaPanel()" class="media-btn" style="display:none;" title="MEDIA">
-    <i class="fas fa-photo-film"></i>
-</button>
+        <!-- Botón Media agrupador (SOLO visible en vertical) -->
+        <button id="btn-media-toggle" onclick="toggleMediaPanel()" class="media-btn" style="display:none;" title="MEDIA">
+            <i class="fas fa-photo-film"></i>
+        </button>
 
-<div id="local-media-controls">
-    <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO">
-        <i class="fas fa-play"></i>
-    </button>
-    <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER">
-        <i class="fas fa-film"></i>
-    </button>
-    <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO">
-        <i class="fas fa-stop"></i>
-    </button>
-</div>
+        <div id="local-media-controls">
+            <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO">
+                <i class="fas fa-play"></i>
+            </button>
+            <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER">
+                <i class="fas fa-film"></i>
+            </button>
+            <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO">
+                <i class="fas fa-stop"></i>
+            </button>
+        </div>
 
-
-<div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
-    <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
-</div>
-        
+        <div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
+            <div id="status-indicator-container" class="flex flex-col items-center">
+                <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
+                <span id="status-timer" class="text-[8px] font-mono text-gray-400 mt-0.5" style="display:none;"></span>
+            </div>
+        </div>
+            
         <div id="map-container-slot" class="map-visible">
             <div style="position: relative; width: 100%; height: 100%;">
                 <div id="map-loading" style="position: absolute; top: 45%; width: 100%; text-align: center; color: rgba(255,0,0,0.8); font-family: 'Share Tech Mono'; font-size: 12px; z-index: 5;">BUSCANDO SATÉLITES...</div>
@@ -563,6 +918,13 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
             <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="resetZoom(this)"><i class="fas fa-compress"></i></div><div class="menu-label">RESET</div></div>
         </div>
     </div>
+</div>
+<!-- ✅ FIN de #capture-root -->
+
+<!-- ⚠️ FUERA de #capture-root: Capa de gestos (transparente, no interfiere con grabación) -->
+<div id="touch-surface" class="absolute inset-0 z-10 interactive"></div>
+
+
 
     <div id="local-media-overlay" onclick="stopLocalMedia()">
         <video id="local-video-player" playsinline></video>
@@ -5714,6 +6076,524 @@ async function refreshTTSCredits() {
     window.toggleLocalMic = toggleLocalMic;
 
 
+// ==========================================================
+//  GESTOS UNIFICADOS: LÍNEA = 📸 (Captura) | "V" = 📽️ (Grabación)
+//  + CAPTURA SOLO DEL CONTENIDO INTERNO (EXCLUYE BOTONES)
+//  + MEZCLA DE AUDIO (SISTEMA + MICRÓFONO) + DESCARGA SILENCIOSA
+//  + DETECCIÓN ROBUSTA PARA USO EN MOVIMIENTO
+// ==========================================================
+
+// ---- 0. INYECCIÓN DE CSS PARA OCULTAR SOLO LOS BOTONES DURANTE CAPTURA/GRABACIÓN ----
+if (!document.getElementById('capture-hide-style')) {
+  const style = document.createElement('style');
+  style.id = 'capture-hide-style';
+  style.textContent = `
+    .capture-ui-hidden .menu-container,
+    .capture-ui-hidden #btn-media-toggle,
+    .capture-ui-hidden #local-media-controls,
+    .capture-ui-hidden #top-right-group,
+    .capture-ui-hidden #glass-controls {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    /* CRÍTICO: La superficie táctil DEBE seguir visible y activa para detectar el gesto "V" y detener la grabación */
+    .capture-ui-hidden #touch-surface {
+      display: block !important;
+      pointer-events: auto !important;
+      opacity: 1 !important;
+      z-index: 9999 !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ---- ESTADO ----
+let isCapturing = false;
+let isRecording = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordStartTime = 0;
+let timerInterval = null;
+let recordAudioCtx = null;
+let recordMicStream = null;
+
+// ---- ELEMENTOS UI ----
+const gearIcon = document.getElementById('settings-gear-icon');
+let statusTimer = document.getElementById('status-timer');
+if (!statusTimer) {
+  statusTimer = document.createElement('span');
+  statusTimer.id = 'status-timer';
+  statusTimer.className = 'text-[10px] font-mono mt-1 font-bold';
+  statusTimer.style.display = 'none';
+  gearIcon.parentNode.appendChild(statusTimer);
+}
+
+// ---- INDICADORES CON EMOJIS ----
+function setStatusIcon(emoji, timerText = null) {
+  gearIcon.className = 'text-3xl transition-all';
+  gearIcon.textContent = emoji;
+  gearIcon.style.filter = 'drop-shadow(0 0 8px rgba(255,255,255,0.6))';
+  gearIcon.style.cursor = 'default';
+  gearIcon.onclick = null;
+
+  if (timerText) {
+    statusTimer.textContent = timerText;
+    statusTimer.style.display = 'block';
+    statusTimer.style.color = '#ff4444';
+  } else {
+    statusTimer.style.display = 'none';
+  }
+}
+
+function restoreGear() {
+  gearIcon.className = 'fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform';
+  gearIcon.textContent = '';
+  gearIcon.style.filter = '';
+  gearIcon.style.cursor = 'pointer';
+  statusTimer.style.display = 'none';
+  gearIcon.onclick = openSettings;
+}
+
+// ---- CAPTURA 📸 (Descarga silenciosa SOLO del contenido interno, SIN botones) ----
+async function takeScreenshot() {
+  if (isCapturing) return;
+  isCapturing = true;
+
+  setStatusIcon('📸');
+
+  try {
+    // ✅ CAPTURAMOS SOLO #capture-root (todo lo que el usuario ve, SIN los botones del menú)
+    const target = document.getElementById('capture-root');
+    if (!target) {
+      console.error('[CAPTURE] capture-root no encontrado. Usando body como fallback.');
+      throw new Error('capture-root no encontrado. Revisa el HTML.');
+    }
+
+    const canvas = await html2canvas(target, {
+      useCORS: true,
+      allowTaint: true,
+      scale: 2, // Mejor calidad
+      backgroundColor: '#000',
+      logging: false
+    });
+
+    // Flash visual (feedback sutil)
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;background:white;opacity:0.25;pointer-events:none;z-index:9999;transition:opacity 0.3s;';
+    document.body.appendChild(flash);
+    setTimeout(() => { flash.style.opacity = '0'; }, 50);
+    setTimeout(() => flash.remove(), 400);
+
+    // Descarga automática silenciosa
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.download = `OBR_CAPTURE_${timestamp}.png`;
+      link.href = url;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+
+    if (navigator.vibrate) navigator.vibrate(30);
+
+  } catch (err) {
+    console.error('[CAPTURE] Error:', err);
+  }
+
+  // Restaurar engranaje después de 1.8s
+  setTimeout(() => {
+    restoreGear();
+    isCapturing = false;
+  }, 1800);
+}
+
+// ---- GRABACIÓN 📽️ (Mezcla de audio + Captura SOLO del contenido interno) ----
+async function toggleRecording() {
+  if (isRecording) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+    return;
+  }
+
+  let displayStream = null;
+
+  try {
+    // ✅ 1. Ocultar SOLO los botones/controles ANTES de iniciar la grabación
+    document.body.classList.add('capture-ui-hidden');
+    await new Promise(r => setTimeout(r, 100)); // Esperar a que el DOM se actualice
+
+    // ✅ 2. Obtener video de la pestaña (capturará TODO lo visible, pero los botones ya están ocultos)
+    displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'browser', frameRate: 30 },
+      audio: true,
+      preferCurrentTab: true,
+      selfBrowserSurface: 'include'
+    });
+
+    // ✅ 3. Obtener audio del MICRÓFONO
+    recordMicStream = null;
+    try {
+      recordMicStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
+      });
+    } catch (micErr) {
+      console.warn('[RECORD] Micrófono no disponible, grabando solo video+audio sistema');
+    }
+
+    // ✅ 4. MEZCLAR audio (sistema + micrófono) usando AudioContext
+    let finalStream;
+    if (recordMicStream) {
+      recordAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const dest = recordAudioCtx.createMediaStreamDestination();
+
+      const displayAudioTracks = displayStream.getAudioTracks();
+      if (displayAudioTracks.length > 0) {
+        const sysSource = recordAudioCtx.createMediaStreamSource(new MediaStream(displayAudioTracks));
+        const sysGain = recordAudioCtx.createGain();
+        sysGain.gain.value = 0.7;
+        sysSource.connect(sysGain).connect(dest);
+      }
+
+      const micSource = recordAudioCtx.createMediaStreamSource(recordMicStream);
+      const micGain = recordAudioCtx.createGain();
+      micGain.gain.value = 1.2;
+      micSource.connect(micGain).connect(dest);
+
+      finalStream = new MediaStream([
+        ...displayStream.getVideoTracks(),
+        ...dest.stream.getAudioTracks()
+      ]);
+    } else {
+      finalStream = displayStream;
+    }
+
+    // ✅ 5. Configurar MediaRecorder
+    const mimeTypes = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9',
+      'video/webm'
+    ];
+    const mimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+    mediaRecorder = new MediaRecorder(finalStream, {
+      mimeType,
+      videoBitsPerSecond: 4000000 // 4 Mbps para buena calidad
+    });
+
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      // Descargar automáticamente SIN diálogo
+      const blob = new Blob(recordedChunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.download = `OBR_RECORD_${timestamp}.webm`;
+      link.href = url;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Limpieza de recursos
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      displayStream.getTracks().forEach(t => t.stop());
+      if (recordMicStream) recordMicStream.getTracks().forEach(t => t.stop());
+      if (recordAudioCtx && recordAudioCtx.state !== 'closed') {
+        recordAudioCtx.close().catch(() => {});
+      }
+
+      // ✅ 6. Restaurar UI al detener
+      document.body.classList.remove('capture-ui-hidden');
+
+      isRecording = false;
+      clearInterval(timerInterval);
+      restoreGear();
+      if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+    };
+
+    // ✅ 7. Iniciar grabación
+    mediaRecorder.start(1000);
+    isRecording = true;
+    recordStartTime = Date.now();
+    setStatusIcon('📽️', '00:00');
+    if (navigator.vibrate) navigator.vibrate(50);
+
+    // Temporizador debajo del emoji
+    timerInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
+      const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const s = String(elapsed % 60).padStart(2, '0');
+      statusTimer.textContent = `● ${m}:${s}`;
+    }, 1000);
+
+    // Si el usuario cierra la pestaña de compartir, detener automáticamente
+    displayStream.getVideoTracks()[0].onended = () => {
+      if (isRecording) toggleRecording();
+    };
+
+  } catch (err) {
+    console.error('[RECORD] Error:', err);
+    // ✅ Asegurar que la UI se restaura incluso si hay error o cancelación
+    document.body.classList.remove('capture-ui-hidden');
+    if (displayStream) {
+      displayStream.getTracks().forEach(t => t.stop());
+    }
+    isRecording = false;
+  }
+}
+
+// ==========================================================
+//  ALGORITMO DE DETECCIÓN: LÍNEA vs V
+//  - LÍNEA: alta linealidad, sin vértices
+//  - V: exactamente 1 vértice con ángulo agudo (< 150°)
+// ==========================================================
+
+// ---- Douglas-Peucker (simplifica el trazo eliminando ruido) ----
+function perpendicularDistance(point, lineStart, lineEnd) {
+  let dx = lineEnd.x - lineStart.x, dy = lineEnd.y - lineStart.y;
+  let mag = Math.hypot(dx, dy);
+  if (mag > 0) {
+    let u = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (mag * mag);
+    u = Math.max(0, Math.min(1, u));
+    return Math.hypot(point.x - (lineStart.x + u * dx), point.y - (lineStart.y + u * dy));
+  }
+  return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
+}
+
+function simplifyPath(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  let maxDist = 0, maxIdx = 0;
+  let start = points[0], end = points[points.length - 1];
+  for (let i = 1; i < points.length - 1; i++) {
+    let d = perpendicularDistance(points[i], start, end);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > tolerance) {
+    return simplifyPath(points.slice(0, maxIdx + 1), tolerance).slice(0, -1)
+      .concat(simplifyPath(points.slice(maxIdx), tolerance));
+  }
+  return [start, end];
+}
+
+// ---- Función principal de análisis ----
+function analyzeGesture(points) {
+  // 🔒 MÍNIMO DE PUNTOS: un trazo rápido genera ~30 puntos
+  if (points.length < 25) return null;
+
+  // 1. LONGITUD TOTAL DEL TRAZO
+  let totalLength = 0;
+  for (let i = 1; i < points.length; i++) {
+    totalLength += Math.hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y);
+  }
+
+  // 🔒 MÍNIMO DE LONGITUD: 150px (evita toques accidentales)
+  if (totalLength < 150) return null;
+
+  // 2. LÍNEA RECTA entre inicio y final
+  let straightDist = Math.hypot(
+    points[points.length - 1].x - points[0].x,
+    points[points.length - 1].y - points[0].y
+  );
+
+  // 3. LINEALIDAD: qué tan cerca está el trazo de ser una línea recta
+  let linearity = straightDist / totalLength;
+
+  // 4. DESVIACIÓN PROMEDIO: distancia promedio de cada punto a la línea recta
+  let sumDev = 0;
+  const p1 = points[0], p2 = points[points.length - 1];
+  for (let p of points) {
+    sumDev += perpendicularDistance(p, p1, p2);
+  }
+  let avgDeviation = sumDev / points.length; // ✅ CORREGIDO: era avgDev
+  let normalizedDev = avgDeviation / totalLength; // ✅ CORREGIDO: era avgDev
+
+  // 5. SIMPLIFICAR CURVA para detectar vértices
+  let simplified = simplifyPath(points, totalLength * 0.04);
+
+  // 6. DETECTAR VÉRTICES (cambios bruscos de dirección > 45°)
+  let vertices = [];
+  let angleThreshold = Math.PI * 0.25; // 45 grados
+  for (let i = 1; i < simplified.length - 1; i++) {
+    let a1 = Math.atan2(
+      simplified[i].y - simplified[i - 1].y,
+      simplified[i].x - simplified[i - 1].x
+    );
+    let a2 = Math.atan2(
+      simplified[i + 1].y - simplified[i].y,
+      simplified[i + 1].x - simplified[i].x
+    );
+    let diff = Math.abs(a2 - a1);
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    diff = Math.abs(diff);
+    if (diff > angleThreshold) {
+      vertices.push({ idx: i, angle: diff, point: simplified[i] });
+    }
+  }
+
+  // 7. ANÁLISIS DE SEGMENTOS (para la V)
+  let segmentRatio = 1.0;
+  let vertexAngle = 0;
+  if (vertices.length === 1) {
+    const v = vertices[0];
+    const pStart = simplified[0];
+    const pMid = v.point;
+    const pEnd = simplified[simplified.length - 1];
+    const len1 = Math.hypot(pMid.x - pStart.x, pMid.y - pStart.y);
+    const len2 = Math.hypot(pEnd.x - pMid.x, pEnd.y - pMid.y);
+    segmentRatio = Math.min(len1, len2) / Math.max(len1, len2);
+    vertexAngle = v.angle;
+  }
+
+  // 8. LOG DE DEBUG
+  console.log(`[GESTO] Linealidad: ${linearity.toFixed(2)} | Desv: ${normalizedDev.toFixed(3)} | Vértices: ${vertices.length} | Longitud: ${totalLength.toFixed(0)}px | RatioSeg: ${segmentRatio.toFixed(2)} | ÁnguloV: ${(vertexAngle * 180 / Math.PI).toFixed(0)}°`);
+
+  // ============================================
+  // CLASIFICACIÓN FINAL
+  // ============================================
+
+  // 📸 LÍNEA: muy alta linealidad (> 0.85) Y baja desviación (< 0.08) Y sin vértices
+  if (linearity > 0.85 && normalizedDev < 0.08 && vertices.length < 2) {
+    return 'line';
+  }
+
+  // 📽️ V: exactamente 1 vértice con ángulo entre 30° y 150° (agudo)
+  if (vertices.length === 1 &&
+      vertexAngle > (Math.PI * 0.17) &&  // > 30°
+      vertexAngle < (Math.PI * 0.83) &&  // < 150°
+      segmentRatio > 0.3 &&
+      linearity < 0.85) {
+    return 'v-shape';
+  }
+
+  return null;
+}
+
+// ---- LISTENERS DE GESTOS (Convive con el Zoom) ----
+const surface = document.getElementById('touch-surface');
+let gesturePoints = [];
+let isPointerDown = false;
+let pointerStartTime = 0;
+let pointerStartPos = { x: 0, y: 0 };
+let gestureTimer = null;
+let zoomTimer = null;
+let hasMoved = false;
+
+surface.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+
+  gesturePoints = [{ x: e.clientX, y: e.clientY }];
+  isPointerDown = true;
+  hasMoved = false;
+  pointerStartTime = performance.now();
+  pointerStartPos = { x: e.clientX, y: e.clientY };
+
+  clearTimeout(gestureTimer);
+  clearTimeout(zoomTimer);
+
+  // Timer de zoom (solo se activa si NO hay movimiento)
+  zoomTimer = setTimeout(() => {
+    if (!hasMoved && isPointerDown) {
+      state.zoom = state.zoom === 1 ? 2.5 : 1;
+      let hardwareZoomSuccess = false;
+      const track = videoStream?.getVideoTracks()[0];
+      if (track) {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.zoom) {
+          try {
+            const targetZoom = state.zoom === 1
+              ? Math.max(1.0, caps.zoom.min)
+              : Math.min(caps.zoom.max, 2.0);
+            track.applyConstraints({ advanced: [{ zoom: targetZoom }] })
+              .then(() => { hardwareZoomSuccess = true; })
+              .catch(() => {});
+          } catch (err) {}
+        }
+      }
+      if (!hardwareZoomSuccess) {
+        const w = window.innerWidth, h = window.innerHeight;
+        el.zoom.style.transformOrigin = `${(e.clientX / w) * 100}% ${(e.clientY / h) * 100}%`;
+        el.zoom.style.transform = `scale(${state.zoom})`;
+      }
+      const ind = document.getElementById('zoom-target-indicator');
+      if (ind) {
+        ind.style.left = e.clientX + 'px';
+        ind.style.top = e.clientY + 'px';
+        ind.classList.add('active');
+        setTimeout(() => ind.classList.remove('active'), 500);
+      }
+      if (navigator.vibrate) navigator.vibrate(50);
+      isPointerDown = false; // Cancelar gesto después del zoom
+    }
+  }, 500);
+});
+
+surface.addEventListener('pointermove', (e) => {
+  if (!isPointerDown) return;
+
+  const last = gesturePoints[gesturePoints.length - 1];
+  const dist = Math.hypot(e.clientX - last.x, e.clientY - last.y);
+
+  if (dist > 4) {
+    hasMoved = true;
+    clearTimeout(zoomTimer);
+    gesturePoints.push({ x: e.clientX, y: e.clientY });
+    if (gesturePoints.length > 300) gesturePoints = gesturePoints.slice(-200);
+  }
+});
+
+surface.addEventListener('pointerup', (e) => {
+  if (!isPointerDown) return;
+  isPointerDown = false;
+  clearTimeout(zoomTimer);
+
+  const numPoints = gesturePoints.length;
+  const elapsed = performance.now() - pointerStartTime;
+  const moved = Math.hypot(
+    gesturePoints[numPoints - 1].x - pointerStartPos.x,
+    gesturePoints[numPoints - 1].y - pointerStartPos.y
+  );
+
+  // Si apenas se movió = clic (mostrar menús)
+  if (moved < 30 || numPoints < 20) {
+    gesturePoints = [];
+    showMenus();
+    return;
+  }
+
+  // Analizar gesto
+  const shape = analyzeGesture(gesturePoints);
+  console.log('[GESTO] Forma detectada:', shape, '| Puntos:', numPoints, '| Tiempo:', elapsed.toFixed(0), 'ms');
+
+  if (shape === 'line') {
+    takeScreenshot();
+  } else if (shape === 'v-shape') {
+    toggleRecording();
+  }
+
+  gesturePoints = [];
+  gestureTimer = setTimeout(() => { gesturePoints = []; }, 500);
+});
+
+surface.addEventListener('pointercancel', () => {
+  isPointerDown = false;
+  clearTimeout(zoomTimer);
+  gesturePoints = [];
+});
+    
+
 // 🔒 CRÍTICO: Detectar orientación real y aplicar estilos manualmente
 function applyPortraitStyles() {
     const isPortrait = window.innerHeight > window.innerWidth;
@@ -5804,6 +6684,10 @@ function checkSmallScreen() {
 // Llamar al iniciar y en resize
 window.addEventListener('load', checkSmallScreen);
 window.addEventListener('resize', checkSmallScreen);
+
+
+
+
 </script>
 </body>
 </html>
