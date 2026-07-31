@@ -290,8 +290,8 @@ body.hide-hud-text #hud-text-container { display: none !important; }
         .mic-toggle.active { opacity: 1; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
 
         #local-media-controls {
-    position: absolute;
-    bottom: 15px;
+    bottom: 135px !important;             /* antes 125px → 10px más arriba */
+    right: 10px !important;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -501,9 +501,9 @@ z-index: 100 !important;
 }
 #menu-right .menu-label { display: none !important; }
 
-/* 6. Botón Media: Traslúcido */
+/* === BOTÓN MEDIA TOGGLE === */
 #btn-media-toggle {
-    position: absolute !important;
+    position: fixed !important;  /* 🔒 Cambiado de absolute a fixed */
     display: flex !important;
     bottom: 75px !important;
     right: 10px !important;
@@ -524,61 +524,107 @@ z-index: 100 !important;
     transform: scale(0.92) !important;
 }
 
-/* 7. Controles de Media: Se despliegan HACIA ABAJO */
-/* Panel de media en vertical - SOLO al presionar botón media */
-/* === MEDIA CONTROLS EN HORIZONTAL: UNIDO AL PANEL DERECHO === */
+/* === CONTROLES DE MEDIA UNIFICADOS === */
+#local-media-controls {
+    position: fixed !important;
+    right: 10px !important;
+    bottom: 135px !important; /* 75px (btn bottom) + 38px (altura btn) + 22px (gap) */
+    left: auto !important;
+    transform: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important; /* Aumentado de 10px para evitar superposición visual */
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    width: 38px !important;
+    align-items: center !important;
+    z-index: 100 !important;
+    height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+/* Estado OCULTO (por defecto en el HTML) */
+#local-media-controls.media-hidden {
+    opacity: 0 !important;
+    transform: translateY(20px) !important; /* SIN translateX(-50%) */
+    pointer-events: none !important;
+}
+
+/* Estado VISIBLE (alternado por JS) */
+#local-media-controls.media-visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateY(0) !important;
+}
+
+/* Tamaño fijo de los botones dentro del contenedor */
+#local-media-controls .media-btn {
+    width: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 14px !important;
+}
+
+/* Modo Horizontal (Landscape) - Ocultar controles */
 @media (orientation: landscape), .landscape-mode {
     #local-media-controls {
-        position: fixed !important;
-        top: 0 !important;
-        right: 0 !important;
-        height: 100vh !important;
-        width: 80px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: center !important;
-        gap: 12px !important;
-        z-index: 100 !important;
-        pointer-events: none !important;
         opacity: 0 !important;
-        transition: all 0.3s ease !important;
-        padding: 20px 8px !important;
-        background: transparent !important;
-        /* Se oculta/muestra junto con el panel derecho */
-        transform: translateX(100%) !important;
+        pointer-events: none !important;
+        transition: opacity 0.3s ease !important;
     }
     #local-media-controls.media-visible {
-        opacity: 1 !important;
+        opacity: 0.6 !important;
         pointer-events: auto !important;
-        transform: translateX(0) !important;
     }
-    #local-media-controls .media-btn {
-        width: 58px !important;
-        height: 58px !important;
-        font-size: 1.3rem !important;
-    }
-    #local-media-controls .menu-label {
-        font-size: 0.58rem !important;
-        color: white !important;
-        text-align: center !important;
-        margin-top: 3px !important;
-        font-family: 'Share Tech Mono' !important;
-        background: rgba(0,0,0,0.65) !important;
-        border-radius: 4px !important;
-        padding: 1px 3px !important;
-    }
-    /* Ocultar botón toggle de media en horizontal */
-    #btn-media-toggle {
-        display: none !important;
+    #local-media-controls.media-visible:hover {
+        opacity: 1.0 !important;
     }
 }
 
-/* === MEDIA CONTROLS EN VERTICAL: PERFECTAMENTE ALINEADO CON BOTÓN MEDIA === */
+/* === CONTROLES DE MEDIA EN VERTICAL === */
+#local-media-controls {
+    position: fixed !important;
+    bottom: 125px !important;  /* 75px (btn) + 38px (btn) + 12px (gap) */
+    right: 10px !important;    /* 🔒 MISMO right que btn-media-toggle */
+    left: auto !important;
+    transform: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    width: 38px !important;    /* 🔒 MISMO ancho que btn-media-toggle */
+    align-items: center !important;
+    z-index: 100 !important;
+    height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+}
+#local-media-controls.media-visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+#local-media-controls .media-btn {
+    width: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;                 /* elimina cualquier margen */
+    padding: 0 !important;                /* elimina relleno interno */
+    font-size: 14px !important;
+}
+#local-media-controls .menu-label {
+    display: none !important;
+}
+
+/* === MEDIA CONTROLS EN VERTICAL: ALINEADO CON BOTÓN MEDIA === */
 @media (orientation: portrait), .portrait-mode {
     #local-media-controls {
         position: fixed !important;
-        bottom: 133px !important;  /* 🔒 75px (btn) + 48px (btn) + 10px (gap) = 133px */
-        right: 10px !important;
+        bottom: 125px !important;  /* 🔒 Justo arriba del botón media (75px + 38px + 12px gap) */
+        right: 10px !important;    /* 🔒 MISMA posición right que btn-media-toggle */
         left: auto !important;
         transform: none !important;
         display: flex !important;
@@ -587,11 +633,11 @@ z-index: 100 !important;
         opacity: 0 !important;
         pointer-events: none !important;
         transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        width: 48px !important;    /* 🔒 Mismo ancho que los botones */
+        width: 38px !important;    /*  MISMO ancho que btn-media-toggle */
         align-items: center !important; /* 🔒 Centrado (no flex-end) */
         z-index: 100 !important;
         height: auto !important;
-        padding: 0 !important;
+        padding: 0 !important;     /* 🔒 Sin padding */
         background: transparent !important;
     }
     #local-media-controls.media-visible {
@@ -599,9 +645,11 @@ z-index: 100 !important;
         pointer-events: auto !important;
     }
     #local-media-controls .media-btn {
-        width: 48px !important;
-        height: 48px !important;
-        font-size: 18px !important;
+    width: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;                 /* elimina cualquier margen */
+    padding: 0 !important;                /* elimina relleno interno */
+    font-size: 14px !important;
     }
     #local-media-controls .menu-label {
         display: none !important;
@@ -1212,7 +1260,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '6'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '12'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
