@@ -67,15 +67,215 @@
         .toast.error { border-color: red; color: red; background: rgba(30, 0, 0, 0.9); text-shadow: 0 0 5px red; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 
-        .menu-container { position: absolute; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
-        .menu-container.visible { opacity: 1; pointer-events: auto; }
-        .menu-container.left-side { left: 8px; }
-        .menu-container.right-side { right: 8px; }
-        .menu-btn { width: 58px; height: 58px; border: 2px solid var(--hud-primary); border-radius: 50%; background: rgba(0,0,0,0.88); display: flex; align-items: center; justify-content: center; color: var(--hud-primary); font-size: 1.3rem; backdrop-filter: blur(4px); transition: all 0.15s; cursor: pointer; pointer-events: auto; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-        .menu-btn:active { transform: scale(0.88); background: rgba(255,51,51,0.25); }
-        .menu-btn.active-state { background: white; border-color: white; color: black; box-shadow: 0 0 20px white; }
-        @media (max-height: 520px) { .menu-container { gap: 5px; } .menu-btn { width: 46px; height: 46px; font-size: 1rem; } .menu-label { display: none; } }
-        .menu-label { font-size: 0.58rem; color: white; text-align: center; margin-top: 3px; font-family: 'Share Tech Mono'; background: rgba(0,0,0,0.65); border-radius: 4px; padding: 1px 3px; }
+        /* === CANVAS OVERLAY SUPERIOR (CRISTAL) === */
+#crystal-overlay-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 75;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+#crystal-overlay-canvas.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* === ZONA SEGURA CENTRAL (SOLO ZOOM) === */
+#safe-touch-zone {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60%;
+    height: 60%;
+    transform: translate(-50%, -50%);
+    z-index: 9;
+    pointer-events: auto;
+}
+
+/* === ESTILO CRISTAL ULTRA-TRANSPARENTE (sin blur) === */
+.crystal-btn {
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    transition: all 0.2s ease !important;
+}
+.crystal-btn:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+.crystal-btn:active {
+    transform: scale(0.92) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+}
+.crystal-btn.active-state {
+    background: rgba(255, 255, 255, 0.25) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    box-shadow: 
+        0 0 12px rgba(255, 255, 255, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+/* Forzar iconos blancos en todos los botones (incluidos emojis) */
+.crystal-btn i,
+.crystal-btn span {
+    color: rgba(255, 255, 255, 0.9) !important;
+    filter: brightness(0) invert(1) !important;
+}
+.crystal-btn.active-state i,
+.crystal-btn.active-state span {
+    filter: brightness(0) invert(1) !important;
+}
+
+/* === PANELES LATERALES - SIEMPRE PANTALLA COMPLETA === */
+.menu-container {
+    position: fixed !important;
+    top: 0 !important;
+    height: 100vh !important;
+    width: 80px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 12px !important;
+    z-index: 100 !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    transition: all 0.3s ease !important;
+    padding: 20px 8px !important;
+    /* SIN FONDO - solo los botones con efecto glass */
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+.menu-container.visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+.menu-container.left-side {
+    left: 0 !important;
+    transform: translateX(-100%) !important;
+}
+.menu-container.left-side.visible {
+    transform: translateX(0) !important;
+}
+.menu-container.right-side {
+    right: 0 !important;
+    transform: translateX(100%) !important;
+}
+.menu-container.right-side.visible {
+    transform: translateX(0) !important;
+}
+.menu-btn { 
+    width: 58px; 
+    height: 58px; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-size: 1.3rem; 
+    transition: all 0.15s; 
+    cursor: pointer; 
+    pointer-events: auto; 
+    touch-action: manipulation; 
+    -webkit-tap-highlight-color: transparent; 
+}
+.menu-btn:active { transform: scale(0.88); }
+.menu-btn.active-state { 
+    background: rgba(255, 51, 51, 0.3) !important; 
+    border-color: rgba(255, 51, 51, 0.6) !important; 
+    color: white !important;
+    box-shadow: 0 0 20px rgba(255, 51, 51, 0.5); 
+}
+@media (max-height: 520px) { .menu-container { gap: 5px; } .menu-btn { width: 46px; height: 46px; font-size: 1rem; } .menu-label { display: none; } }
+.menu-label { font-size: 0.58rem; color: white; text-align: center; margin-top: 3px; font-family: 'Share Tech Mono'; background: rgba(0,0,0,0.65); border-radius: 4px; padding: 1px 3px; }
+
+/* Ocultar elementos según configuración granular */
+body.hide-notifications #toast-container { display: none !important; }
+body.hide-filters #menu-left { display: none !important; }
+body.hide-ai-functions #menu-right { display: none !important; }
+body.hide-telemetry #telemetry-container { display: none !important; }
+body.hide-map #map-container-slot { display: none !important; }
+body.hide-hud-text #hud-text-container { display: none !important; }
+
+/* Botón de configuración: semi-transparente pero clicable */
+body.hide-settings-gear #top-right-group {
+    opacity: 0.15 !important;
+    transition: opacity 0.3s ease !important;
+    pointer-events: auto !important; /* Asegura que siga siendo clicable */
+}
+body.hide-settings-gear #top-right-group:hover {
+    opacity: 0.8 !important;
+}
+body.hide-settings-gear #top-right-group #settings-gear-icon {
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+}
+body.hide-settings-gear #top-right-group:hover #settings-gear-icon {
+    opacity: 1;
+}
+
+body.hide-map #map-container-slot { display: none !important; }
+body.hide-hud-text #hud-text-container { display: none !important; }
+
+/* Indicador de grabación */
+#recording-indicator {
+    position: fixed;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 0, 0, 0.85);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    z-index: 500;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 20px rgba(255, 0, 0, 0.4);
+}
+#recording-indicator.active {
+    display: flex;
+    animation: recPulse 1.5s infinite;
+}
+#recording-indicator .rec-dot {
+    width: 10px;
+    height: 10px;
+    background: white;
+    border-radius: 50%;
+    animation: recDotPulse 1s infinite;
+}
+@keyframes recPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+@keyframes recDotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* Flash de captura */
+#capture-flash {
+    position: fixed;
+    inset: 0;
+    background: white;
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease-out;
+}
+#capture-flash.flash {
+    opacity: 0.6;
+}
 
         #telemetry-container { position: absolute; bottom: 10px; right: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; pointer-events: none; z-index: 150; }
         .stat-row { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: rgba(0, 255, 0, 0.7); text-shadow: 1px 1px 0px black; background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 2px; display: flex; align-items: center; gap: 6px; }
@@ -89,11 +289,42 @@
         .mic-toggle { pointer-events: auto; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
         .mic-toggle.active { opacity: 1; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
 
-        #local-media-controls { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; z-index: 80; pointer-events: auto; opacity: 0.6; transition: opacity 0.3s; }
-        #local-media-controls:hover { opacity: 1.0; }
-        .media-btn { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.05); color: rgba(255,255,255,0.3); border-radius: 50%; width: 40px; height: 40px; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; backdrop-filter: blur(2px); }
-        .media-btn:active { transform: scale(0.9); }
-        .media-btn:hover { background: rgba(255,51,51,0.3); border-color: rgba(255,51,51,0.5); color: rgba(255,255,255,0.8); }
+        #local-media-controls {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    z-index: 80;
+    pointer-events: auto;
+    opacity: 0.6;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+#local-media-controls:hover { opacity: 1.0; }
+/* Clase para ocultar botones de media */
+#local-media-controls.media-hidden {
+    opacity: 0 !important;
+    transform: translateX(-50%) translateY(20px) !important;
+    pointer-events: none !important;
+}
+.media-btn {
+    background: rgba(0,0,0,0.15);
+    border: 1px solid rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.3);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    backdrop-filter: blur(2px);
+}
+.media-btn:active { transform: scale(0.9); }
+.media-btn:hover { background: rgba(255,51,51,0.3); border-color: rgba(255,51,51,0.5); color: rgba(255,255,255,0.8); }
 
         #local-media-overlay { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center; transition: opacity 0.5s ease-in-out; opacity: 0; pointer-events: none; }
         #local-media-overlay.active { display: flex; opacity: 1; pointer-events: auto; }
@@ -122,26 +353,36 @@
 }
 .modal-bg.active { display: flex; }
 
-/* En móvil: modales a pantalla completa con scroll */
-@media (max-width: 768px) {
-    .modal-bg { 
-        padding: 0; 
-        align-items: flex-start; 
+/* En móvil/vertical: modales a pantalla completa con scroll */
+@media (max-width: 768px), (orientation: portrait) {
+    .modal-bg {
+        padding: 0;
+        align-items: flex-start;
     }
-    .modal-bg > div { 
-        width: 100% !important; 
-        max-width: 100% !important; 
-        height: 100vh !important; 
-        max-height: 100vh !important; 
-        border-radius: 0 !important; 
+    .modal-bg > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
         border: none !important;
         margin: 0 !important;
     }
-    .modal-bg .custom-scrollbar { 
-        -webkit-overflow-scrolling: touch; 
+    .modal-bg .custom-scrollbar {
+        -webkit-overflow-scrolling: touch;
+    }
+    /* Grid de UI hide en 1 columna en vertical */
+    #ui-hide-grid {
+        grid-template-columns: 1fr !important;
     }
 }
 
+/* En horizontal: grid de 2 columnas para UI hide */
+@media (orientation: landscape) and (min-width: 769px) {
+    #ui-hide-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
 
 /* === DISEÑO VERTICAL ADAPTATIVO === */
 @media (orientation: portrait), .portrait-mode {
@@ -175,38 +416,90 @@
         height: 100% !important;
     }
 
-    /* Mapa: abajo izquierda */
-    #map-container-slot {
-        position: absolute !important;
-        width: 80px !important;
-        height: 80px !important;
-        left: 8px !important;
-        bottom: 8px !important;
-        transform: scale(0.85) !important;
-        transform-origin: bottom left !important;
-        z-index: 100 !important;
-    }
+    /* Mapa: abajo izquierda - AUMENTADO 20% */
+#map-container-slot {
+position: absolute !important;
+width: 96px !important;  /* 80px * 1.20 = 96px */
+height: 96px !important; /* 80px * 1.20 = 96px */
+left: 8px !important;
+bottom: 8px !important;
+transform: scale(1.02) !important; /* 0.85 * 1.20 = 1.02 */
+transform-origin: bottom left !important;
+z-index: 100 !important;
+}
 
     /* Filtros: centro inferior */
-    #menu-left {
-        position: absolute !important;
-        top: auto !important;
-        bottom: 10px !important;
-        left: 50% !important;
-        right: auto !important;
-        transform: translateX(-50%) !important;
-        flex-direction: row !important;
-        gap: 6px !important;
-        z-index: 100 !important;
-    }
+    /* === FILTROS: PARTE INFERIOR CENTRADA === */
+#menu-left {
+    position: fixed !important;
+    top: auto !important;
+    bottom: 15px !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    z-index: 100 !important;
+    height: auto !important;
+    width: auto !important;
+    justify-content: center !important;
+    padding: 8px 12px !important;
+    background: transparent !important;
+}
+#menu-left .menu-btn {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 0.95rem !important;
+}
+#menu-left .menu-label { display: none !important; }
 
-    #menu-left .menu-btn {
-        width: 40px !important;
-        height: 40px !important;
-        font-size: 0.9rem !important;
-    }
+/* === MENÚ DERECHO: MÁS AL MARGEN === */
+/* === FILTROS: PARTE INFERIOR CENTRADA === */
+#menu-left {
+    position: fixed !important;
+    top: auto !important;
+    bottom: 15px !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    z-index: 100 !important;
+    height: auto !important;
+    width: auto !important;
+    justify-content: center !important;
+    padding: 8px 12px !important;
+    background: transparent !important;
+}
+#menu-left .menu-btn {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 0.95rem !important;
+}
+#menu-left .menu-label { display: none !important; }
 
-    #menu-left .menu-label { display: none !important; }
+/* === MENÚ DERECHO: MÁS AL MARGEN === */
+#menu-right {
+    position: fixed !important;
+    top: 50% !important;
+    right: 4px !important;
+    transform: translateY(-50%) !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    z-index: 100 !important;
+    height: auto !important;
+    width: auto !important;
+    padding: 10px 6px !important;
+    background: transparent !important;
+}
+#menu-right .menu-btn {
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 1rem !important;
+}
+#menu-right .menu-label { display: none !important; }
 
 /* 6. Botón Media: Traslúcido */
 #btn-media-toggle {
@@ -232,45 +525,103 @@
 }
 
 /* 7. Controles de Media: Se despliegan HACIA ABAJO */
-#local-media-controls {
-    position: absolute !important;
-    bottom: 120px !important;
-    right: 10px !important;
-    left: auto !important;              /* 🔒 ANULA el left: 50% del CSS base */
-    transform: none !important;         /* 🔒 ANULA el translateX(-50%) del CSS base */
-    display: flex !important;           /* 🔒 Fuerza flexbox */
-    flex-direction: column-reverse !important;
-    gap: 6px !important;
-    opacity: 0;
-    pointer-events: none;
-    transition: all 0.3s !important;
-    width: 38px !important;             /* 🔒 Ancho fijo = ancho del botón */
-    align-items: flex-end !important;   /* 🔒 Alinea botones a la derecha */
-}
-#local-media-controls.media-visible {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transform: translateY(0) !important; /* 🔒 Se desliza hacia arriba al abrirse */
+/* Panel de media en vertical - SOLO al presionar botón media */
+/* === MEDIA CONTROLS EN HORIZONTAL: UNIDO AL PANEL DERECHO === */
+@media (orientation: landscape), .landscape-mode {
+    #local-media-controls {
+        position: fixed !important;
+        top: 0 !important;
+        right: 0 !important;
+        height: 100vh !important;
+        width: 80px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        gap: 12px !important;
+        z-index: 100 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        transition: all 0.3s ease !important;
+        padding: 20px 8px !important;
+        background: transparent !important;
+        /* Se oculta/muestra junto con el panel derecho */
+        transform: translateX(100%) !important;
+    }
+    #local-media-controls.media-visible {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: translateX(0) !important;
+    }
+    #local-media-controls .media-btn {
+        width: 58px !important;
+        height: 58px !important;
+        font-size: 1.3rem !important;
+    }
+    #local-media-controls .menu-label {
+        font-size: 0.58rem !important;
+        color: white !important;
+        text-align: center !important;
+        margin-top: 3px !important;
+        font-family: 'Share Tech Mono' !important;
+        background: rgba(0,0,0,0.65) !important;
+        border-radius: 4px !important;
+        padding: 1px 3px !important;
+    }
+    /* Ocultar botón toggle de media en horizontal */
+    #btn-media-toggle {
+        display: none !important;
+    }
 }
 
-/* Botones sin color, translúcidos como el botón Media */
-.media-btn {
-    width: 36px !important;
-    height: 36px !important;
-    font-size: 14px !important;
-    background: rgba(255,255,255,0.08) !important; /* 🔒 Traslúcido */
-    border: 1px solid rgba(255,255,255,0.15) !important; /* 🔒 Borde sutil */
-    color: rgba(255,255,255,0.4) !important; /* 🔒 Icono translúcido */
-    border-radius: 50% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    pointer-events: auto !important;
-    transition: all 0.2s ease !important;
+/* === MEDIA CONTROLS EN VERTICAL: PERFECTAMENTE ALINEADO CON BOTÓN MEDIA === */
+@media (orientation: portrait), .portrait-mode {
+    #local-media-controls {
+        position: fixed !important;
+        bottom: 133px !important;  /* 🔒 75px (btn) + 48px (btn) + 10px (gap) = 133px */
+        right: 10px !important;
+        left: auto !important;
+        transform: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        width: 48px !important;    /* 🔒 Mismo ancho que los botones */
+        align-items: center !important; /* 🔒 Centrado (no flex-end) */
+        z-index: 100 !important;
+        height: auto !important;
+        padding: 0 !important;
+        background: transparent !important;
+    }
+    #local-media-controls.media-visible {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+    #local-media-controls .media-btn {
+        width: 48px !important;
+        height: 48px !important;
+        font-size: 18px !important;
+    }
+    #local-media-controls .menu-label {
+        display: none !important;
+    }
 }
-.media-btn:active {
-    transform: scale(0.9) !important;
-    background: rgba(255,255,255,0.15) !important;
+
+/* Media controls en horizontal - se ocultan con los paneles */
+@media (orientation: landscape), .landscape-mode {
+    #local-media-controls {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: opacity 0.3s ease !important;
+    }
+    #local-media-controls.media-visible {
+        opacity: 0.6 !important;
+        pointer-events: auto !important;
+    }
+    #local-media-controls.media-visible:hover {
+        opacity: 1.0 !important;
+    }
 }
 
     /* Telemetría: abajo derecha */
@@ -495,74 +846,105 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     <div id="zoom-target-indicator"></div>
 
     <div id="ui-layer">
-        <div id="hud-layer" class="hud-burn-hidden">
-            <img src="obr-logo.png" id="hud-logo" class="absolute top-5 left-5 w-[80px] h-[80px] opacity-90" alt="OBR">
-            <div id="hud-text-container" class="absolute top-5 left-[110px]">
-                <div id="hud-title" class="text-white font-orbitron font-bold text-base shadow-black drop-shadow-md">EXPLORACIONES OBR</div>
-                <div id="hud-time" class="text-[#ff3333] font-mono text-[20px] shadow-black drop-shadow-md font-bold" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">--/--/-- - --:--:--</div>
-            </div>
-        </div>
-
-        <div id="toast-container"></div>
-        <div id="tally-border" class="preview"></div>
-        
-        <div id="status-indicators" class="absolute bottom-12 left-5 flex items-center gap-2 text-sm pointer-events-none z-50" style="filter: drop-shadow(0px 0px 4px rgba(0,0,0,0.8));">
-            <div id="recovery-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">🚀</div>
-            <div id="ai-context-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">📄</div>
-            <div id="tts-warning" class="transition-opacity duration-500 text-yellow-500 font-mono text-xs bg-black/60 px-1.5 py-0.5 rounded border border-yellow-700 items-center gap-1" style="opacity: 0; display: none;">⚠️ <span class="text-[9px]">RED/TTS</span></div>
-        </div>
-        
-<!-- Botón Media agrupador (SOLO visible en vertical) -->
-<button id="btn-media-toggle" onclick="toggleMediaPanel()" class="media-btn" style="display:none;" title="MEDIA">
-    <i class="fas fa-photo-film"></i>
-</button>
-
-<div id="local-media-controls">
-    <button class="media-btn" onclick="playLocalMedia('intro')" title="INTRO">
-        <i class="fas fa-play"></i>
-    </button>
-    <button class="media-btn" onclick="playLocalMedia('banner')" title="BANNER">
-        <i class="fas fa-film"></i>
-    </button>
-    <button class="media-btn" onclick="playLocalMedia('outro')" title="OUTRO">
-        <i class="fas fa-stop"></i>
-    </button>
-</div>
-
-
-<div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
-    <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
-</div>
-        
-        <div id="map-container-slot" class="map-visible">
-            <div style="position: relative; width: 100%; height: 100%;">
-                <div id="map-loading" style="position: absolute; top: 45%; width: 100%; text-align: center; color: rgba(255,0,0,0.8); font-family: 'Share Tech Mono'; font-size: 12px; z-index: 5;">BUSCANDO SATÉLITES...</div>
-                <div id="mini-map"></div>
-                <div id="mini-map-tint" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; background: rgba(0, 15, 35, 0.15); mix-blend-mode: normal;"></div>
-                <div id="mini-map-overlay"></div>
-                <div id="mini-map-glitch"></div>
-            </div>
-        </div>
-
-        <div id="telemetry-container">
-            <div class="stat-row"><span id="mic-remote-status" class="text-gray-500 font-bold">MIC REM: OFFLINE</span></div>
-            <div class="stat-row"><span id="meta-res">INIT...</span><i class="fas fa-expand text-[8px]"></i></div>
-            <div class="stat-row"><span id="meta-fps">-- FPS</span><div class="signal-bars signal-level-0" id="signal-ui"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div>
-        </div>
-
-        <div id="menu-left" class="menu-container left-side">
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('night', this)" id="btn-night"><i class="fas fa-moon"></i></div><div class="menu-label">NOCT</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('thermal', this)" id="btn-thermal"><i class="fas fa-bolt"></i></div><div class="menu-label">SPEC</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('urbex', this)" id="btn-urbex"><i class="fas fa-city"></i></div><div class="menu-label">URBEX</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('lidar', this)" id="btn-heatmap"><i class="fas fa-fingerprint"></i></div><div class="menu-label">LIDAR</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="setFilter('sls', this)" id="btn-sls"><i class="fas fa-ghost"></i></div><div class="menu-label">SLS</div></div>
-        </div>
-        <div id="menu-right" class="menu-container right-side">
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="togglePareidolia(this)" id="btn-ia"><i class="fas fa-eye"></i></div><div class="menu-label">VISION</div></div>
-            <div onclick="event.stopPropagation()" id="wrapper-audio-scan" style="display:none;"><div class="menu-btn" onclick="toggleAudioScanner()" id="btn-audio-menu"><i class="fas fa-microphone"></i></div><div class="menu-label">AUDIO</div></div>
-            <div onclick="event.stopPropagation()"><div class="menu-btn" onclick="resetZoom(this)"><i class="fas fa-compress"></i></div><div class="menu-label">RESET</div></div>
+    <!-- CANVAS OVERLAY CRISTAL -->
+    <canvas id="crystal-overlay-canvas"></canvas>
+    
+    <!-- ZONA SEGURA CENTRAL (solo zoom) -->
+    <div id="safe-touch-zone"></div>
+    
+    <!-- INDICADOR DE GRABACIÓN -->
+    <div id="recording-indicator">
+        <span class="rec-dot"></span>
+        <span id="rec-time">00:00</span>
+    </div>
+    
+    <!-- FLASH DE CAPTURA -->
+    <div id="capture-flash"></div>
+    
+    <!-- HUD -->
+    <div id="hud-layer" class="hud-burn-hidden">
+        <img src="obr-logo.png" id="hud-logo" class="absolute top-5 left-5 w-[80px] h-[80px] opacity-90" alt="OBR">
+        <div id="hud-text-container" class="absolute top-5 left-[110px]">
+            <div id="hud-title" class="text-white font-orbitron font-bold text-base shadow-black drop-shadow-md">EXPLORACIONES OBR</div>
+            <div id="hud-time" class="text-[#ff3333] font-mono text-[20px] shadow-black drop-shadow-md font-bold" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">--/--/-- - --:--:--</div>
         </div>
     </div>
+    
+    <div id="toast-container"></div>
+    <div id="tally-border" class="preview"></div>
+    
+    <div id="status-indicators" class="absolute bottom-12 left-5 flex items-center gap-2 text-sm pointer-events-none z-50" style="filter: drop-shadow(0px 0px 4px rgba(0,0,0,0.8));">
+        <div id="recovery-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">🚀</div>
+        <div id="ai-context-indicator" class="transition-opacity duration-500" style="opacity: 0; display: none;">📄</div>
+        <div id="tts-warning" class="transition-opacity duration-500 text-yellow-500 font-mono text-xs bg-black/60 px-1.5 py-0.5 rounded border border-yellow-700 items-center gap-1" style="opacity: 0; display: none;">⚠️ <span class="text-[9px]">RED/TTS</span></div>
+    </div>
+    
+    <!-- BOTÓN MEDIA (solo visible en vertical) -->
+<button id="btn-media-toggle" onclick="toggleMediaPanel(event)" class="crystal-btn media-btn" style="display:none;" title="MEDIA">
+    <i class="fas fa-photo-film"></i>
+</button>
+    
+    <!-- CONTROLES DE MEDIA (con labels para horizontal) -->
+<div id="local-media-controls" class="media-hidden">
+    <div onclick="event.stopPropagation()">
+        <button class="crystal-btn media-btn" onclick="playLocalMedia('intro')" title="INTRO">
+            <i class="fas fa-play"></i>
+        </button>
+        <div class="menu-label">INTRO</div>
+    </div>
+    <div onclick="event.stopPropagation()">
+        <button class="crystal-btn media-btn" onclick="playLocalMedia('banner')" title="BANNER">
+            <i class="fas fa-film"></i>
+        </button>
+        <div class="menu-label">BANNER</div>
+    </div>
+    <div onclick="event.stopPropagation()">
+        <button class="crystal-btn media-btn" onclick="playLocalMedia('outro')" title="OUTRO">
+            <i class="fas fa-stop"></i>
+        </button>
+        <div class="menu-label">OUTRO</div>
+    </div>
+</div>
+    
+    <div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
+        <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
+    </div>
+    
+    <div id="map-container-slot" class="map-visible">
+        <div style="position: relative; width: 100%; height: 100%;">
+            <div id="map-loading" style="position: absolute; top: 45%; width: 100%; text-align: center; color: rgba(255,0,0,0.8); font-family: 'Share Tech Mono'; font-size: 12px; z-index: 5;">BUSCANDO SATÉLITES...</div>
+            <div id="mini-map"></div>
+            <div id="mini-map-tint" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; background: rgba(0, 15, 35, 0.15); mix-blend-mode: normal;"></div>
+            <div id="mini-map-overlay"></div>
+            <div id="mini-map-glitch"></div>
+        </div>
+    </div>
+    
+    <div id="telemetry-container">
+        <div class="stat-row"><span id="mic-remote-status" class="text-gray-500 font-bold">MIC REM: OFFLINE</span></div>
+        <div class="stat-row"><span id="meta-res">INIT...</span><i class="fas fa-expand text-[8px]"></i></div>
+        <div class="stat-row"><span id="meta-fps">-- FPS</span><div class="signal-bars signal-level-0" id="signal-ui"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div>
+    </div>
+    
+    <!-- PANEL IZQUIERDO - FILTROS -->
+    <div id="menu-left" class="menu-container left-side">
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="setFilter('night', this)" id="btn-night"><i class="fas fa-moon"></i></div><div class="menu-label">NOCT</div></div>
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="setFilter('thermal', this)" id="btn-thermal"><i class="fas fa-bolt"></i></div><div class="menu-label">SPEC</div></div>
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="setFilter('urbex', this)" id="btn-urbex"><i class="fas fa-city"></i></div><div class="menu-label">URBEX</div></div>
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="setFilter('lidar', this)" id="btn-heatmap"><i class="fas fa-fingerprint"></i></div><div class="menu-label">LIDAR</div></div>
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="setFilter('sls', this)" id="btn-sls"><i class="fas fa-ghost"></i></div><div class="menu-label">SLS</div></div>
+    </div>
+    
+    <!-- PANEL DERECHO - FUNCIONES IA + ZOOM + GRABAR/FOTO -->
+    <div id="menu-right" class="menu-container right-side">
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="togglePareidolia(this)" id="btn-ia"><i class="fas fa-eye"></i></div><div class="menu-label">VISION</div></div>
+        <div onclick="event.stopPropagation()" id="wrapper-audio-scan" style="display:none;"><div class="crystal-btn menu-btn" onclick="toggleAudioScanner()" id="btn-audio-menu"><i class="fas fa-microphone"></i></div><div class="menu-label">AUDIO</div></div>
+        <div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="resetZoom(this)"><i class="fas fa-compress"></i></div><div class="menu-label">RESET</div></div>
+        <!-- BOTONES GRABAR Y FOTO (iconos blancos unificados) -->
+<div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="toggleScreenRecording()" id="btn-record" title="Grabar Pantalla"><i class="fas fa-video"></i></div><div class="menu-label">REC</div></div>
+<div onclick="event.stopPropagation()"><div class="crystal-btn menu-btn" onclick="takeScreenshot()" id="btn-photo" title="Capturar Foto"><i class="fas fa-camera"></i></div><div class="menu-label">FOTO</div></div>
+    </div>
+</div>
 
     <div id="local-media-overlay" onclick="stopLocalMedia()">
         <video id="local-video-player" playsinline></video>
@@ -703,31 +1085,29 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 
             <div id="settings-scroll-container" class="p-4 overflow-y-auto flex-1 custom-scrollbar min-h-0">
                 
-                <div class="bg-black/50 p-3 rounded border border-gray-700 shadow-[0_0_10px_rgba(255,255,255,0.02)] mb-4 grid grid-cols-2 gap-4">
-                    <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600" onclick="toggleCleanUI()">
-                                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform" id="btn-toggle-ui-switch"></div>
-                            </div>
-                            <div>
-                                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">OCULTAR BOTONES</h3>
-                            </div>
-                        </div>
-                        <i id="btn-toggle-ui" onclick="toggleCleanUI()" class="fas fa-eye-slash text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
-                    </div>
-                    
-                    <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600" onclick="toggleLocalMic()">
-                                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform" id="btn-toggle-mic-switch"></div>
-                            </div>
-                            <div>
-                                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">MIC LOCAL 🎙️</h3>
-                            </div>
-                        </div>
-                        <i id="btn-toggle-mic" onclick="toggleLocalMic()" class="fas fa-microphone text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
-                    </div>
-                </div>
+               <!-- BLOQUE 1: CONFIGURACIÓN GRANULAR DE UI -->
+<div class="bg-black/50 p-4 rounded border border-purple-600 shadow-[0_0_15px_rgba(128,0,128,0.15)] mb-4">
+    <h3 class="text-[12px] font-bold text-purple-400 mb-3 border-b border-purple-900/60 pb-2 uppercase tracking-wider text-center">🎛️ OCULTAR ELEMENTOS DE UI</h3>
+    <div class="grid grid-cols-2 gap-2" id="ui-hide-grid">
+        <!-- Se genera dinámicamente con JS -->
+    </div>
+    <p class="text-[9px] text-gray-500 font-mono mt-3 text-center">Toca cada opción para alternar visibilidad</p>
+</div>
+
+<!-- BLOQUE 2: MIC LOCAL -->
+<div class="bg-black/50 p-3 rounded border border-gray-700 shadow-[0_0_10px_rgba(255,255,255,0.02)] mb-4">
+    <div class="flex justify-between items-center bg-black/40 p-2 rounded border border-gray-800">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-4 bg-gray-800 rounded-full relative cursor-pointer border border-gray-600" onclick="toggleLocalMic()">
+                <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 rounded-full transition-transform" id="btn-toggle-mic-switch"></div>
+            </div>
+            <div>
+                <h3 class="text-[10px] font-bold text-gray-300 uppercase tracking-wider">MIC LOCAL 🎙️</h3>
+            </div>
+        </div>
+        <i id="btn-toggle-mic" onclick="toggleLocalMic()" class="fas fa-microphone text-gray-500 cursor-pointer transition-colors hover:text-white"></i>
+    </div>
+</div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
     <!-- BLOQUE 1: RED ESTUDIO (Ahora ocupa la mitad izquierda, más grande) -->
@@ -2449,7 +2829,14 @@ if (!isPortrait) {
 let mediaPanelVisible = false;
 let mediaAutoHideTimer = null;
 
-function toggleMediaPanel() {
+// 🔒 CRÍTICO: toggleMediaPanel ahora recibe el evento y previene propagación
+function toggleMediaPanel(event) {
+    // Prevenir que el evento burbujee y abra los menús laterales
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
     const controls = document.getElementById('local-media-controls');
     const btn = document.getElementById('btn-media-toggle');
     mediaPanelVisible = !mediaPanelVisible;
@@ -2458,33 +2845,66 @@ function toggleMediaPanel() {
         controls.classList.toggle('media-visible', mediaPanelVisible);
     }
     
-    // Ocultar el botón Media cuando se despliega el panel
+    // Mantener el botón Media visible siempre (no ocultarlo)
     if (btn) {
-        btn.style.opacity = mediaPanelVisible ? '0' : '0.5';
-        btn.style.pointerEvents = mediaPanelVisible ? 'none' : 'auto';
+        btn.style.opacity = '0.5';
+        btn.style.pointerEvents = 'auto';
     }
     
-    // Auto-ocultar después de 6 segundos
+    // Auto-ocultar después de 2 segundos
     if (mediaPanelVisible) {
         clearTimeout(mediaAutoHideTimer);
         mediaAutoHideTimer = setTimeout(() => {
             if (mediaPanelVisible) toggleMediaPanel();
-        }, 6000);
+        }, 2000); // 🔒 Cambiado de 6000 a 2000 (2 segundos)
+    } else {
+        clearTimeout(mediaAutoHideTimer);
     }
 }
 
-// === FIX: Mostrar botón Media solo en vertical ===
+// 🔒 CRÍTICO: checkOrientation mejorada con logs de depuración
 function checkOrientation() {
     const btn = document.getElementById('btn-media-toggle');
-    if (!btn) return;
+    if (!btn) {
+        console.warn('[MEDIA] Botón btn-media-toggle no encontrado');
+        return;
+    }
     
     const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-    btn.style.display = isPortrait ? 'flex' : 'none';
+    const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+    
+    console.log('[MEDIA] Orientación detectada:', {
+        portrait: isPortrait,
+        landscape: isLandscape,
+        windowSize: `${window.innerWidth}x${window.innerHeight}`
+    });
+    
+    // 🔒 CRÍTICO: Forzar display flex en vertical, none en horizontal
+    if (isPortrait) {
+        btn.style.display = 'flex';
+        console.log('[MEDIA] Botón visible en vertical');
+    } else {
+        btn.style.display = 'none';
+        console.log('[MEDIA] Botón oculto en horizontal');
+    }
 }
 
+// Registrar listeners
 window.addEventListener('resize', checkOrientation);
 window.addEventListener('orientationchange', checkOrientation);
-window.addEventListener('load', checkOrientation);
+
+//  CRÍTICO: Ejecutar checkOrientation después de que todo esté cargado
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkOrientation);
+} else {
+    // DOM ya está cargado, ejecutar inmediatamente
+    setTimeout(checkOrientation, 100);
+}
+
+// También ejecutar en window.onload
+window.addEventListener('load', () => {
+    setTimeout(checkOrientation, 200);
+});
 
 function handleOrientationChange() {
     // Esperar a que el navegador termine de rotar
@@ -2625,7 +3045,82 @@ function applySharpness(level) {
     currentSharpness = level;
 }
 
-    window.onload = () => {
+
+// === FUNCIONES PARA CONFIGURACIÓN GRANULAR DE UI ===
+const UI_HIDE_OPTIONS = [
+    { key: 'hide-notifications', label: 'NOTIFICACIONES', icon: '🔔', desc: 'Oculta los toasts de mensajes' },
+    { key: 'hide-filters', label: 'FILTROS (PANEL IZQ)', icon: '🎨', desc: 'Panel lateral izquierdo completo' },
+    { key: 'hide-ai-functions', label: 'FUNCIONES IA (PANEL DER)', icon: '🤖', desc: 'Panel lateral derecho completo' },
+    { key: 'hide-telemetry', label: 'TELEMETRÍA', icon: '📊', desc: 'FPS, resolución y señal' },
+    { key: 'hide-settings-gear', label: 'BOTÓN CONFIGURACIONES', icon: '⚙️', desc: 'Engranaje invisible (sigue funcional)' },
+    { key: 'hide-map', label: 'MAPA', icon: '🗺️', desc: 'Mini mapa GPS' },
+    { key: 'hide-hud-text', label: 'HUD TEXTO', icon: '📝', desc: 'Solo deja el logo OBR visible' }
+];
+
+function loadUIHideSettings() {
+    console.log("[UI HIDE] Cargando configuraciones guardadas de ocultamiento...");
+    UI_HIDE_OPTIONS.forEach(opt => {
+        const saved = localStorage.getItem('obr_' + opt.key);
+        if (saved === 'true') {
+            document.body.classList.add(opt.key);
+            console.log(`[UI HIDE] Aplicado al iniciar: ${opt.key}`);
+        }
+    });
+}
+
+function toggleUIHideOption(key) {
+    // 1. Alternar la clase en el body
+    const isActive = document.body.classList.toggle(key);
+    
+    // 2. Depuración en consola para verificar que funciona
+    console.log(`[UI HIDE] ${key} ahora está:`, isActive ? 'ACTIVO (oculto)' : 'INACTIVO (visible)');
+    console.log('[UI HIDE] Clases actuales del body:', document.body.className);
+    
+    // 3. Guardar en localStorage
+    localStorage.setItem('obr_' + key, isActive ? 'true' : 'false');
+    
+    // 4. Actualizar el estilo visual del botón en el modal
+    updateUIHideButtons();
+}
+
+function updateUIHideButtons() {
+    UI_HIDE_OPTIONS.forEach(opt => {
+        const btn = document.getElementById('ui-hide-' + opt.key);
+        if (!btn) return;
+        const isActive = document.body.classList.contains(opt.key);
+        if (isActive) {
+            btn.classList.add('border-purple-500', 'text-purple-400', 'bg-purple-900/20');
+            btn.classList.remove('border-gray-700', 'text-gray-500');
+        } else {
+            btn.classList.remove('border-purple-500', 'text-purple-400', 'bg-purple-900/20');
+            btn.classList.add('border-gray-700', 'text-gray-500');
+        }
+    });
+}
+
+function generateUIHideGrid() {
+    const grid = document.getElementById('ui-hide-grid');
+    if (!grid || grid.children.length > 0) return; // Ya generado
+    
+    UI_HIDE_OPTIONS.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.id = 'ui-hide-' + opt.key;
+        btn.className = 'flex items-center gap-2 p-2 rounded border border-gray-700 text-gray-500 text-[10px] font-mono transition-all hover:border-purple-500';
+        btn.innerHTML = `
+            <span class="text-base">${opt.icon}</span>
+            <div class="flex-1 text-left">
+                <div class="font-bold uppercase tracking-wider">${opt.label}</div>
+                <div class="text-[8px] text-gray-600 mt-0.5">${opt.desc}</div>
+            </div>
+        `;
+        btn.onclick = () => toggleUIHideOption(opt.key);
+        grid.appendChild(btn);
+    });
+    updateUIHideButtons();
+}
+// === FIN DE FUNCIONES UI ===
+
+window.onload = () => {
     // 1. Consultar créditos reales de ElevenLabs al iniciar (protegido)
     if (ELEVENLABS_API_KEY) {
         fetchElevenLabsCredits();
@@ -2637,9 +3132,6 @@ function applySharpness(level) {
     
     const groqInput = document.getElementById('groq-key-input');
     if (groqInput) groqInput.value = GROQ_API_KEY;
-    
-    // NOTA: El campo 'eleven-key-input' no existe en el HTML actual, 
-    // por eso lo omitimos para evitar el error "Cannot set properties of null"
     
     // 3. Mostrar estado visual si ya están guardadas
     if (GEMINI_API_KEY && document.getElementById('gemini-status')) {
@@ -2672,10 +3164,22 @@ function applySharpness(level) {
         btn.style.color = "#00ff41";
     }
     
-    // 6. Actualizar UI de TTS
+    // 6. Cargar configuración granular de UI (Protegido con verificación de existencia)
+    if (typeof loadUIHideSettings === 'function') {
+        loadUIHideSettings();
+    }
+    
+    // 7. Actualizar UI de TTS
     updateTTSStatusUI();
-
     resize();
+
+    // 8. Verificar soporte de grabación
+    const recBtn = document.getElementById('btn-record');
+    if (recBtn && !('MediaRecorder' in window)) {
+        recBtn.style.opacity = '0.3';
+        recBtn.style.pointerEvents = 'none';
+        recBtn.title = 'Grabación no soportada en este navegador';
+    }
 };
 
 // Configurar slider de nitidez
@@ -3937,11 +4441,14 @@ function updateProgress(p, t) {
 function drawBurnInHUD(ctx, width, height, scale) {
     if (scale <= 0.01) return;
     
+    // 🔒 VERIFICAR SI EL USUARIO OCULTÓ EL TEXTO DEL HUD
+    const hideText = document.body.classList.contains('hide-hud-text');
+    
     const isPortrait = window.innerHeight > window.innerWidth;
     
     // Factores de escala para reducciones
-    const verticalYFactor = 0.864;   // Sube un 10% en vertical (0.96 * 0.9)
-    const horizontalSizeFactor = 0.95; // Reduce 5% en horizontal
+    const verticalYFactor = 0.864;
+    const horizontalSizeFactor = 0.95;
     
     // Configuración adaptativa
     const config = {
@@ -3960,26 +4467,31 @@ function drawBurnInHUD(ctx, width, height, scale) {
     ctx.globalAlpha = Math.max(0, Math.min(1, scale));
     ctx.shadowColor = "black";
     ctx.shadowBlur = config.shadowBlur;
-
+    
+    // 1. DIBUJAR LOGO (Siempre visible, como solicitaste)
     if (logoImg.complete && logoImg.naturalWidth > 0) {
         ctx.drawImage(logoImg, config.logoX, config.logoY, config.logoSize, config.logoSize);
     }
-
-    ctx.fillStyle = "white";
-    ctx.font = `bold ${config.titleSize}px 'Orbitron', sans-serif`;
-    ctx.fillText("EXPLORACIONES OBR", config.logoX + config.logoSize + config.titleOffset, config.logoY + config.titleY);
-
-    if (DOM_CACHE && DOM_CACHE.clock) {
-        ctx.fillStyle = "#ff3333";
-        ctx.font = `${isPortrait ? 'bold ' : ''}${config.clockSize}px 'Share Tech Mono', monospace`;
-        if (isPortrait) {
-            ctx.shadowColor = "rgba(0,0,0,0.9)";
-            ctx.shadowBlur = 8;
+    
+    // 2. DIBUJAR TEXTO Y RELOJ (SOLO si NO está activada la opción de ocultar)
+    if (!hideText) {
+        ctx.fillStyle = "white";
+        ctx.font = `bold ${config.titleSize}px 'Orbitron', sans-serif`;
+        ctx.fillText("EXPLORACIONES OBR", config.logoX + config.logoSize + config.titleOffset, config.logoY + config.titleY);
+        
+        if (DOM_CACHE && DOM_CACHE.clock) {
+            ctx.fillStyle = "#ff3333";
+            ctx.font = `${isPortrait ? 'bold ' : ''}${config.clockSize}px 'Share Tech Mono', monospace`;
+            if (isPortrait) {
+                ctx.shadowColor = "rgba(0,0,0,0.9)";
+                ctx.shadowBlur = 8;
+            }
+            ctx.fillText(DOM_CACHE.clock.innerText, config.logoX + config.logoSize + config.titleOffset, config.logoY + config.clockY);
         }
-        ctx.fillText(DOM_CACHE.clock.innerText, config.logoX + config.logoSize + config.titleOffset, config.logoY + config.clockY);
     }
+    
     ctx.restore();
-
+    
     // Indicador SLS (solo horizontal)
     if (state.isSLS && !isPortrait) {
         ctx.save();
@@ -4038,15 +4550,13 @@ function drawAIBurnIn(c, w, h, scale) {
     c.globalAlpha = Math.max(0, Math.min(1, scale * 1.5));
 
     // Factores de reducción
-    const verticalFactor = 0.9;    // Reduce 10% en vertical
-    const horizontalFactor = 0.63; // 0.7 (reducción previa) * 0.9 (10% adicional) = 0.63
-    
-    const margin = Math.min(w, h) * 0.025;
-    
-    // Tamaños del panel
-    const panelW = isPortrait ? w * 0.45 * verticalFactor : 320 * horizontalFactor;
-    const imgH = isPortrait ? h * 0.30 * verticalFactor : 240 * horizontalFactor;
-    const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFactor;
+    const verticalFactor = 0.72;   // 🔒 REDUCIDO 20%: 0.9 * 0.80 = 0.72
+const horizontalFactor = 0.63; // 0.7 (reducción previa) * 0.9 (10% adicional) = 0.63
+const margin = Math.min(w, h) * 0.025;
+// Tamaños del panel
+const panelW = isPortrait ? w * 0.45 * verticalFactor : 320 * horizontalFactor;
+const imgH = isPortrait ? h * 0.30 * verticalFactor : 240 * horizontalFactor;
+const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFactor;
     const finalImgH = Math.min(imgH, maxPanelH);
     const finalPanelW = Math.min(panelW, w * 0.60);
 
@@ -5587,34 +6097,120 @@ if (sharpSlider) {
         showToast("Config Guardada"); 
         document.getElementById('settings-modal').classList.remove('active'); 
     }
-    function openSettings() { updateTTSStatusUI(); initTTSModeUI(); loadTTSFilterPanel(); document.getElementById('settings-modal').classList.add('active'); }
+
+
+function openSettings() { 
+    updateTTSStatusUI(); 
+    initTTSModeUI(); 
+    loadTTSFilterPanel(); 
+    generateUIHideGrid(); // <-- Esta línea genera los botones granulares
+    document.getElementById('settings-modal').classList.add('active'); 
+}
     
-    let menuTimeout; const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
-    document.getElementById('touch-surface').addEventListener('click', showMenus);
-    function showMenus() { if(isCleanUI) return; menus.forEach(m => m.classList.add('visible')); clearTimeout(menuTimeout); menuTimeout = setTimeout(() => menus.forEach(m => m.classList.remove('visible')), 4000); }
+let menuTimeout;
+let menuAutoHideEnabled = true;
+const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
+const mediaControls = document.getElementById('local-media-controls');
+
+document.getElementById('touch-surface').addEventListener('click', showMenus);
+
+function showMenus() {
+    if (isCleanUI) return;
+    
+    // Mostrar paneles laterales
+    menus.forEach(m => m.classList.add('visible'));
+    
+    // Mostrar botones de media (quitar clase media-hidden)
+    if (mediaControls) {
+        mediaControls.classList.remove('media-hidden');
+    }
+    
+    // Auto-ocultar después de 4 segundos
+    clearTimeout(menuTimeout);
+    if (menuAutoHideEnabled) {
+        menuTimeout = setTimeout(() => {
+            menus.forEach(m => m.classList.remove('visible'));
+            // Ocultar botones de media
+            if (mediaControls) {
+                mediaControls.classList.add('media-hidden');
+            }
+        }, 2000);
+    }
+}
+
+function hideMenus() {
+    menus.forEach(m => m.classList.remove('visible'));
+    // Ocultar botones de media
+    if (mediaControls) {
+        mediaControls.classList.add('media-hidden');
+    }
+}
+
     function showToast(msg, isError = false) { const t = document.createElement('div'); t.className = `toast ${isError ? 'error' : ''}`; t.innerText = msg; document.getElementById('toast-container').appendChild(t); setTimeout(() => t.remove(), 3000); }
     
-    let pressTimer; const touchSurface = document.getElementById('touch-surface');
-    touchSurface.addEventListener('pointerdown', (e) => { 
-        pressTimer = setTimeout(async () => { 
-            state.zoom = state.zoom === 1 ? 2.5 : 1; let hardwareZoomSuccess = false;
-            const track = videoStream?.getVideoTracks()[0];
-            if (track) { const caps = track.getCapabilities ? track.getCapabilities() : {}; if (caps.zoom) { try { const targetZoom = state.zoom === 1 ? Math.max(1.0, caps.zoom.min) : Math.min(caps.zoom.max, 2.0); await track.applyConstraints({ advanced: [{ zoom: targetZoom }] }); hardwareZoomSuccess = true; } catch (err) {} } }
-            if (!hardwareZoomSuccess) { 
-                const w = window.innerWidth, h = window.innerHeight, xPct = (e.clientX / w) * 100, yPct = (e.clientY / h) * 100; 
-                el.zoom.style.transformOrigin = `${xPct}% ${yPct}%`; 
-                el.zoom.style.transform = `scale(${state.zoom})`; 
-                window._softwareZoomActive = state.zoom > 1;
-                window._zoomXPct = xPct / 100;
-                window._zoomYPct = yPct / 100;
-            } else {
-                window._softwareZoomActive = false;
-            }
-            const ind = document.getElementById('zoom-target-indicator'); ind.style.left = e.clientX+'px'; ind.style.top = e.clientY+'px'; ind.classList.add('active'); setTimeout(()=>ind.classList.remove('active'),500); if(navigator.vibrate) navigator.vibrate(50); 
-        }, 500); 
-    });
+// === ZONA SEGURA + TOUCH SURFACE CON ZOOM ===
+let pressTimer;
+const touchSurface = document.getElementById('touch-surface');
+const safeTouchZone = document.getElementById('safe-touch-zone');
+
+// Función unificada para ejecutar el zoom
+function performZoom(e) {
+    state.zoom = state.zoom === 1 ? 2.5 : 1;
+    let hardwareZoomSuccess = false;
+    const track = videoStream?.getVideoTracks()[0];
     
-    touchSurface.addEventListener('pointerup', () => clearTimeout(pressTimer)); touchSurface.addEventListener('pointermove', () => clearTimeout(pressTimer));
+    if (track) {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.zoom) {
+            try {
+                const targetZoom = state.zoom === 1 ? Math.max(1.0, caps.zoom.min) : Math.min(caps.zoom.max, 2.0);
+                track.applyConstraints({ advanced: [{ zoom: targetZoom }] }).then(() => {
+                    hardwareZoomSuccess = true;
+                }).catch(() => {});
+            } catch (err) {}
+        }
+    }
+    
+    if (!hardwareZoomSuccess) {
+        const w = window.innerWidth, h = window.innerHeight;
+        const xPct = (e.clientX / w) * 100, yPct = (e.clientY / h) * 100;
+        el.zoom.style.transformOrigin = `${xPct}% ${yPct}%`;
+        el.zoom.style.transform = `scale(${state.zoom})`;
+        window._softwareZoomActive = state.zoom > 1;
+        window._zoomXPct = xPct / 100;
+        window._zoomYPct = yPct / 100;
+    } else {
+        window._softwareZoomActive = false;
+    }
+    
+    const ind = document.getElementById('zoom-target-indicator');
+    ind.style.left = e.clientX + 'px';
+    ind.style.top = e.clientY + 'px';
+    ind.classList.add('active');
+    setTimeout(() => ind.classList.remove('active'), 500);
+    if (navigator.vibrate) navigator.vibrate(50);
+}
+
+// Touch Surface (área completa excepto zona segura)
+touchSurface.addEventListener('pointerdown', (e) => {
+    // Mostrar menús al tocar
+    showMenus();
+    // Iniciar timer para zoom
+    pressTimer = setTimeout(() => performZoom(e), 500);
+});
+touchSurface.addEventListener('pointerup', () => clearTimeout(pressTimer));
+touchSurface.addEventListener('pointermove', () => clearTimeout(pressTimer));
+touchSurface.addEventListener('pointercancel', () => clearTimeout(pressTimer));
+
+// Zona Segura (centro - solo zoom, no abre menús)
+safeTouchZone.addEventListener('pointerdown', (e) => {
+    e.stopPropagation(); // Evita que llegue al touch-surface
+    // Solo zoom, no mostrar menús
+    pressTimer = setTimeout(() => performZoom(e), 500);
+});
+safeTouchZone.addEventListener('pointerup', () => clearTimeout(pressTimer));
+safeTouchZone.addEventListener('pointermove', () => clearTimeout(pressTimer));
+safeTouchZone.addEventListener('pointercancel', () => clearTimeout(pressTimer));
     
     function resetZoom(btn) { 
         state.zoom = 1; 
@@ -5712,6 +6308,276 @@ async function refreshTTSCredits() {
     window.startRemoteMic = startRemoteMicAgora;
     window.stopRemoteMic = stopRemoteMicAgora;
     window.toggleLocalMic = toggleLocalMic;
+
+
+// ==========================================================
+// 🎬 SISTEMA DE GRABACIÓN + SCREENSHOT (getDisplayMedia NATIVO)
+// Captura EXACTAMENTE lo que ve el usuario (video + filtros + overlays + HUD)
+// ==========================================================
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let recordingStartTime = 0;
+let recordingTimer = null;
+
+// Guardar archivos de forma robusta (evita errores de cross-origin/iframe)
+async function saveBlobToFile(blob, fileName, mimeType) {
+    try {
+        if ('showSaveFilePicker' in window && window === window.top) {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: fileName,
+                types: [{
+                    description: mimeType.includes('image') ? 'Imagen' : 'Video',
+                    accept: { [mimeType]: [mimeType.includes('image') ? '.png' : '.webm'] }
+                }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return true;
+        }
+    } catch (err) {
+        console.warn("showSaveFilePicker no disponible:", err.name);
+    }
+    try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return true;
+    } catch (err) {
+        console.error("Fallback de descarga falló:", err);
+        return false;
+    }
+}
+
+// Oculta la UI temporalmente y guarda el estado EXACTO
+function hideUIForCapture() {
+    const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
+    const mediaControls = document.getElementById('local-media-controls');
+    const captureGroup = document.getElementById('capture-controls-group');
+    
+    const state = {
+        menuLeftVisible: menus[0]?.classList.contains('visible') || false,
+        menuRightVisible: menus[1]?.classList.contains('visible') || false,
+        mediaVisible: mediaControls?.classList.contains('media-visible') || false,
+        captureGroupOpacity: captureGroup?.style.opacity || '1'
+    };
+    
+    menus.forEach(m => m?.classList.remove('visible'));
+    if (mediaControls) mediaControls.classList.remove('media-visible');
+    if (captureGroup) captureGroup.style.opacity = '0';
+    
+    return state;
+}
+
+// Restaura el estado EXACTO sin alterar timers
+function restoreUIAfterCapture(state) {
+    const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
+    const mediaControls = document.getElementById('local-media-controls');
+    const captureGroup = document.getElementById('capture-controls-group');
+    
+    if (state.menuLeftVisible) menus[0]?.classList.add('visible');
+    else menus[0]?.classList.remove('visible');
+    
+    if (state.menuRightVisible) menus[1]?.classList.add('visible');
+    else menus[1]?.classList.remove('visible');
+    
+    if (state.mediaVisible && mediaControls) mediaControls.classList.add('media-visible');
+    else if (mediaControls) mediaControls.classList.remove('media-visible');
+    
+    if (captureGroup) captureGroup.style.opacity = state.captureGroupOpacity;
+}
+
+// Actualiza el estado visual de los botones
+function updateRecordingUI(recording) {
+    const btnRecord = document.getElementById('btn-record');
+    const btnPhoto = document.getElementById('btn-photo');
+    const recordEmoji = document.getElementById('record-emoji');
+    
+    if (recording) {
+        if (btnRecord) btnRecord.classList.add('active-state');
+        if (btnPhoto) btnPhoto.style.display = 'none';
+        if (recordEmoji) {
+            recordEmoji.textContent = '⏺️';
+            recordEmoji.style.filter = 'none';
+        }
+    } else {
+        if (btnRecord) btnRecord.classList.remove('active-state');
+        if (btnPhoto) btnPhoto.style.display = 'flex';
+        if (recordEmoji) {
+            recordEmoji.textContent = '📽️';
+            recordEmoji.style.filter = 'brightness(0) invert(1)';
+        }
+    }
+}
+
+// ️ GRABACIÓN CON getDisplayMedia (captura pestaña completa)
+async function toggleScreenRecording() {
+    if (isRecording) {
+        stopScreenRecording();
+    } else {
+        await startScreenRecording();
+    }
+}
+
+async function startScreenRecording() {
+    try {
+        const uiState = hideUIForCapture();
+        await new Promise(r => setTimeout(r, 150));
+        
+        // CAPTURAR LA PESTAÑA ACTUAL (API NATIVA)
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+                cursor: 'never',
+                displaySurface: 'browser',
+                logicalSurface: true,
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                frameRate: { ideal: 30 }
+            },
+            audio: false,
+            preferCurrentTab: true
+        });
+        
+        const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+        let selectedMime = mimeTypes.find(mime => MediaRecorder.isTypeSupported(mime)) || 'video/webm';
+        
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: selectedMime,
+            videoBitsPerSecond: 8000000
+        });
+        
+        recordedChunks = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(recordedChunks, { type: selectedMime });
+            
+            if (blob.size > 1000) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                const fileName = `OBR_REC_${timestamp}.webm`;
+                await saveBlobToFile(blob, fileName, selectedMime);
+            } else {
+                console.warn("Grabación vacía");
+            }
+            
+            stream.getTracks().forEach(t => t.stop());
+            restoreUIAfterCapture(uiState);
+        };
+        
+        stream.getVideoTracks()[0].onended = () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                stopScreenRecording();
+            }
+        };
+        
+        mediaRecorder.start(1000);
+        isRecording = true;
+        recordingStartTime = Date.now();
+        
+        updateRecordingUI(true);
+        
+    } catch (err) {
+        console.error('Error iniciando grabación:', err);
+        const uiState = {
+            menuLeftVisible: true,
+            menuRightVisible: true,
+            mediaVisible: false,
+            captureGroupOpacity: '1'
+        };
+        restoreUIAfterCapture(uiState);
+    }
+}
+
+function stopScreenRecording() {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    try { mediaRecorder.stop(); } catch (e) { console.warn('Error al detener:', e); }
+    isRecording = false;
+    if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
+    updateRecordingUI(false);
+}
+
+// 📸 SCREENSHOT CON getDisplayMedia (captura pestaña completa)
+async function takeScreenshot() {
+    try {
+        const uiState = hideUIForCapture();
+        
+        // Flash visual
+        const flash = document.getElementById('capture-flash');
+        if (flash) {
+            flash.classList.add('flash');
+            setTimeout(() => flash.classList.remove('flash'), 150);
+        }
+        
+        await new Promise(r => setTimeout(r, 150));
+        
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+                cursor: 'never',
+                displaySurface: 'browser',
+                logicalSurface: true,
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            },
+            audio: false,
+            preferCurrentTab: true
+        });
+        
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        
+        await new Promise((resolve) => {
+            video.onloadedmetadata = () => resolve();
+        });
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        
+        canvas.toBlob(async (blob) => {
+            if (!blob) {
+                restoreUIAfterCapture(uiState);
+                return;
+            }
+            
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const fileName = `OBR_CAM_${timestamp}.png`;
+            
+            await saveBlobToFile(blob, fileName, 'image/png');
+            
+            restoreUIAfterCapture(uiState);
+            
+        }, 'image/png', 1.0);
+        
+    } catch (err) {
+        console.error('Error capturando screenshot:', err);
+        const uiState = {
+            menuLeftVisible: true,
+            menuRightVisible: true,
+            mediaVisible: false,
+            captureGroupOpacity: '1'
+        };
+        restoreUIAfterCapture(uiState);
+    }
+}
+
+// Exponer funciones globalmente
+window.takeScreenshot = takeScreenshot;
+window.toggleScreenRecording = toggleScreenRecording;
 
 
 // 🔒 CRÍTICO: Detectar orientación real y aplicar estilos manualmente
