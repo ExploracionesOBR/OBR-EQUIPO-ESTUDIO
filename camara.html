@@ -28,6 +28,7 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -40,8 +41,18 @@
         #main-view-area { position: absolute; inset: 0; background: #000; overflow: hidden; transition: filter 0.2s; transform: translateZ(0); will-change: filter; }
         #zoom-container { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: center center; transition: transform 0.2s ease-out; will-change: transform; backface-visibility: hidden; }
         #shared-video-element { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 1; pointer-events: none; }
-        #sls-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; pointer-events: none; opacity: 1 !important; visibility: visible; display: block; }
-        #audio-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+        #master-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 1 !important;
+  visibility: visible;
+  display: block;
+}
         #heatmap-buffer, #lidar-buffer { display: none; }
         #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 70; }
         .interactive { pointer-events: auto; cursor: pointer; }
@@ -394,7 +405,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
     }
 
     /* Canvas SLS/LIDAR */
-    #sls-canvas, #lidar-canvas, #audio-canvas {
+    #master-canvas, #lidar-canvas {
         position: absolute !important;
         top: 0 !important;
         left: 0 !important;
@@ -880,23 +891,21 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 </svg>
     <div id="main-view-area">
         <div id="zoom-container">
-            <video id="shared-video-element" autoplay playsinline muted></video>
-            <canvas id="sls-canvas"></canvas>
-            <canvas id="audio-canvas"></canvas>
-        </div>
+  <video id="shared-video-element" autoplay playsinline muted></video>
+  <canvas id="master-canvas"></canvas>
+</div>
         <div id="ai-scan-overlay"></div>
     </div>
     
     <canvas id="heatmap-buffer"></canvas>
     <canvas id="lidar-buffer"></canvas>
+    <canvas id="map-mirror-canvas" style="display:none;"></canvas>
+    
     
     <div id="touch-surface" class="absolute inset-0 z-10 interactive"></div>
     <div id="zoom-target-indicator"></div>
 
     <div id="ui-layer">
-    <!-- CANVAS OVERLAY CRISTAL -->
-    <canvas id="crystal-overlay-canvas"></canvas>
-    
     <!-- ZONA SEGURA CENTRAL (solo zoom) -->
     <div id="safe-touch-zone"></div>
     
@@ -1747,7 +1756,8 @@ self.addEventListener('fetch', e => {
                 clock: document.getElementById('hud-time'),
                 ctxInd: document.getElementById('ai-context-indicator'),
                 recInd: document.getElementById('recovery-indicator'),
-                warning: document.getElementById('tts-warning')
+                warning: document.getElementById('tts-warning'),
+                masterCanvas: document.getElementById('master-canvas')
             };
         }
     }
@@ -2731,14 +2741,22 @@ async function getElevenLabsAudio(text, voiceId) {
     function lerp(a, b, t = 0.5) { return a + (b - a) * t; }
 
     const animState = { hudScale: 1.0, hudTarget: 1.0, aiScale: 0.0, aiTarget: 0.0 };
-    const el = { 
-        video: document.getElementById('shared-video-element'), canvas: document.getElementById('sls-canvas'), audioCanvas: document.getElementById('audio-canvas'),
-        heatCanvas: document.getElementById('heatmap-buffer'), lidarCanvas: document.getElementById('lidar-buffer'), zoom: document.getElementById('zoom-container'), 
-        statusText: document.getElementById('status-text'), statusDot: document.getElementById('status-dot') 
-    };
+  const el = {
+  video: document.getElementById('shared-video-element'),
+  masterCanvas: document.getElementById('master-canvas'), // ← CAMBIADO
+  heatCanvas: document.getElementById('heatmap-buffer'),
+  lidarCanvas: document.getElementById('lidar-buffer'),
+  zoom: document.getElementById('zoom-container'),
+  statusText: document.getElementById('status-text'),
+  statusDot: document.getElementById('status-dot')
+};
 
-    const ctx = el.canvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
-    const audioLayerCtx = el.audioCanvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
+// 🎯 UN SOLO CONTEXTO MAESTRO
+const ctx = el.masterCanvas.getContext('2d', {
+  alpha: true,
+  desynchronized: false,
+  willReadFrequently: false
+});
     const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
     
     let aiDetector = null, segmenter = null, poses = [], lidarMask = null;
@@ -3348,6 +3366,96 @@ function initMiniMap() {
     );
 }
 
+
+// ==========================================================
+// 🗺️ CAPTURA DEL MAPA PARA CANVAS MAESTRO
+// ==========================================================
+let mapMirrorCanvas = null;
+let mapMirrorCtx = null;
+let lastMapCapture = 0;
+const MAP_CAPTURE_INTERVAL = 1000; // Capturar mapa cada 1 segundo (rendimiento)
+
+function initMapMirror() {
+  mapMirrorCanvas = document.getElementById('map-mirror-canvas');
+  if (!mapMirrorCanvas) return;
+  
+  const mapSlot = document.getElementById('map-container-slot');
+  if (!mapSlot) return;
+  
+  // Tamaño del mini-mapa (96x96 en vertical, 156x156 en horizontal)
+  const isPortrait = window.innerHeight > window.innerWidth;
+  const mapSize = isPortrait ? 96 : 156;
+  
+  mapMirrorCanvas.width = mapSize;
+  mapMirrorCanvas.height = mapSize;
+  mapMirrorCtx = mapMirrorCanvas.getContext('2d', { alpha: true });
+}
+
+async function captureMapToMirror() {
+  const now = Date.now();
+  if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return; // Limitar capturas
+  if (typeof html2canvas === 'undefined') return;
+  
+  const mapSlot = document.getElementById('map-container-slot');
+  if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
+  if (!mapMirrorCtx) initMapMirror();
+  if (!mapMirrorCtx) return;
+  
+  try {
+    // Capturar SOLO el contenedor del mapa (rápido, es pequeño)
+    const canvas = await html2canvas(mapSlot, {
+      backgroundColor: null,
+      scale: 1, // Sin escalar (ya es pequeño)
+      useCORS: true,
+      logging: false,
+      width: mapSlot.offsetWidth,
+      height: mapSlot.offsetHeight
+    });
+    
+    // Dibujar en el canvas espejo
+    mapMirrorCtx.clearRect(0, 0, mapMirrorCanvas.width, mapMirrorCanvas.height);
+    mapMirrorCtx.drawImage(canvas, 0, 0, mapMirrorCanvas.width, mapMirrorCanvas.height);
+    lastMapCapture = now;
+  } catch (err) {
+    // Silenciar errores de captura (tiles no cargados, etc.)
+  }
+}
+
+function drawMapToMaster(masterCtx, masterW, masterH) {
+  const mapSlot = document.getElementById('map-container-slot');
+  if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
+  if (!mapMirrorCanvas || !mapMirrorCtx) return;
+  
+  // Verificar si hay contenido capturado
+  // (comprobamos un pixel del centro)
+  try {
+    const centerPixel = mapMirrorCtx.getImageData(
+      Math.floor(mapMirrorCanvas.width / 2),
+      Math.floor(mapMirrorCanvas.height / 2),
+      1, 1
+    ).data;
+    if (centerPixel[3] === 0) return; // Canvas vacío
+  } catch (e) { return; }
+  
+  // Calcular posición del mapa en el canvas maestro
+  const isPortrait = masterH > masterW;
+  const mapSize = isPortrait ? 96 : 156;
+  const mapX = isPortrait ? 8 : 30;
+  const mapY = isPortrait ? masterH - mapSize - 8 : masterH - mapSize - 15;
+  
+  // Dibujar con borde redondeado simulado
+  masterCtx.save();
+  masterCtx.globalAlpha = 0.95;
+  masterCtx.drawImage(mapMirrorCanvas, mapX, mapY, mapSize, mapSize);
+  
+  // Borde sutil para definir el mapa
+  masterCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  masterCtx.lineWidth = 1;
+  masterCtx.strokeRect(mapX, mapY, mapSize, mapSize);
+  masterCtx.restore();
+}
+
+
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
     // 🔒 CRÍTICO: Cambiar emoji cada 2 minutos aunque el usuario no se mueva
     if (!window._emojiChangeInterval) {
@@ -3473,7 +3581,7 @@ if (newChatUrl) {
     
     clearTimeout(loadingTimer);
     
-    initMiniMap();
+    initMapMirror();
 
     // 4K a 30 FPS para mejor fluidez y menor consumo
 const constraintSets = [
@@ -4420,10 +4528,9 @@ function drawLidarEffect(c, width, height, currentFrame) {
     lidarCtx.stroke();
     lidarCtx.restore();
     
-    c.globalCompositeOperation = 'screen';
-    c.drawImage(el.lidarCanvas, 0, 0, width, height);
-    c.globalCompositeOperation = 'source-over';
-    lastLidarMask = maskToUse;
+    ctx.globalCompositeOperation = 'screen';
+ctx.drawImage(el.lidarCanvas, 0, 0, width, height);
+ctx.globalCompositeOperation = 'source-over';
 }
 
     function initScanlines(w, h) {
@@ -4434,51 +4541,33 @@ function drawLidarEffect(c, width, height, currentFrame) {
     }
 
     function resize() {
-    // Obtener dimensiones reales de la ventana
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    el.canvas.width = w;
-    el.canvas.height = h;
-    el.lidarCanvas.width = w;
-    el.lidarCanvas.height = h;
-    el.audioCanvas.width = w;
-    el.audioCanvas.height = h;
-    // Resetear caché de coordenadas para forzar recálculo en renderLoop
-    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  // 🎯 CANVAS MAESTRO
+  el.masterCanvas.width = w;
+  el.masterCanvas.height = h;
+
+  // Buffers internos
+  el.lidarCanvas.width = w;
+  el.lidarCanvas.height = h;
+
+  // 🗺️ Actualizar tamaño del canvas espejo del mapa
+  if (mapMirrorCanvas) {
+    const isPortrait = h > w;
+    const mapSize = isPortrait ? 96 : 156;
+    mapMirrorCanvas.width = mapSize;
+    mapMirrorCanvas.height = mapSize;
+  }
+
+  lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
 }
 
-//function fixCanvasSize() {
-    // 🔒 Declaración explícita de vW y vH para evitar "is not defined"
-  //  const vW = el.video.videoWidth || 1920;
-    //const vH = el.video.videoHeight || 1080;
-    
-    // 🔒 CRÍTICO: Redimensionar TODOS los canvas
-    //el.canvas.width = vW;
-    //el.canvas.height = vH;
-    //el.lidarCanvas.width = vW;
-    //el.lidarCanvas.height = vH;
-    //el.audioCanvas.width = vW;
-    //el.audioCanvas.height = vH;
-    
-    // Ajustar CSS para que llenen la pantalla
-    //el.canvas.style.width = "100vw";
-    //el.canvas.style.height = "100vh";
-    //el.lidarCanvas.style.width = "100vw";
-    //el.lidarCanvas.style.height = "100vh";
-    //el.audioCanvas.style.width = "100vw";
-    //el.audioCanvas.style.height = "100vh";
-    
-    // Forzar recálculo
-    //lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
-//}
-
-//window.addEventListener("resize", fixCanvasSize);
-
-function drawFallbackSilhouette() { 
-    audioLayerCtx.globalAlpha = 0.12; 
-    audioLayerCtx.fillStyle = "#00ffff"; 
-    audioLayerCtx.fillRect(0, 0, el.audioCanvas.width, el.audioCanvas.height); 
-    audioLayerCtx.globalAlpha = 1; 
+function drawFallbackSilhouette() {
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = "#00ffff";
+  ctx.fillRect(0, 0, el.masterCanvas.width, el.masterCanvas.height);
+  ctx.globalAlpha = 1;
 }
 
 function updateProgress(p, t) { 
@@ -4559,6 +4648,7 @@ function drawBurnInHUD(ctx, width, height, scale) {
         ctx.restore();
     }
 }
+
 
 function drawGlitchText(c, text, x, y, size = 12) { 
     const glitchOffset = Math.random() * 4 - 2; 
@@ -4881,72 +4971,114 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         if (!drewPose && window.motionLevel > 0.025) { targetCtx.save(); targetCtx.strokeStyle = `rgba(255,0,0,${0.2 + pulse * 0.25})`; targetCtx.lineWidth = 1.5; targetCtx.shadowBlur = 8 + pulse * 8; targetCtx.shadowColor = "rgba(255,0,0,0.5)"; targetCtx.strokeRect(dW * 0.35 + dX, dH * 0.2 + dY, dW * 0.3, dH * 0.6); targetCtx.restore(); }
     }
 
-    function renderLoop(now, metadata) {
-        if (!now) now = performance.now();
-        const delta = now - lastFrameTime;
-        if (delta < fpsInterval) { if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop); return; }
-        if (document.hidden) return;
-        lastFrameUpdateTime = now; // El Guardian sabrá que el sistema está vivo
-        lastFrameTime = now; frameCount++;
-        
-        const vW = el.video.videoWidth, vH = el.video.videoHeight, cW = el.canvas.width, cH = el.canvas.height;
-        const isTransmitting = (agoraClient && agoraClient.joined);
-        
-        ctx.clearRect(0, 0, cW, cH); audioLayerCtx.clearRect(0, 0, cW, cH); updateSmoothing();
-        
-        if (vW && vH) {
-            if (vW !== lastVW || vH !== lastVH || cW !== lastCW || cH !== lastCH) {
-    const vRatio = vW / vH, cRatio = cW / cH; 
-    let dW, dH, dX, dY;
-    
-    // 🔒 CRÍTICO: Calcular dimensiones correctas según orientación
-    if (cRatio > vRatio) {
-        // Canvas más ancho que el video (letterbox vertical)
-        dW = cW;
-        dH = cW / vRatio;
-        dX = 0;
-        dY = (cH - dH) / 2;
-    } else {
-        // Canvas más alto que el video (pillarbox horizontal)
-        dW = cH * vRatio;
-        dH = cH;
-        dX = (cW - dW) / 2;
-        dY = 0;
-    }
-    
-    window.drawCoords = { dW, dH, dX, dY, vW, vH };
-    lastVW = vW; lastVH = vH; lastCW = cW; lastCH = cH;
-    
-    console.log(`[CANVAS] Video: ${vW}x${vH}, Canvas: ${cW}x${cH}, Draw: ${dW.toFixed(0)}x${dH.toFixed(0)} @ (${dX.toFixed(0)},${dY.toFixed(0)})`);
-}
-            
-            if (state.isLidar) { 
-                audioLayerCtx.fillStyle = 'rgba(0,0,0,0.25)'; 
-                audioLayerCtx.fillRect(0,0, cW, cH); 
-                drawLidarEffect(audioLayerCtx, cW, cH, frameCount); 
-            }
-        }
+function renderLoop(now, metadata) {
+  if (!now) now = performance.now();
+  const delta = now - lastFrameTime;
+  if (delta < fpsInterval) { 
+    if ('requestVideoFrameCallback' in el.video) 
+      el.video.requestVideoFrameCallback(renderLoop); 
+    else 
+      requestAnimationFrame(renderLoop); 
+    return; 
+  }
+  if (document.hidden) return;
 
-        if (state.isSLS && !state.isLidar) {
-            const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
-            const nPoses = renderPoses.length;
-            if (!nPoses && (Date.now() - (window._slsStartTime||0)) > 800) drawFallbackSilhouette();
-            for (let ti = 0; ti < nPoses; ti++) {
-                drawHybrid(audioLayerCtx, renderPoses[ti], ti); 
-            }
-        }
-        
-        const speed = 0.25; animState.hudScale += (animState.hudTarget - animState.hudScale) * speed; animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
-        drawBurnInHUD(audioLayerCtx, cW, cH, animState.hudScale); 
-        
-         
-        
-        if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) { drawAIBurnIn(audioLayerCtx, cW, cH, animState.aiScale); } 
-        
-        if (state.isAudioScan) { drawAudioVisualizer(audioLayerCtx, cW, cH); } 
-        
-        if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
+  lastFrameUpdateTime = now;
+  lastFrameTime = now; 
+  frameCount++;
+
+  const vW = el.video.videoWidth, vH = el.video.videoHeight;
+  const cW = el.masterCanvas.width, cH = el.masterCanvas.height;
+
+  // 🎯 1. LIMPIAR COMPLETAMENTE (fondo negro sólido, NO transparente)
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1.0;
+  ctx.filter = 'none';
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, cW, cH);
+  
+  updateSmoothing();
+
+  // 🎯 2. CALCULAR COORDENADAS (letterbox/pillarbox)
+  if (vW && vH) {
+    if (vW !== lastVW || vH !== lastVH || cW !== lastCW || cH !== lastCH) {
+      const vRatio = vW / vH, cRatio = cW / cH;
+      let dW, dH, dX, dY;
+      if (cRatio > vRatio) {
+        dW = cW; dH = cW / vRatio; dX = 0; dY = (cH - dH) / 2;
+      } else {
+        dW = cH * vRatio; dH = cH; dX = (cW - dW) / 2; dY = 0;
+      }
+      window.drawCoords = { dW, dH, dX, dY, vW, vH };
+      lastVW = vW; lastVH = vH; lastCW = cW; lastCH = cH;
     }
+
+    const { dW, dH, dX, dY } = window.drawCoords;
+
+    // 🎯 3. APLICAR FILTROS CSS AL CONTEXTO ANTES DE DIBUJAR
+    ctx.save();
+    ctx.filter = getCanvasVideoFilter();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    //  4. DIBUJAR VIDEO CON FILTROS APLICADOS
+    ctx.drawImage(el.video, dX, dY, dW, dH);
+    ctx.restore();
+
+    //  5. APLICAR NITIDEZ MANUAL (post-procesado)
+    if (currentSharpness > 0) {
+      applySharpnessToCanvas(ctx, dX, dY, dW, dH, currentSharpness);
+    }
+
+    // 🎯 6. LIDAR
+    if (state.isLidar) {
+      drawLidarEffect(ctx, cW, cH, frameCount);
+    }
+  }
+
+  //  7. SLS
+  if (state.isSLS && !state.isLidar) {
+    const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
+    if (!renderPoses.length && (Date.now() - (window._slsStartTime||0)) > 800) {
+      drawFallbackSilhouette();
+    }
+    for (let ti = 0; ti < renderPoses.length; ti++) {
+      drawHybrid(ctx, renderPoses[ti], ti);
+    }
+  }
+
+  // 🎯 8. SCAN BOXES DE IA VISION
+  if (state.isPareidolia) {
+    drawCanvasScanBoxes(ctx, cW, cH);
+  }
+
+  //  9. HUD + AI
+  const speed = 0.25;
+  animState.hudScale += (animState.hudTarget - animState.hudScale) * speed;
+  animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
+
+  drawBurnInHUD(ctx, cW, cH, animState.hudScale);
+  if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) {
+    drawAIBurnIn(ctx, cW, cH, animState.aiScale);
+  }
+
+  // 🎯 10. AUDIO VISUALIZER
+  if (state.isAudioScan) {
+    drawAudioVisualizer(ctx, cW, cH);
+  }
+
+  //  11. MARCO TALLY (dibujado en canvas)
+  drawTallyBorder(ctx, cW, cH);
+
+  // Siguiente frame
+  if ('requestVideoFrameCallback' in el.video)
+    el.video.requestVideoFrameCallback(renderLoop);
+  else 
+    requestAnimationFrame(renderLoop);
+}
+
+//AQUI FUNALIZA  renderLoop
+
 
     function updateClock() {
         if (!DOM_CACHE) return;
@@ -6358,274 +6490,7 @@ async function refreshTTSCredits() {
     window.toggleLocalMic = toggleLocalMic;
 
 
-// ==========================================================
-// 🎬 SISTEMA DE GRABACIÓN + SCREENSHOT (getDisplayMedia NATIVO)
-// Captura EXACTAMENTE lo que ve el usuario (video + filtros + overlays + HUD)
-// ==========================================================
-let mediaRecorder = null;
-let recordedChunks = [];
-let isRecording = false;
-let recordingStartTime = 0;
-let recordingTimer = null;
 
-// Guardar archivos de forma robusta (evita errores de cross-origin/iframe)
-async function saveBlobToFile(blob, fileName, mimeType) {
-    try {
-        if ('showSaveFilePicker' in window && window === window.top) {
-            const handle = await window.showSaveFilePicker({
-                suggestedName: fileName,
-                types: [{
-                    description: mimeType.includes('image') ? 'Imagen' : 'Video',
-                    accept: { [mimeType]: [mimeType.includes('image') ? '.png' : '.webm'] }
-                }]
-            });
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            return true;
-        }
-    } catch (err) {
-        console.warn("showSaveFilePicker no disponible:", err.name);
-    }
-    try {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        return true;
-    } catch (err) {
-        console.error("Fallback de descarga falló:", err);
-        return false;
-    }
-}
-
-// Oculta la UI temporalmente y guarda el estado EXACTO
-function hideUIForCapture() {
-    const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
-    const mediaControls = document.getElementById('local-media-controls');
-    const captureGroup = document.getElementById('capture-controls-group');
-    
-    const state = {
-        menuLeftVisible: menus[0]?.classList.contains('visible') || false,
-        menuRightVisible: menus[1]?.classList.contains('visible') || false,
-        mediaVisible: mediaControls?.classList.contains('media-visible') || false,
-        captureGroupOpacity: captureGroup?.style.opacity || '1'
-    };
-    
-    menus.forEach(m => m?.classList.remove('visible'));
-    if (mediaControls) mediaControls.classList.remove('media-visible');
-    if (captureGroup) captureGroup.style.opacity = '0';
-    
-    return state;
-}
-
-// Restaura el estado EXACTO sin alterar timers
-function restoreUIAfterCapture(state) {
-    const menus = [document.getElementById('menu-left'), document.getElementById('menu-right')];
-    const mediaControls = document.getElementById('local-media-controls');
-    const captureGroup = document.getElementById('capture-controls-group');
-    
-    if (state.menuLeftVisible) menus[0]?.classList.add('visible');
-    else menus[0]?.classList.remove('visible');
-    
-    if (state.menuRightVisible) menus[1]?.classList.add('visible');
-    else menus[1]?.classList.remove('visible');
-    
-    if (state.mediaVisible && mediaControls) mediaControls.classList.add('media-visible');
-    else if (mediaControls) mediaControls.classList.remove('media-visible');
-    
-    if (captureGroup) captureGroup.style.opacity = state.captureGroupOpacity;
-}
-
-// Actualiza el estado visual de los botones
-function updateRecordingUI(recording) {
-    const btnRecord = document.getElementById('btn-record');
-    const btnPhoto = document.getElementById('btn-photo');
-    const recordEmoji = document.getElementById('record-emoji');
-    
-    if (recording) {
-        if (btnRecord) btnRecord.classList.add('active-state');
-        if (btnPhoto) btnPhoto.style.display = 'none';
-        if (recordEmoji) {
-            recordEmoji.textContent = '⏺️';
-            recordEmoji.style.filter = 'none';
-        }
-    } else {
-        if (btnRecord) btnRecord.classList.remove('active-state');
-        if (btnPhoto) btnPhoto.style.display = 'flex';
-        if (recordEmoji) {
-            recordEmoji.textContent = '📽️';
-            recordEmoji.style.filter = 'brightness(0) invert(1)';
-        }
-    }
-}
-
-// ️ GRABACIÓN CON getDisplayMedia (captura pestaña completa)
-async function toggleScreenRecording() {
-    if (isRecording) {
-        stopScreenRecording();
-    } else {
-        await startScreenRecording();
-    }
-}
-
-async function startScreenRecording() {
-    try {
-        const uiState = hideUIForCapture();
-        await new Promise(r => setTimeout(r, 150));
-        
-        // CAPTURAR LA PESTAÑA ACTUAL (API NATIVA)
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-                cursor: 'never',
-                displaySurface: 'browser',
-                logicalSurface: true,
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                frameRate: { ideal: 30 }
-            },
-            audio: false,
-            preferCurrentTab: true
-        });
-        
-        const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-        let selectedMime = mimeTypes.find(mime => MediaRecorder.isTypeSupported(mime)) || 'video/webm';
-        
-        mediaRecorder = new MediaRecorder(stream, {
-            mimeType: selectedMime,
-            videoBitsPerSecond: 8000000
-        });
-        
-        recordedChunks = [];
-        
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-        };
-        
-        mediaRecorder.onstop = async () => {
-            const blob = new Blob(recordedChunks, { type: selectedMime });
-            
-            if (blob.size > 1000) {
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                const fileName = `OBR_REC_${timestamp}.webm`;
-                await saveBlobToFile(blob, fileName, selectedMime);
-            } else {
-                console.warn("Grabación vacía");
-            }
-            
-            stream.getTracks().forEach(t => t.stop());
-            restoreUIAfterCapture(uiState);
-        };
-        
-        stream.getVideoTracks()[0].onended = () => {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                stopScreenRecording();
-            }
-        };
-        
-        mediaRecorder.start(1000);
-        isRecording = true;
-        recordingStartTime = Date.now();
-        
-        updateRecordingUI(true);
-        
-    } catch (err) {
-        console.error('Error iniciando grabación:', err);
-        const uiState = {
-            menuLeftVisible: true,
-            menuRightVisible: true,
-            mediaVisible: false,
-            captureGroupOpacity: '1'
-        };
-        restoreUIAfterCapture(uiState);
-    }
-}
-
-function stopScreenRecording() {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-    try { mediaRecorder.stop(); } catch (e) { console.warn('Error al detener:', e); }
-    isRecording = false;
-    if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
-    updateRecordingUI(false);
-}
-
-// 📸 SCREENSHOT CON getDisplayMedia (captura pestaña completa)
-async function takeScreenshot() {
-    try {
-        const uiState = hideUIForCapture();
-        
-        // Flash visual
-        const flash = document.getElementById('capture-flash');
-        if (flash) {
-            flash.classList.add('flash');
-            setTimeout(() => flash.classList.remove('flash'), 150);
-        }
-        
-        await new Promise(r => setTimeout(r, 150));
-        
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-                cursor: 'never',
-                displaySurface: 'browser',
-                logicalSurface: true,
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-            },
-            audio: false,
-            preferCurrentTab: true
-        });
-        
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-        
-        await new Promise((resolve) => {
-            video.onloadedmetadata = () => resolve();
-        });
-        
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
-        
-        canvas.toBlob(async (blob) => {
-            if (!blob) {
-                restoreUIAfterCapture(uiState);
-                return;
-            }
-            
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const fileName = `OBR_CAM_${timestamp}.png`;
-            
-            await saveBlobToFile(blob, fileName, 'image/png');
-            
-            restoreUIAfterCapture(uiState);
-            
-        }, 'image/png', 1.0);
-        
-    } catch (err) {
-        console.error('Error capturando screenshot:', err);
-        const uiState = {
-            menuLeftVisible: true,
-            menuRightVisible: true,
-            mediaVisible: false,
-            captureGroupOpacity: '1'
-        };
-        restoreUIAfterCapture(uiState);
-    }
-}
-
-// Exponer funciones globalmente
-window.takeScreenshot = takeScreenshot;
-window.toggleScreenRecording = toggleScreenRecording;
 
 
 // 🔒 CRÍTICO: Detectar orientación real y aplicar estilos manualmente
@@ -6718,6 +6583,275 @@ function checkSmallScreen() {
 // Llamar al iniciar y en resize
 window.addEventListener('load', checkSmallScreen);
 window.addEventListener('resize', checkSmallScreen);
+
+// ==========================================================
+// 🎨 FILTROS DE VIDEO PARA CANVAS (réplica de CSS)
+// ==========================================================
+function getCanvasVideoFilter() {
+  const f = state.filter;
+  if (f === 'night') {
+    return 'grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0)';
+  } else if (f === 'thermal') {
+    return 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(3.0) contrast(1.5) brightness(1.2)';
+  } else if (f === 'urbex') {
+    return 'invert(100%) hue-rotate(180deg) saturate(2.5) contrast(1.15) brightness(0.85)';
+  }
+  return 'none';
+}
+
+// ==========================================================
+// 🔪 NITIDEZ MANUAL (convolución) - Reemplaza filtros SVG
+// ==========================================================
+function applySharpnessToCanvas(ctx, x, y, w, h, level) {
+  if (level <= 0 || w === 0 || h === 0) return;
+  
+  // Kernels de sharpening según nivel
+  const kernels = {
+    1: [0, -0.5, 0, -0.5, 3.0, -0.5, 0, -0.5, 0],
+    2: [0, -1.0, 0, -1.0, 5.0, -1.0, 0, -1.0, 0],
+    3: [-0.5, -0.5, -0.5, -0.5, 5.0, -0.5, -0.5, -0.5, -0.5]
+  };
+  
+  const kernel = kernels[level] || kernels[1];
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  
+  // Obtener pixels del área del video
+  const imgData = ctx.getImageData(x, y, w, h);
+  const data = imgData.data;
+  const wImg = imgData.width;
+  const hImg = imgData.height;
+  const output = new Uint8ClampedArray(data.length);
+  
+  // Aplicar convolución (optimizado: step=2 para rendimiento en móvil)
+  const step = level >= 3 ? 1 : 2;
+  
+  for (let py = 1; py < hImg - 1; py += step) {
+    for (let px = 1; px < wImg - 1; px += step) {
+      let r = 0, g = 0, b = 0;
+      let ki = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const idx = ((py + ky) * wImg + (px + kx)) * 4;
+          r += data[idx] * kernel[ki];
+          g += data[idx + 1] * kernel[ki];
+          b += data[idx + 2] * kernel[ki];
+          ki++;
+        }
+      }
+      const outIdx = (py * wImg + px) * 4;
+      output[outIdx] = Math.min(255, Math.max(0, r));
+      output[outIdx + 1] = Math.min(255, Math.max(0, g));
+      output[outIdx + 2] = Math.min(255, Math.max(0, b));
+      output[outIdx + 3] = 255;
+      
+      // Rellenar pixels saltados
+      if (step === 2) {
+        for (let fy = 0; fy < step && py + fy < hImg; fy++) {
+          for (let fx = 0; fx < step && px + fx < wImg; fx++) {
+            const fIdx = ((py + fy) * wImg + (px + fx)) * 4;
+            output[fIdx] = output[outIdx];
+            output[fIdx + 1] = output[outIdx + 1];
+            output[fIdx + 2] = output[outIdx + 2];
+            output[fIdx + 3] = 255;
+          }
+        }
+      }
+    }
+  }
+  
+  imgData.data.set(output);
+  ctx.putImageData(imgData, x, y);
+  ctx.restore();
+}
+
+// ==========================================================
+// 🟥 MARCO TALLY (dibujado en canvas)
+// ==========================================================
+function drawTallyBorder(ctx, w, h) {
+  const tallyEl = document.getElementById('tally-border');
+  if (!tallyEl) return;
+  
+  if (tallyEl.classList.contains('online')) {
+    ctx.save();
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 6;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = 'rgba(0,255,0,0.5)';
+    ctx.strokeRect(3, 3, w - 6, h - 6);
+    ctx.restore();
+  } else if (tallyEl.classList.contains('preview')) {
+    ctx.save();
+    ctx.strokeStyle = '#800000';
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = 0.6;
+    ctx.strokeRect(2, 2, w - 4, h - 4);
+    ctx.restore();
+  }
+}
+
+// ==========================================================
+//  GRABACIÓN DE VIDEO + AUDIO (ALTA CALIDAD)
+// ==========================================================
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStartTime = 0;
+let recordingTimer = null;
+let isRecording = false;
+
+async function toggleScreenRecording() {
+  if (isRecording) {
+    stopScreenRecording();
+  } else {
+    await startScreenRecording();
+  }
+}
+
+async function startScreenRecording() {
+  try {
+    // 1. Capturar stream del canvas maestro a 60 FPS
+    const canvasStream = el.masterCanvas.captureStream(60);
+    const videoTrack = canvasStream.getVideoTracks()[0];
+
+    // 2. Obtener stream de audio mezclado
+    let audioTrack = null;
+    if (mixDestination && mixDestination.stream.getAudioTracks().length > 0) {
+      audioTrack = mixDestination.stream.getAudioTracks()[0];
+    } else if (audioStream && audioStream.getAudioTracks().length > 0) {
+      audioTrack = audioStream.getAudioTracks()[0];
+    }
+
+    // 3. Combinar video + audio
+    const tracks = [videoTrack];
+    if (audioTrack) tracks.push(audioTrack);
+    const combinedStream = new MediaStream(tracks);
+
+    // 4. Configurar MediaRecorder con ALTA CALIDAD
+    const mimeTypes = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm'
+    ];
+    let selectedMime = '';
+    for (const mime of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        selectedMime = mime;
+        break;
+      }
+    }
+
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(combinedStream, {
+      mimeType: selectedMime,
+      videoBitsPerSecond: 8_000_000,  // 8 Mbps
+      audioBitsPerSecond: 192_000     // 192 kbps
+    });
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: selectedMime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.download = `OBR_REC_${timestamp}.webm`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast('✅ VIDEO GUARDADO (8Mbps)', false);
+    };
+
+    mediaRecorder.start(1000);
+    isRecording = true;
+    recordingStartTime = Date.now();
+
+    // UI feedback
+    const recInd = document.getElementById('recording-indicator');
+    if (recInd) recInd.classList.add('active');
+    const btn = document.getElementById('btn-record');
+    if (btn) btn.classList.add('active-state');
+
+    // Timer
+    recordingTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+      const min = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const sec = String(elapsed % 60).padStart(2, '0');
+      const recTime = document.getElementById('rec-time');
+      if (recTime) recTime.innerText = `${min}:${sec}`;
+    }, 1000);
+
+    showToast('🔴 GRABANDO (60FPS + AUDIO)', false);
+    mediaRecorder._canvasStream = canvasStream;
+
+  } catch (err) {
+    console.error('Error grabando:', err);
+    showToast('❌ ERROR AL GRABAR: ' + err.message, true);
+  }
+}
+
+function stopScreenRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+
+  mediaRecorder.stop();
+  isRecording = false;
+
+  if (mediaRecorder._canvasStream) {
+    mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
+  }
+
+  clearInterval(recordingTimer);
+
+  const recInd = document.getElementById('recording-indicator');
+  if (recInd) recInd.classList.remove('active');
+  const btn = document.getElementById('btn-record');
+  if (btn) btn.classList.remove('active-state');
+
+  showToast('⏹ PROCESANDO VIDEO...', false);
+}
+
+// ==========================================================
+// 📸 CAPTURA DE FOTO (ALTA CALIDAD)
+// ==========================================================
+function takeScreenshot() {
+  try {
+    // Flash visual
+    const flash = document.getElementById('capture-flash');
+    if (flash) {
+      flash.classList.add('flash');
+      setTimeout(() => flash.classList.remove('flash'), 200);
+    }
+
+    // Capturar canvas maestro como PNG (calidad máxima)
+    el.masterCanvas.toBlob((blob) => {
+      if (!blob) {
+        showToast('❌ ERROR CAPTURA', true);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.download = `OBR_SNAP_${timestamp}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast('📸 FOTO GUARDADA (PNG)', false);
+
+      if (navigator.vibrate) navigator.vibrate(80);
+    }, 'image/png', 1.0);
+  } catch (err) {
+    console.error('Error captura:', err);
+    showToast('❌ ERROR CAPTURA', true);
+  }
+}
+
+// Exponer globalmente
+window.toggleScreenRecording = toggleScreenRecording;
+window.takeScreenshot = takeScreenshot;
+
+
 </script>
 </body>
 </html>
