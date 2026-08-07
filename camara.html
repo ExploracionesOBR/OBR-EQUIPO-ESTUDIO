@@ -165,9 +165,15 @@
     -webkit-backdrop-filter: none !important;
 }
 .menu-container.visible {
-    opacity: 1 !important;
-    pointer-events: auto !important;
+opacity: 1 !important;
+pointer-events: auto !important;
 }
+/* 🔒 CRÍTICO: con el panel OCULTO, ningún botón interno recibe toques.
+   Esto evita que FOTO/REC se activen "fantasma" al presionar MEDIA. */
+.menu-container:not(.visible) * {
+    pointer-events: none !important;
+}
+
 .menu-container.left-side {
     left: 0 !important;
     transform: translateX(-100%) !important;
@@ -429,14 +435,14 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 
     /* Mapa: abajo izquierda - AUMENTADO 20% */
 #map-container-slot {
-position: absolute !important;
-width: 96px !important;  /* 80px * 1.20 = 96px */
-height: 96px !important; /* 80px * 1.20 = 96px */
-left: 8px !important;
-bottom: 8px !important;
-transform: scale(1.02) !important; /* 0.85 * 1.20 = 1.02 */
-transform-origin: bottom left !important;
-z-index: 100 !important;
+    position: absolute !important;
+    width: 140px !important;
+    height: 140px !important;
+    left: 2px !important;
+    bottom: 2px !important;
+    transform: scale(1.02) !important;
+    transform-origin: bottom left !important;
+    z-index: 100 !important;
 }
 
     /* Filtros: centro inferior */
@@ -1337,6 +1343,19 @@ const state = {
     aiModel: localStorage.getItem('obr_ai_model') || 'gemini-2.0-flash',
     aiProvider: localStorage.getItem('obr_ai_provider') || 'gemini'
 };
+
+// ==========================================================
+// 📱 DETECCIÓN DE DISPOSITIVO Y OPTIMIZACIÓN (Bloque SEGURO)
+// ==========================================================
+// Solo declaramos las banderas de dispositivo, NO los FPS (ya existen más abajo)
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+// 🚀 CRÍTICO: Desactivar efectos pesados (grano) solo en iOS para ahorrar CPU
+const disableGrainOnIOS = isIOS; 
+
 
 // ==========================================================
 // CONFIGURACIÓN DE APIs Y CRÉDITOS (Con fallback a tus claves)
@@ -2722,7 +2741,8 @@ async function getElevenLabsAudio(text, voiceId) {
     let performanceLagging = false;
     
     const analysisCanvas = document.createElement('canvas'); const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-    analysisCanvas.width = 128; analysisCanvas.height = 96;
+    analysisCanvas.width = 96;  // 🔒 Más pequeño = más rápido
+analysisCanvas.height = 72; // 🔒 Más pequeño = más rápido
     const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240; const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
 
     const scanBoxPool = [];
@@ -2751,14 +2771,21 @@ async function getElevenLabsAudio(text, voiceId) {
   statusDot: document.getElementById('status-dot')
 };
 
-// 🎯 UN SOLO CONTEXTO MAESTRO
+// ==========================================================
+// 🎯 CONTEXTO MAESTRO (Configuración Estable sin Parpadeos)
+// ==========================================================
 const ctx = el.masterCanvas.getContext('2d', {
-  alpha: true,
-  desynchronized: false,
-  willReadFrequently: false
+    alpha: true,              // ✅ Necesario para composición correcta en Safari/iOS
+    desynchronized: false,    // ✅ CRÍTICO: false para evitar parpadeos/tearing
+    willReadFrequently: false // ✅ Optimizado: no leemos píxeles del canvas maestro
 });
-    const lidarCtx = el.lidarCanvas.getContext('2d', { alpha: true, desynchronized: false, willReadFrequently: true });
-    
+
+const lidarCtx = el.lidarCanvas.getContext('2d', { 
+    alpha: true, 
+    desynchronized: false, 
+    willReadFrequently: true  // ✅ True solo aquí porque LiDAR sí lee datos
+});
+  
     let aiDetector = null, segmenter = null, poses = [], lidarMask = null;
     let lidarBusy = false; let lastLidarMask = null; let scanlineCanvas = null; let lidarGeneratedFrame = -1;
     let lidarActivityGrid = new Float32Array(24 * 18);
@@ -2801,7 +2828,7 @@ const ctx = el.masterCanvas.getContext('2d', {
         }
         targetPoses = validPoses;
         
-        if(ctx && ctx.beginPath) ctx.beginPath(); if(audioLayerCtx && audioLayerCtx.beginPath) audioLayerCtx.beginPath();
+        if(ctx && ctx.beginPath) ctx.beginPath();
         if (!state.isPareidolia && !state.isSLS) { 
             if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} } 
             currentAiImage = null; currentAiImgEl = null; 
@@ -3373,90 +3400,132 @@ function initMiniMap() {
 let mapMirrorCanvas = null;
 let mapMirrorCtx = null;
 let lastMapCapture = 0;
-const MAP_CAPTURE_INTERVAL = 1000; // Capturar mapa cada 1 segundo (rendimiento)
+const MAP_CAPTURE_INTERVAL = 2000; // Capturar mapa cada 1 segundo (rendimiento)
 
 function initMapMirror() {
-  mapMirrorCanvas = document.getElementById('map-mirror-canvas');
-  if (!mapMirrorCanvas) return;
-  
-  const mapSlot = document.getElementById('map-container-slot');
-  if (!mapSlot) return;
-  
-  // Tamaño del mini-mapa (96x96 en vertical, 156x156 en horizontal)
-  const isPortrait = window.innerHeight > window.innerWidth;
-  const mapSize = isPortrait ? 96 : 156;
-  
-  mapMirrorCanvas.width = mapSize;
-  mapMirrorCanvas.height = mapSize;
-  mapMirrorCtx = mapMirrorCanvas.getContext('2d', { alpha: true });
+    mapMirrorCanvas = document.getElementById('map-mirror-canvas');
+    if (!mapMirrorCanvas) return;
+    const mapSlot = document.getElementById('map-container-slot');
+    if (!mapSlot) return;
+    
+    // Tamaño del mini-mapa (106px en vertical, 156px en horizontal)
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const mapSize = isPortrait ? 140 : 156; // 🔒 140px = mismo tamaño
+    
+    mapMirrorCanvas.width = mapSize;
+    mapMirrorCanvas.height = mapSize;
+    mapMirrorCtx = mapMirrorCanvas.getContext('2d', { alpha: true });
 }
 
 async function captureMapToMirror() {
-  const now = Date.now();
-  if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return; // Limitar capturas
-  if (typeof html2canvas === 'undefined') return;
-  
-  const mapSlot = document.getElementById('map-container-slot');
-  if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
-  if (!mapMirrorCtx) initMapMirror();
-  if (!mapMirrorCtx) return;
-  
-  try {
-    // Capturar SOLO el contenedor del mapa (rápido, es pequeño)
-    const canvas = await html2canvas(mapSlot, {
-      backgroundColor: null,
-      scale: 1, // Sin escalar (ya es pequeño)
-      useCORS: true,
-      logging: false,
-      width: mapSlot.offsetWidth,
-      height: mapSlot.offsetHeight
-    });
-    
-    // Dibujar en el canvas espejo
-    mapMirrorCtx.clearRect(0, 0, mapMirrorCanvas.width, mapMirrorCanvas.height);
-    mapMirrorCtx.drawImage(canvas, 0, 0, mapMirrorCanvas.width, mapMirrorCanvas.height);
-    lastMapCapture = now;
-  } catch (err) {
-    // Silenciar errores de captura (tiles no cargados, etc.)
-  }
+    const now = Date.now();
+    if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return;
+    if (typeof html2canvas === 'undefined') return;
+    const mapSlot = document.getElementById('map-container-slot');
+    if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
+    if (!mapMirrorCtx) initMapMirror();
+    if (!mapMirrorCtx) return;
+
+    // 🔒 CRÍTICO: Sincronizar el espejo con el tamaño REAL del mapa en pantalla
+    const rect = mapSlot.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const w = Math.round(rect.width), h = Math.round(rect.height);
+    if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) {
+        mapMirrorCanvas.width = w;
+        mapMirrorCanvas.height = h;
+    }
+
+    try {
+        // scale:2 = supersampling (mapa más nítido en foto/video)
+        const canvas = await html2canvas(mapSlot, {
+            backgroundColor: null,
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            width: rect.width,
+            height: rect.height
+        });
+        mapMirrorCtx.clearRect(0, 0, w, h);
+        mapMirrorCtx.drawImage(canvas, 0, 0, w, h);
+        lastMapCapture = now;
+    } catch (err) {
+         console.warn('Error capturando mapa:', err);
+        // Asegurar que los overlays se restauren incluso si hay error
+        const overlay = document.getElementById('mini-map-overlay');
+        const glitch = document.getElementById('mini-map-glitch');
+        const tint = document.getElementById('mini-map-tint');
+        if (overlay) overlay.style.display = '';
+        if (glitch) glitch.style.display = '';
+        if (tint) tint.style.display = '';
+    }
 }
 
+let mapMaskCanvas = null;
+let mapMaskCtx = null;
+
 function drawMapToMaster(masterCtx, masterW, masterH) {
-  const mapSlot = document.getElementById('map-container-slot');
-  if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
-  if (!mapMirrorCanvas || !mapMirrorCtx) return;
-  
-  // Verificar si hay contenido capturado
-  // (comprobamos un pixel del centro)
-  try {
-    const centerPixel = mapMirrorCtx.getImageData(
-      Math.floor(mapMirrorCanvas.width / 2),
-      Math.floor(mapMirrorCanvas.height / 2),
-      1, 1
-    ).data;
-    if (centerPixel[3] === 0) return; // Canvas vacío
-  } catch (e) { return; }
-  
-  // Calcular posición del mapa en el canvas maestro
-  const isPortrait = masterH > masterW;
-  const mapSize = isPortrait ? 96 : 156;
-  const mapX = isPortrait ? 8 : 30;
-  const mapY = isPortrait ? masterH - mapSize - 8 : masterH - mapSize - 15;
-  
-  // Dibujar con borde redondeado simulado
-  masterCtx.save();
-  masterCtx.globalAlpha = 0.95;
-  masterCtx.drawImage(mapMirrorCanvas, mapX, mapY, mapSize, mapSize);
-  
-  // Borde sutil para definir el mapa
-  masterCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-  masterCtx.lineWidth = 1;
-  masterCtx.strokeRect(mapX, mapY, mapSize, mapSize);
-  masterCtx.restore();
+    const mapSlot = document.getElementById('map-container-slot');
+    if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
+    if (!mapMirrorCanvas || !mapMirrorCanvas.width || !mapMirrorCanvas.height) return;
+
+    // 🔒 CRÍTICO: Posición y tamaño REALES del mapa HTML (incluye scale/transforms)
+    const rect = mapSlot.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+
+    // Canvas auxiliar: mapa + máscara suave (réplica exacta del CSS)
+    if (!mapMaskCanvas) {
+        mapMaskCanvas = document.createElement('canvas');
+        mapMaskCtx = mapMaskCanvas.getContext('2d');
+    }
+    if (mapMaskCanvas.width !== w || mapMaskCanvas.height !== h) {
+        mapMaskCanvas.width = w;
+        mapMaskCanvas.height = h;
+    }
+
+    // Dibujar el mapa espejo
+    mapMaskCtx.globalCompositeOperation = 'source-over';
+    mapMaskCtx.clearRect(0, 0, w, h);
+    mapMaskCtx.drawImage(mapMirrorCanvas, 0, 0, w, h);
+
+    // Máscara vertical (bordes sup/inf difuminados, igual que el CSS)
+    const gV = mapMaskCtx.createLinearGradient(0, 0, 0, h);
+    gV.addColorStop(0, 'rgba(0,0,0,0)');
+    gV.addColorStop(0.2, 'rgba(0,0,0,1)');
+    gV.addColorStop(0.8, 'rgba(0,0,0,1)');
+    gV.addColorStop(1, 'rgba(0,0,0,0)');
+    mapMaskCtx.globalCompositeOperation = 'destination-in';
+    mapMaskCtx.fillStyle = gV;
+    mapMaskCtx.fillRect(0, 0, w, h);
+
+    // Máscara horizontal (bordes izq/der) → intersección = réplica del mask-composite
+    const gH = mapMaskCtx.createLinearGradient(0, 0, w, 0);
+    gH.addColorStop(0, 'rgba(0,0,0,0)');
+    gH.addColorStop(0.2, 'rgba(0,0,0,1)');
+    gH.addColorStop(0.8, 'rgba(0,0,0,1)');
+    gH.addColorStop(1, 'rgba(0,0,0,0)');
+    mapMaskCtx.fillStyle = gH;
+    mapMaskCtx.fillRect(0, 0, w, h);
+
+    // 🔒 Dibujar en el canvas maestro EXACTAMENTE donde está el mapa HTML
+    masterCtx.save();
+    masterCtx.globalCompositeOperation = 'source-over';
+    masterCtx.globalAlpha = 1;
+    masterCtx.drawImage(mapMaskCanvas, rect.left, rect.top);
+    masterCtx.restore();
 }
 
 
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
+    // 🔒 NUEVO: Ocultar texto de carga después de 4 segundos sí o sí
+    if (loadingEl) {
+        setTimeout(() => {
+            loadingEl.style.opacity = '0';
+            setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
+        }, 4000);
+    }
+
     // 🔒 CRÍTICO: Cambiar emoji cada 2 minutos aunque el usuario no se mueva
     if (!window._emojiChangeInterval) {
         window._emojiChangeInterval = setInterval(() => {
@@ -3507,6 +3576,8 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
             }).addTo(miniMapInstance);
             
             setTimeout(() => { miniMapInstance.invalidateSize(); }, 500);
+// 🗺️ Primera captura del espejo apenas el mapa existe
+setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
         }
         
         // 🔒 MANTENER ZOOM 14 (vista amplia)
@@ -3567,34 +3638,43 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
 
 
     async function initApp() {
-    unlockAudioContext(); 
+    unlockAudioContext();
     document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
-    document.getElementById('cam-error-panel').style.display = 'none'; 
-    requestWakeLock(); 
-// Guardar URL del chat si se modificó en el modal antes de iniciar
-const newChatUrl = document.getElementById('chat-url-input')?.value.trim();
-if (newChatUrl) {
-  CHAT_OVERLAY_URL = newChatUrl;
-  localStorage.setItem('obr_chat_url', newChatUrl);
-}
-    updateProgress(10, "INICIANDO SENSOR...");
+    document.getElementById('cam-error-panel').style.display = 'none';
+    requestWakeLock();
     
+    // Guardar URL del chat si se modificó en el modal antes de iniciar
+    const newChatUrl = document.getElementById('chat-url-input')?.value.trim();
+    if (newChatUrl) {
+        CHAT_OVERLAY_URL = newChatUrl;
+        localStorage.setItem('obr_chat_url', newChatUrl);
+    }
+
+    // 🗺️ PASO 1: Iniciar mapa INMEDIATAMENTE (antes de la cámara para que no se trabe)
+    updateProgress(10, "INICIALIZANDO SISTEMAS OBR...");
+initMiniMap();
+initMapMirror();
+// 🗺️ Refrescar el espejo del mapa cada 2s (alimenta el video en vivo)
+setInterval(() => { captureMapToMirror(); }, 2000);
+    
+    // Esperar un momento para que el navegador procese la solicitud de GPS
+    await new Promise(r => setTimeout(r, 300));
+
+    updateProgress(20, "SOLICITANDO ACCESO A SENSOR ÓPTICO...");
     clearTimeout(loadingTimer);
     
-    initMapMirror();
-
     // 4K a 30 FPS para mejor fluidez y menor consumo
-const constraintSets = [
-{ audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] } },
-{ audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] } },
-{ audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } } },
-{ audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 30 } } }
-];
-
+    const constraintSets = [
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } } },
+        { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 30 } } }
+    ];
+    
     let stream = null; let lastError = null;
     for (let i = 0; i < constraintSets.length; i++) {
         try {
-            updateProgress(10 + i * 5, i === 0 ? "INICIANDO SENSOR 4K..." : i === 1 ? "INICIANDO SENSOR 1080p..." : i === 2 ? "INTENTANDO 720p..." : "MODO BÁSICO...");
+            updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
             stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
             break;
         } catch(e) {
@@ -3602,7 +3682,7 @@ const constraintSets = [
             if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
         }
     }
-
+    
     if (!stream) {
         const e = lastError; localStorage.removeItem("camPermission");
         document.querySelectorAll('.load-btn').forEach(b => {
@@ -3612,40 +3692,59 @@ const constraintSets = [
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
             showCamError('PERMISO DENEGADO', 'El navegador bloqueó el acceso a la cámara. Revisa los permisos.', null);
         } else if (e.name === 'NotFoundError') {
-            showCamError('CÁMARA NO DISPONIBLE', 'No se encontró ninguna cámara en este dispositivo. Si tu dispositivo tiene cámara, reinicia la app.', null);
+            showCamError('CÁMARA NO DISPONIBLE', 'No se encontró ninguna cámara en este dispositivo.', null);
         } else {
             showCamError('ERROR DE CÁMARA', `${e.name}: ${e.message}`, null);
         }
         return;
     }
-
-    localStorage.setItem("camPermission", "granted"); try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
-    videoStream = new MediaStream(stream.getVideoTracks()); 
-    el.video.srcObject = videoStream; el.video.play().then(() => { fixCanvasSize(); }).catch(()=>{});
     
-    updateProgress(30, "PRECARGANDO MEDIOS LOCALES..."); await preloadLocalAssets();
-    updateProgress(50, "CALIBRANDO MOTORES IA...");
-        
+    localStorage.setItem("camPermission", "granted"); 
+    try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
+    
+    videoStream = new MediaStream(stream.getVideoTracks());
+    el.video.srcObject = videoStream; 
+    el.video.play().then(() => { /* fixCanvasSize(); */ }).catch(()=>{});
+    
+    updateProgress(70, "PRECARGANDO ACTIVOS LOCALES Y MEMORIA..."); 
+    await preloadLocalAssets();
+    
+    updateProgress(85, "CALIBRANDO MOTORES DE IA (SLS / LIDAR / PAREIDOLIA)...");
+    
     setTimeout(async () => {
         try {
             if(window.tf) { try { await tf.setBackend('webgl'); } catch(e) { await tf.setBackend('cpu'); } }
             if(window.poseDetection) aiDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true });
-            if(window.SelfieSegmentation) { segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); segmenter.setOptions({ modelSelection: 1 }); segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); }
-
-            const vRatio = el.video.videoHeight / el.video.videoWidth; analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+            if(window.SelfieSegmentation) { 
+                segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); 
+                segmenter.setOptions({ modelSelection: 1 }); 
+                segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); 
+            }
+            const vRatio = el.video.videoHeight / el.video.videoWidth; 
+            analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
             analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
-            if(segmenter) await segmenter.send({image: analysisCanvas}); if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
-        } catch(e) {}
+            if(segmenter) await segmenter.send({image: analysisCanvas}); 
+            if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
+        } catch(e) { console.warn("Error leve en calibración IA:", e); }
         
-        updateProgress(100, "SISTEMAS LISTOS"); document.getElementById('loading').style.display = 'none'; resize(); window.addEventListener('resize', resize);
+        updateProgress(95, "CONFIGURANDO MOTOR DE AUDIO Y TTS...");
+        await initAudioEngine(); // Iniciar audio temprano
         
-        initDOMCache();
-        if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); else requestAnimationFrame(renderLoop);
-        setInterval(telemetryLoop, 1000); requestAnimationFrame(detectionLoop);
-
-        initRTM();
-        initRemoteMicReceiverAgora();
-    }, 800);
+        updateProgress(100, "SISTEMAS EN LÍNEA - ACCEDIENDO AL ENTORNO...");
+        
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none'; 
+            resize(); 
+            window.addEventListener('resize', resize);
+            initDOMCache();
+            if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); 
+            else requestAnimationFrame(renderLoop);
+            setInterval(telemetryLoop, 2000); // 🔒 Cada 2 segundos en vez de 1 
+            requestAnimationFrame(detectionLoop);
+            initRTM();
+            initRemoteMicReceiverAgora();
+        }, 400); // Pequeña pausa dramática al 100%
+    }, 500);
 }
     
     async function detectionLoop() {
@@ -4052,18 +4151,11 @@ function executeAudioScanDeactivation(btnMenu) {
 
 function drawAudioVisualizer(c, w, h) {
     if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
-    
     audioAnalyser.getByteTimeDomainData(audioDataArray);
     const bufferLength = audioAnalyser.frequencyBinCount;
-    
     let minVal = 255, maxVal = 0, rmsSum = 0, currentMaxVolume = 0;
     let isBufferFrozen = true;
-    
-    if (!window._lastAudioBuffer) {
-        window._lastAudioBuffer = new Uint8Array(bufferLength);
-        isBufferFrozen = false;
-    }
-    
+    if (!window._lastAudioBuffer) { window._lastAudioBuffer = new Uint8Array(bufferLength); isBufferFrozen = false; }
     for (let i = 0; i < bufferLength; i++) {
         const val = audioDataArray[i];
         if (val < minVal) minVal = val;
@@ -4074,45 +4166,49 @@ function drawAudioVisualizer(c, w, h) {
         rmsSum += v * v;
     }
     window._lastAudioBuffer.set(audioDataArray);
-    
     const rmsLevel = Math.sqrt(rmsSum / bufferLength);
     const amplitude = maxVal - minVal;
     const isHardwareDead = isBufferFrozen || amplitude <= 1;
-    
-    if (!isHardwareDead) {
-        lastValidAudioTime = Date.now();
-    } else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
-        if (Date.now() - lastValidAudioTime > 2500) {
-            lastValidAudioTime = Date.now();
-            lastReconnectTime = 0;
-            reconnectAudioNode();
-        }
+    if (!isHardwareDead) { lastValidAudioTime = Date.now(); }
+    else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
+        if (Date.now() - lastValidAudioTime > 2500) { lastValidAudioTime = Date.now(); lastReconnectTime = 0; reconnectAudioNode(); }
     }
-    
     const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window._liveUserLastUpdate < 1500);
     ambientNoiseLevel = ambientNoiseLevel * 0.985 + rmsLevel * 0.015;
     const dynamicThreshold = ambientNoiseLevel * 2.2 + 0.015;
-    
     if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && rmsLevel > dynamicThreshold) {
         cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
     }
     cumulativeEVPEnergy *= 0.93;
     cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
-    
-    // 🔒 DETECTAR ORIENTACIÓN
-    const isPortrait = window.innerHeight > window.innerWidth;
-    
-    // 🔒 EN VERTICAL: Usamos coordenadas fijas del canvas base (1920x1080)
-    // porque el CSS ya se encarga de escalarlo para llenar la pantalla.
-    const baseW = 1920;
-    const visualBins = isPortrait ? 64 : (window.innerWidth < 600 ? 64 : 128);
-    const step = Math.floor(bufferLength / visualBins);
-    
-    const displayWidth = isPortrait ? baseW * 0.50 : w * 0.465; // 50% del ancho en vertical
-    const startX = (baseW - displayWidth) / 2;
+
+    // 🔒 LAYOUT ADAPTATIVO REAL (usa el tamaño REAL del canvas, no 1920 fijo)
+    const isPortrait = h > w;
+    let screenScale, waveHeight, bottomY, displayWidth, startX, textFS, evpFS;
+    if (isPortrait) {
+        // Hueco entre MAPA (izq ~150px) y TELEMETRÍA (der ~118px)
+        const leftSpace = 150, rightSpace = 118;
+        displayWidth = Math.max(110, w - leftSpace - rightSpace);
+        startX = leftSpace + ((w - leftSpace - rightSpace) - displayWidth) / 2;
+        bottomY = h - 34;                 // centro inferior, entre mapa y telemetría
+        waveHeight = 26;
+        textFS = 10;                      // 🔒 texto usuario pequeño
+        evpFS = 11;                       // 🔒 texto EVP pequeño
+        screenScale = 1;
+    } else {
+        screenScale = Math.max(1.2, Math.min(4, 1920 / (w || 1920)));
+        displayWidth = w * 0.465;
+        startX = (w - displayWidth) / 2;
+        bottomY = h * 0.88;
+        waveHeight = 55 * screenScale;
+        textFS = Math.round(13 * screenScale);
+        evpFS = Math.round(14 * screenScale);
+    }
+    const visualBins = isPortrait ? 48 : (w < 600 ? 64 : 128);
+    const step = Math.max(1, Math.floor(bufferLength / visualBins));
     const sliceW = displayWidth / visualBins;
     const nowAnim = performance.now();
-    
+
     if (isSpookySpeaking || isTtsPlaying) {
         const env = (Math.sin(nowAnim * 0.005) + 1) * 0.5;
         const env2 = (Math.sin(nowAnim * 0.0031) + 1) * 0.5;
@@ -4127,7 +4223,6 @@ function drawAudioVisualizer(c, w, h) {
     } else {
         for (let i = 0; i < visualBins; i++) simulatedPikes[i] *= 0.9;
     }
-    
     const sp2 = window._sp2Buffer;
     for (let i = 0; i < visualBins; i++) {
         const l2 = i > 1 ? simulatedPikes[i-2] : 0;
@@ -4137,24 +4232,12 @@ function drawAudioVisualizer(c, w, h) {
         sp2[i] = l2*0.1 + l1*0.25 + simulatedPikes[i]*0.3 + r1*0.25 + r2*0.1;
     }
     for (let i = 0; i < visualBins; i++) simulatedPikes[i] = sp2[i];
-    
+
     c.save();
-    
-    // 🔒 ESCALA: En vertical es 1.0 (el CSS lo escala), en horizontal usamos screenScale
-    const screenScale = isPortrait ? 1.0 : Math.max(1.2, Math.min(4, 1920 / (window.innerWidth || 1920)));
-    
-    const waveHeight = isPortrait ? 35 : 55 * screenScale;
-    const bottomY = isPortrait ? 1000 : h * 0.88; // 1000 está cerca del fondo (1080)
-    const sensitivity = isPortrait ? 3.5 : Math.min(5.0, 4.5 / screenScale * 2.0);
     const clampH = waveHeight * 0.95;
     const clampY = (val) => Math.max(-clampH, Math.min(clampH, val));
-    
-    // 🔒 TEXTO: Tamaño fijo y pequeño en vertical
-    const textFS = isPortrait ? 14 : Math.round(23 * screenScale);
-    
-    // ==========================================
-    // DIBUJO DEL GRÁFICO
-    // ==========================================
+    const sensitivity = isPortrait ? 3.0 : Math.min(5.0, 4.5 / screenScale * 2.0);
+
     const rawYValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         let v = (audioDataArray[i * step] / 128.0) - 1;
@@ -4163,204 +4246,131 @@ function drawAudioVisualizer(c, w, h) {
         }
         rawYValues[i] = v;
     }
-
     const yValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         const prev = i > 0 ? rawYValues[i-1] : 0;
         const next = i < visualBins - 1 ? rawYValues[i+1] : 0;
-        let smoothed = (prev * 0.1 + rawYValues[i] * 0.8 + next * 0.1); 
-        const fadeFactor = Math.pow(Math.sin((i / (visualBins - 1)) * Math.PI), 0.8);
-        yValues[i] = smoothed * fadeFactor;
+        yValues[i] = (prev * 0.1 + rawYValues[i] * 0.8 + next * 0.1) * Math.pow(Math.sin((i / (visualBins - 1)) * Math.PI), 0.8);
     }
 
-    c.shadowBlur = 0;
-    c.shadowColor = 'transparent';
-
+    c.shadowBlur = 0; c.shadowColor = 'transparent';
     c.beginPath();
     let x = startX;
     c.moveTo(startX, bottomY);
-    for (let i = 0; i < visualBins; i++) {
-        const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity);
-        c.lineTo(x, y);
-        x += sliceW;
-    }
+    for (let i = 0; i < visualBins; i++) { c.lineTo(x, bottomY + clampY(yValues[i] * waveHeight * sensitivity)); x += sliceW; }
     c.lineTo(startX + displayWidth, bottomY);
     c.closePath();
-
     const grd = c.createLinearGradient(0, bottomY - waveHeight, 0, bottomY + waveHeight);
-    grd.addColorStop(0, 'rgba(0, 150, 255, 0.0)');
-    grd.addColorStop(0.3, 'rgba(0, 180, 255, 0.2)');
-    grd.addColorStop(0.5, 'rgba(0, 230, 255, 0.6)');
-    grd.addColorStop(0.7, 'rgba(0, 180, 255, 0.2)');
-    grd.addColorStop(1, 'rgba(0, 150, 255, 0.0)');
-    c.fillStyle = grd;
-    c.fill();
+    grd.addColorStop(0, 'rgba(0,150,255,0)'); grd.addColorStop(0.3, 'rgba(0,180,255,0.2)');
+    grd.addColorStop(0.5, 'rgba(0,230,255,0.6)'); grd.addColorStop(0.7, 'rgba(0,180,255,0.2)');
+    grd.addColorStop(1, 'rgba(0,150,255,0)');
+    c.fillStyle = grd; c.fill();
 
-    const numLayers = 2;
-    for (let l = numLayers - 1; l >= 0; l--) {
-        const scale = 1.0 - (l / numLayers) * 0.3;
-        const alpha = 0.3 + (l / numLayers) * 0.7;
-        c.beginPath();
-        x = startX;
+    for (let l = 1; l >= 0; l--) {
+        const scale = 1.0 - (l / 2) * 0.3;
+        const alpha = 0.3 + (l / 2) * 0.7;
+        c.beginPath(); x = startX;
         for (let i = 0; i < visualBins; i++) {
             const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity * scale);
-            if (i === 0) c.moveTo(x, y);
-            else c.lineTo(x, y);
+            if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
             x += sliceW;
         }
-        c.strokeStyle = `rgba(0, 200, 255, ${alpha})`;
-        c.lineWidth = 1.0 + (l * 2.0);
-        c.stroke();
+        c.strokeStyle = `rgba(0,200,255,${alpha})`; c.lineWidth = 1.0 + l * 2.0; c.stroke();
     }
-
-    c.beginPath();
-    x = startX;
+    c.beginPath(); x = startX;
     for (let i = 0; i < visualBins; i++) {
         const y = bottomY + clampY(yValues[i] * waveHeight * sensitivity);
-        if (i === 0) c.moveTo(x, y);
-        else c.lineTo(x, y);
+        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
         x += sliceW;
     }
-    c.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-    c.lineWidth = screenScale * 1.5;
-    c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = Math.max(1, screenScale * 1.5); c.stroke();
 
-    // ==========================================
-    // TEXTO DEL USUARIO
-    // ==========================================
+    // ===== TEXTO DEL USUARIO (centrado, tamaño pequeño) =====
     if (window._liveUserText && window._liveUserLastUpdate) {
         const timeSinceUpdate = Date.now() - window._liveUserLastUpdate;
-        if (timeSinceUpdate < 3000) { 
+        if (timeSinceUpdate < 3000) {
             c.save();
-            c.globalAlpha = 0.95; 
-            
+            c.globalAlpha = 0.95;
             let displayUserText = window._liveUserText;
             const userWords = displayUserText.split(' ');
-            
-            // 🔒 En vertical: máximo 4 palabras
-            if (isPortrait && userWords.length > 4) {
-                displayUserText = userWords.slice(-4).join(' ');
-            } else if (userWords.length > 8) {
-                displayUserText = userWords.slice(-8).join(' ');
-            }
-            
+            const maxWords = isPortrait ? 4 : 8;
+            if (userWords.length > maxWords) displayUserText = userWords.slice(-maxWords).join(' ');
             const userLabel = displayUserText.toUpperCase();
-            
             if (!window._userTextCanvas) {
                 window._userTextCanvas = document.createElement('canvas');
-                window._userTextCtx = window._userTextCanvas.getContext('2d', {willReadFrequently: true});
+                window._userTextCtx = window._userTextCanvas.getContext('2d', { willReadFrequently: true });
                 window._lastRenderedUserText = "";
             }
-            
-            const uCanv = window._userTextCanvas;
-            const uCtx = window._userTextCtx;
+            const uCanv = window._userTextCanvas, uCtx = window._userTextCtx;
             c.font = `bold ${textFS}px 'Share Tech Mono'`;
             const txtW = c.measureText(userLabel).width;
-            
-            if (txtW > 0 && textFS > 0) {
-                const reqW = Math.ceil(txtW + textFS * 4);
-                const reqH = Math.ceil(textFS * 4);
-                
+            if (txtW > 0) {
+                const reqW = Math.ceil(txtW + textFS * 4), reqH = Math.ceil(textFS * 4);
                 if (userLabel !== window._lastRenderedUserText || uCanv.width !== reqW || uCanv.height !== reqH) {
-                    uCanv.width = reqW;
-                    uCanv.height = reqH;
+                    uCanv.width = reqW; uCanv.height = reqH;
                     uCtx.clearRect(0, 0, reqW, reqH);
                     uCtx.font = `bold ${textFS}px 'Share Tech Mono'`;
-                    uCtx.textAlign = "center";
-                    uCtx.textBaseline = "middle";
-                    uCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+                    uCtx.textAlign = "center"; uCtx.textBaseline = "middle";
+                    uCtx.fillStyle = "rgba(255,255,255,0.85)";
                     uCtx.shadowColor = "#00d4ff";
-                    uCtx.shadowBlur = 40 * screenScale;
+                    uCtx.shadowBlur = (isPortrait ? 8 : 40 * screenScale);
                     uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    uCtx.shadowBlur = 20 * screenScale;
-                    uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    uCtx.shadowBlur = 10 * screenScale;
-                    uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    uCtx.shadowBlur = 5 * screenScale;
+                    uCtx.shadowBlur = (isPortrait ? 4 : 10 * screenScale);
                     uCtx.fillText(userLabel, reqW/2, reqH/2);
                     window._lastRenderedUserText = userLabel;
                 }
-                
-                // 🔒 Y fija en vertical para que quede arriba del gráfico
-                const uY = isPortrait ? 920 : bottomY - 80 * screenScale;
+                const uY = bottomY - waveHeight - (isPortrait ? 24 : 80 * screenScale);
                 c.drawImage(uCanv, (w / 2) - (reqW / 2), uY - (reqH / 2));
             }
             c.restore();
         }
     }
-    
-    // ==========================================
-    // TEXTO EVP
-    // ==========================================
+
+    // ===== TEXTO EVP (centrado, tamaño pequeño) =====
     if (lastSpokenText) {
         const label = lastSpokenText.toUpperCase();
         c.save();
         c.globalAlpha = 0.85;
-        
         if (!window._evpTextCanvas) {
             window._evpTextCanvas = document.createElement('canvas');
-            window._evpTextCtx = window._evpTextCanvas.getContext('2d', {willReadFrequently: true});
+            window._evpTextCtx = window._evpTextCanvas.getContext('2d', { willReadFrequently: true });
             window._lastRenderedEvpText = "";
         }
-        
-        const tCanv = window._evpTextCanvas;
-        const tCtx = window._evpTextCtx;
-        c.font = `bold ${textFS}px 'Share Tech Mono'`;
+        const tCanv = window._evpTextCanvas, tCtx = window._evpTextCtx;
+        c.font = `bold ${evpFS}px 'Share Tech Mono'`;
         const txtW = c.measureText(label).width;
-        
-        if (txtW > 0 && textFS > 0) {
-            const reqW = Math.ceil(txtW + textFS * 4);
-            const reqH = Math.ceil(textFS * 3);
-            
+        if (txtW > 0) {
+            const reqW = Math.ceil(txtW + evpFS * 4), reqH = Math.ceil(evpFS * 3);
             if (label !== window._lastRenderedEvpText || tCanv.width !== reqW || tCanv.height !== reqH) {
-                tCanv.width = reqW;
-                tCanv.height = reqH;
+                tCanv.width = reqW; tCanv.height = reqH;
                 tCtx.clearRect(0, 0, reqW, reqH);
-                const cx = reqW / 2;
-                const cy = reqH / 2;
-                tCtx.font = `bold ${textFS}px 'Share Tech Mono'`;
-                tCtx.textAlign = "center";
-                tCtx.textBaseline = "middle";
-                tCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+                tCtx.font = `bold ${evpFS}px 'Share Tech Mono'`;
+                tCtx.textAlign = "center"; tCtx.textBaseline = "middle";
+                tCtx.fillStyle = "rgba(255,255,255,0.85)";
                 tCtx.shadowColor = "#ab0202";
-                tCtx.shadowBlur = 40 * screenScale;
-                tCtx.fillText(label, cx, cy);
-                tCtx.shadowBlur = 20 * screenScale;
-                tCtx.fillText(label, cx, cy);
-                tCtx.shadowBlur = 10 * screenScale;
-                tCtx.fillText(label, cx, cy);
-                tCtx.shadowBlur = 5 * screenScale;
-                tCtx.fillText(label, cx, cy);
+                tCtx.shadowBlur = (isPortrait ? 8 : 40 * screenScale);
+                tCtx.fillText(label, reqW/2, reqH/2);
+                tCtx.shadowBlur = (isPortrait ? 4 : 10 * screenScale);
+                tCtx.fillText(label, reqW/2, reqH/2);
                 tCtx.globalCompositeOperation = "destination-out";
                 tCtx.save();
-                tCtx.translate(cx, cy);
+                tCtx.translate(reqW/2, reqH/2);
                 tCtx.rotate((120 * Math.PI) / 180);
-                for(let i=0; i<18; i++) {
+                for (let i = 0; i < 18; i++) {
                     tCtx.fillStyle = `rgba(0,0,0,${0.6 + Math.random() * 0.4})`;
-                    const cutW = (Math.random() * 0.3 + 0.05) * reqW;
-                    const cutH = (Math.random() * 2 + 0.5) * screenScale;
-                    const rx = (Math.random() - 0.5) * reqW * 2;
-                    const ry = (Math.random() - 0.5) * (reqH + reqW);
-                    tCtx.fillRect(rx, ry, cutW, cutH);
+                    tCtx.fillRect((Math.random()-0.5)*reqW*2, (Math.random()-0.5)*(reqH+reqW), (Math.random()*0.3+0.05)*reqW, (Math.random()*2+0.5)*Math.max(1,screenScale));
                 }
                 tCtx.restore();
-                for(let i = 0; i < 300; i++) {
-                    tCtx.fillStyle = `rgba(0,0,0,${0.4 + Math.random() * 0.4})`;
-                    tCtx.fillRect(Math.random() * reqW, Math.random() * reqH, Math.random() * 3 * screenScale, Math.random() * 2 * screenScale);
-                }
                 tCtx.globalCompositeOperation = "source-over";
                 window._lastRenderedEvpText = label;
             }
-            
-            // 🔒 Y fija en vertical para que quede encima del gráfico
-            const evpY = isPortrait ? 960 : bottomY - 30 * screenScale;
+            const evpY = bottomY - waveHeight - (isPortrait ? 8 : 30 * screenScale);
             c.drawImage(tCanv, (w / 2) - (reqW / 2), evpY - (reqH / 2));
         }
         c.restore();
     }
-    
     c.restore();
-    
+
     // Lógica de trigger EVP (sin cambios)
     const now_evp = Date.now();
     const micActive = !!(audioAnalyser && audioDataArray && !isBufferFrozen);
@@ -4371,15 +4381,12 @@ function drawAudioVisualizer(c, w, h) {
     const timeSinceLastEvp = now_evp - lastEvpTime;
     const forceTriggerTime = 40000 + Math.random() * 20000;
     const isForced = (timeSinceLastEvp > forceTriggerTime);
-    
     let currentGap = window._evpNextGap || 8000;
     if (hasSpike && currentGap > 1500) currentGap = 1500;
     if (hasEnergy && currentGap > 3000) currentGap = 3000;
-    
     const triggerProb = afterQuestion ? 0.20 : (hasSpike ? 0.15 : (hasEnergy ? 0.35 : 0.65));
     const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement &&
         (isForced || ((isSilent || hasEnergy || hasSpike) && timeSinceLastEvp > currentGap && Math.random() > triggerProb));
-    
     if (shouldTrigger) {
         lastEvpTime = Date.now() + 99999;
         if (afterQuestion || window._waitingFirstInteraction) {
@@ -4391,12 +4398,10 @@ function drawAudioVisualizer(c, w, h) {
             else if (dado < 0.80) window._evpNextGap = 10000 + Math.random() * 8000;
             else window._evpNextGap = 20000 + Math.random() * 15000;
         }
-        
         if (ttsMainGain) {
             const volVar = 0.75 + Math.random() * 0.5;
             ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
         }
-        
         let evpText;
         const textRoll = Math.random();
         if (afterQuestion) {
@@ -4413,12 +4418,9 @@ function drawAudioVisualizer(c, w, h) {
                 evpText = generarEventoEVP();
             }
         }
-        
         if (evpText && evpText.trim() !== '') {
             const palabrasEvp = evpText.split(' ');
-            if (palabrasEvp.length > 1) {
-                evpText = palabrasEvp[Math.floor(Math.random() * palabrasEvp.length)];
-            }
+            if (palabrasEvp.length > 1) evpText = palabrasEvp[Math.floor(Math.random() * palabrasEvp.length)];
             speakSpooky(evpText);
         }
         cumulativeEVPEnergy = -30;
@@ -4446,7 +4448,7 @@ function drawLidarEffect(c, width, height, currentFrame) {
     const maskToUse = lidarMask || lastLidarMask;
     
     // 🔒 CRÍTICO: Grid más pequeño para menos círculos (16x12 en lugar de 24x18)
-    const gridW = 16, gridH = 12;
+    const gridW = 12, gridH = 9; // 🔒 Grid más pequeño = menos círculos = más rápido
     
     // 1. Decaimiento rápido si no hay máscara
     if (!maskToUse) {
@@ -4540,31 +4542,31 @@ ctx.globalCompositeOperation = 'source-over';
          for(let i=0; i<h; i+=4) sCtx.rect(0, i, w, 1.5); sCtx.fill();
     }
 
-    function resize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-
-  // 🎯 CANVAS MAESTRO
-  el.masterCanvas.width = w;
-  el.masterCanvas.height = h;
-
-  // Buffers internos
-  el.lidarCanvas.width = w;
-  el.lidarCanvas.height = h;
-
-  // 🗺️ Actualizar tamaño del canvas espejo del mapa
-  if (mapMirrorCanvas) {
-    const isPortrait = h > w;
-    const mapSize = isPortrait ? 96 : 156;
-    mapMirrorCanvas.width = mapSize;
-    mapMirrorCanvas.height = mapSize;
-  }
-
-  lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+function resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    
+    // 🎯 CANVAS MAESTRO
+    el.masterCanvas.width = w;
+    el.masterCanvas.height = h;
+    
+    // Buffers internos
+    el.lidarCanvas.width = w;
+    el.lidarCanvas.height = h;
+    
+    // 🗺️ Actualizar tamaño del canvas espejo del mapa
+    if (mapMirrorCanvas) {
+        const isPortrait = h > w;
+        const mapSize = isPortrait ? 140 : 156; // 🔒 140px = mismo tamaño que el CSS
+        mapMirrorCanvas.width = mapSize;
+        mapMirrorCanvas.height = mapSize;
+    }
+    
+    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
 }
 
 function drawFallbackSilhouette() {
-  ctx.globalAlpha = 0.12;
+  ctx.globalAlpha = 0.20;
   ctx.fillStyle = "#00ffff";
   ctx.fillRect(0, 0, el.masterCanvas.width, el.masterCanvas.height);
   ctx.globalAlpha = 1;
@@ -4991,11 +4993,8 @@ function renderLoop(now, metadata) {
   const cW = el.masterCanvas.width, cH = el.masterCanvas.height;
 
   // 🎯 1. LIMPIAR COMPLETAMENTE (fondo negro sólido, NO transparente)
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 1.0;
-  ctx.filter = 'none';
   ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, cW, cH);
+ctx.fillRect(0, 0, cW, cH);
   
   updateSmoothing();
 
@@ -5024,7 +5023,6 @@ function renderLoop(now, metadata) {
     //  4. DIBUJAR VIDEO CON FILTROS APLICADOS
     ctx.drawImage(el.video, dX, dY, dW, dH);
     ctx.restore();
-
     //  5. APLICAR NITIDEZ MANUAL (post-procesado)
     if (currentSharpness > 0) {
       applySharpnessToCanvas(ctx, dX, dY, dW, dH, currentSharpness);
@@ -5068,9 +5066,10 @@ function renderLoop(now, metadata) {
   }
 
   //  11. MARCO TALLY (dibujado en canvas)
-  drawTallyBorder(ctx, cW, cH);
-
-  // Siguiente frame
+drawTallyBorder(ctx, cW, cH);
+// 🗺️ 12. MAPA GPS (dibujado desde el espejo → sale en foto Y en video grabado)
+drawMapToMaster(ctx, cW, cH);
+// Siguiente frame
   if ('requestVideoFrameCallback' in el.video)
     el.video.requestVideoFrameCallback(renderLoop);
   else 
@@ -6373,10 +6372,9 @@ function performZoom(e) {
 
 // Touch Surface (área completa excepto zona segura)
 touchSurface.addEventListener('pointerdown', (e) => {
-    // Mostrar menús al tocar
     showMenus();
-    // Iniciar timer para zoom
-    pressTimer = setTimeout(() => performZoom(e), 500);
+    // 🔒 800ms: un toque normal (100-300ms) NUNCA activará el zoom
+    pressTimer = setTimeout(() => performZoom(e), 800);
 });
 touchSurface.addEventListener('pointerup', () => clearTimeout(pressTimer));
 touchSurface.addEventListener('pointermove', () => clearTimeout(pressTimer));
@@ -6384,9 +6382,8 @@ touchSurface.addEventListener('pointercancel', () => clearTimeout(pressTimer));
 
 // Zona Segura (centro - solo zoom, no abre menús)
 safeTouchZone.addEventListener('pointerdown', (e) => {
-    e.stopPropagation(); // Evita que llegue al touch-surface
-    // Solo zoom, no mostrar menús
-    pressTimer = setTimeout(() => performZoom(e), 500);
+    e.stopPropagation();
+    pressTimer = setTimeout(() => performZoom(e), 800);
 });
 safeTouchZone.addEventListener('pointerup', () => clearTimeout(pressTimer));
 safeTouchZone.addEventListener('pointermove', () => clearTimeout(pressTimer));
@@ -6532,7 +6529,7 @@ window.addEventListener('load', () => {
             if (typeof drawBurnInHUD === 'function') {
                 const vW = el.video.videoWidth || 1920;
                 const vH = el.video.videoHeight || 1080;
-                drawBurnInHUD(audioLayerCtx, vW, vH, 1.0);
+                drawBurnInHUD(ctx, vW, vH, 1.0);
             }
         } else {
             console.warn('[LOGO] Logo no cargado, reintentando...');
@@ -6544,7 +6541,7 @@ window.addEventListener('load', () => {
                     setTimeout(() => {
                         const vW = el.video.videoWidth || 1920;
                         const vH = el.video.videoHeight || 1080;
-                        drawBurnInHUD(audioLayerCtx, vW, vH, 1.0);
+                        drawBurnInHUD(ctx, vW, vH, 1.0);
                     }, 100);
                 }
             };
@@ -6600,70 +6597,70 @@ function getCanvasVideoFilter() {
 }
 
 // ==========================================================
-// 🔪 NITIDEZ MANUAL (convolución) - Reemplaza filtros SVG
+// 🔪 NITIDEZ + GRANO DE PELÍCULA (Optimizado para Safari iOS)
 // ==========================================================
+let grainCanvas = null;
+let grainCtx = null;
+const GRAIN_SIZE = 256; 
+
+function initGrainCanvas() {
+    if (grainCanvas) return;
+    grainCanvas = document.createElement('canvas');
+    grainCanvas.width = GRAIN_SIZE;
+    grainCanvas.height = GRAIN_SIZE;
+    grainCtx = grainCanvas.getContext('2d', { alpha: true });
+    generateGrainPattern();
+}
+
+function generateGrainPattern() {
+    if (!grainCtx) return;
+    const imgData = grainCtx.createImageData(GRAIN_SIZE, GRAIN_SIZE);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        const noise = Math.random() * 255;
+        data[i] = noise;
+        data[i + 1] = noise;
+        data[i + 2] = noise;
+        data[i + 3] = 255;
+    }
+    grainCtx.putImageData(imgData, 0, 0);
+}
+
+// BUSCAR LA FUNCIÓN applySharpnessToCanvas Y REEMPLAZAR COMPLETA CON:
 function applySharpnessToCanvas(ctx, x, y, w, h, level) {
   if (level <= 0 || w === 0 || h === 0) return;
   
-  // Kernels de sharpening según nivel
-  const kernels = {
-    1: [0, -0.5, 0, -0.5, 3.0, -0.5, 0, -0.5, 0],
-    2: [0, -1.0, 0, -1.0, 5.0, -1.0, 0, -1.0, 0],
-    3: [-0.5, -0.5, -0.5, -0.5, 5.0, -0.5, -0.5, -0.5, -0.5]
+  // 🔒 OPTIMIZACIÓN: Usar SOLO filtros CSS (GPU), SIN grano de película
+  // El grano consume MUCHA CPU regenerándose cada 3 frames
+  const filters = {
+    1: 'contrast(1.08) saturate(1.05) brightness(1.02)', // Baja - HD sutil
+    2: 'contrast(1.15) saturate(1.10) brightness(1.03)', // Media - HD medio
+    3: 'contrast(1.25) saturate(1.15) brightness(1.05)'  // Alta - HD fuerte
   };
   
-  const kernel = kernels[level] || kernels[1];
-  
+  const filter = filters[level] || filters[1];
   ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = filter;
+  ctx.drawImage(el.video, x, y, w, h);
+  ctx.filter = 'none';
+  ctx.restore();
   
-  // Obtener pixels del área del video
-  const imgData = ctx.getImageData(x, y, w, h);
-  const data = imgData.data;
-  const wImg = imgData.width;
-  const hImg = imgData.height;
-  const output = new Uint8ClampedArray(data.length);
+  // 🔒 ELIMINADO: Generación de grano de película (ahorrando ~40% CPU)
+  // Si quieres mantener grano sutil, descomenta esto:
   
-  // Aplicar convolución (optimizado: step=2 para rendimiento en móvil)
-  const step = level >= 3 ? 1 : 2;
-  
-  for (let py = 1; py < hImg - 1; py += step) {
-    for (let px = 1; px < wImg - 1; px += step) {
-      let r = 0, g = 0, b = 0;
-      let ki = 0;
-      for (let ky = -1; ky <= 1; ky++) {
-        for (let kx = -1; kx <= 1; kx++) {
-          const idx = ((py + ky) * wImg + (px + kx)) * 4;
-          r += data[idx] * kernel[ki];
-          g += data[idx + 1] * kernel[ki];
-          b += data[idx + 2] * kernel[ki];
-          ki++;
-        }
-      }
-      const outIdx = (py * wImg + px) * 4;
-      output[outIdx] = Math.min(255, Math.max(0, r));
-      output[outIdx + 1] = Math.min(255, Math.max(0, g));
-      output[outIdx + 2] = Math.min(255, Math.max(0, b));
-      output[outIdx + 3] = 255;
-      
-      // Rellenar pixels saltados
-      if (step === 2) {
-        for (let fy = 0; fy < step && py + fy < hImg; fy++) {
-          for (let fx = 0; fx < step && px + fx < wImg; fx++) {
-            const fIdx = ((py + fy) * wImg + (px + fx)) * 4;
-            output[fIdx] = output[outIdx];
-            output[fIdx + 1] = output[outIdx + 1];
-            output[fIdx + 2] = output[outIdx + 2];
-            output[fIdx + 3] = 255;
-          }
-        }
-      }
+  if (level >= 2) {
+    initGrainCanvas();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.03; // Muy sutil (3%)
+    const pattern = ctx.createPattern(grainCanvas, 'repeat');
+    if (pattern) {
+      ctx.fillStyle = pattern;
+      ctx.fillRect(x, y, w, h);
     }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1.0;
   }
   
-  imgData.data.set(output);
-  ctx.putImageData(imgData, x, y);
-  ctx.restore();
 }
 
 // ==========================================================
@@ -6709,147 +6706,182 @@ async function toggleScreenRecording() {
 }
 
 async function startScreenRecording() {
-  try {
-    // 1. Capturar stream del canvas maestro a 60 FPS
-    const canvasStream = el.masterCanvas.captureStream(60);
-    const videoTrack = canvasStream.getVideoTracks()[0];
+    try {
+        // 1. Stream del canvas maestro a 30 FPS (coherente con cámara 4K@30)
+        const canvasStream = el.masterCanvas.captureStream(30);
+        const videoTrack = canvasStream.getVideoTracks()[0];
 
-    // 2. Obtener stream de audio mezclado
-    let audioTrack = null;
-    if (mixDestination && mixDestination.stream.getAudioTracks().length > 0) {
-      audioTrack = mixDestination.stream.getAudioTracks()[0];
-    } else if (audioStream && audioStream.getAudioTracks().length > 0) {
-      audioTrack = audioStream.getAudioTracks()[0];
+        // 2. Audio SOLO si la pista está VIVA (evita grabaciones vacías/corruptas)
+        let audioTrack = null;
+        if (mixDestination && mixDestination.stream.getAudioTracks().length > 0) {
+            const t = mixDestination.stream.getAudioTracks()[0];
+            if (t.readyState === 'live') audioTrack = t;
+        }
+        if (!audioTrack && audioStream && audioStream.getAudioTracks().length > 0) {
+            const t = audioStream.getAudioTracks()[0];
+            if (t.readyState === 'live') audioTrack = t;
+        }
+
+        const tracks = [videoTrack];
+        if (audioTrack) tracks.push(audioTrack);
+        const combinedStream = new MediaStream(tracks);
+
+        // 3. PRIORIDAD DE FORMATO: MP4 (compatible con todos los reproductores)
+        //    y WebM como respaldo
+        const mimeTypes = [
+            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+            'video/mp4;codecs=avc1',
+            'video/mp4',
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm'
+        ];
+        let selectedMime = '';
+        for (const mime of mimeTypes) {
+            if (window.MediaRecorder && MediaRecorder.isTypeSupported(mime)) { selectedMime = mime; break; }
+        }
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, {
+            mimeType: selectedMime || undefined,
+            videoBitsPerSecond: 8_000_000,
+            audioBitsPerSecond: 192_000
+        });
+        mediaRecorder._ext = (mediaRecorder.mimeType || selectedMime || '').includes('mp4') ? 'mp4' : 'webm';
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onerror = (e) => console.error('[REC] Error:', e);
+
+        mediaRecorder.onstop = () => {
+            const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
+            if (totalSize < 8000) {
+                showToast('⚠️ GRABACIÓN VACÍA — REINTENTA', true);
+                return;
+            }
+            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `OBR_REC_${timestamp}.${mediaRecorder._ext}`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            showToast(`✅ VIDEO GUARDADO (${mediaRecorder._ext.toUpperCase()} · ${(totalSize/1048576).toFixed(1)}MB)`, false);
+        };
+
+        // Forzar un paint antes de arrancar (garantiza primer frame con contenido)
+        requestAnimationFrame(() => {
+            mediaRecorder.start(1000);
+        });
+
+        isRecording = true;
+        recordingStartTime = Date.now();
+
+        const recInd = document.getElementById('recording-indicator');
+        if (recInd) recInd.classList.add('active');
+        const btn = document.getElementById('btn-record');
+        if (btn) btn.classList.add('active-state');
+
+        recordingTimer = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const recTime = document.getElementById('rec-time');
+            if (recTime) recTime.innerText = `${String(Math.floor(elapsed/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
+        }, 1000);
+
+        showToast(`🔴 GRABANDO (30FPS · ${mediaRecorder._ext.toUpperCase()})`, false);
+        mediaRecorder._canvasStream = canvasStream;
+    } catch (err) {
+        console.error('Error grabando:', err);
+        showToast('❌ ERROR AL GRABAR: ' + err.message, true);
     }
-
-    // 3. Combinar video + audio
-    const tracks = [videoTrack];
-    if (audioTrack) tracks.push(audioTrack);
-    const combinedStream = new MediaStream(tracks);
-
-    // 4. Configurar MediaRecorder con ALTA CALIDAD
-    const mimeTypes = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm'
-    ];
-    let selectedMime = '';
-    for (const mime of mimeTypes) {
-      if (MediaRecorder.isTypeSupported(mime)) {
-        selectedMime = mime;
-        break;
-      }
-    }
-
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(combinedStream, {
-      mimeType: selectedMime,
-      videoBitsPerSecond: 8_000_000,  // 8 Mbps
-      audioBitsPerSecond: 192_000     // 192 kbps
-    });
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: selectedMime });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      a.download = `OBR_REC_${timestamp}.webm`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showToast('✅ VIDEO GUARDADO (8Mbps)', false);
-    };
-
-    mediaRecorder.start(1000);
-    isRecording = true;
-    recordingStartTime = Date.now();
-
-    // UI feedback
-    const recInd = document.getElementById('recording-indicator');
-    if (recInd) recInd.classList.add('active');
-    const btn = document.getElementById('btn-record');
-    if (btn) btn.classList.add('active-state');
-
-    // Timer
-    recordingTimer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-      const min = String(Math.floor(elapsed / 60)).padStart(2, '0');
-      const sec = String(elapsed % 60).padStart(2, '0');
-      const recTime = document.getElementById('rec-time');
-      if (recTime) recTime.innerText = `${min}:${sec}`;
-    }, 1000);
-
-    showToast('🔴 GRABANDO (60FPS + AUDIO)', false);
-    mediaRecorder._canvasStream = canvasStream;
-
-  } catch (err) {
-    console.error('Error grabando:', err);
-    showToast('❌ ERROR AL GRABAR: ' + err.message, true);
-  }
 }
 
 function stopScreenRecording() {
-  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-
-  mediaRecorder.stop();
-  isRecording = false;
-
-  if (mediaRecorder._canvasStream) {
-    mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
-  }
-
-  clearInterval(recordingTimer);
-
-  const recInd = document.getElementById('recording-indicator');
-  if (recInd) recInd.classList.remove('active');
-  const btn = document.getElementById('btn-record');
-  if (btn) btn.classList.remove('active-state');
-
-  showToast('⏹ PROCESANDO VIDEO...', false);
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    mediaRecorder.stop();
+    isRecording = false;
+    if (mediaRecorder._canvasStream) {
+        mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
+    }
+    clearInterval(recordingTimer);
+    const recInd = document.getElementById('recording-indicator');
+    if (recInd) recInd.classList.remove('active');
+    const btn = document.getElementById('btn-record');
+    if (btn) btn.classList.remove('active-state');
+    showToast('⏹ PROCESANDO VIDEO...', false);
 }
 
 // ==========================================================
-// 📸 CAPTURA DE FOTO (ALTA CALIDAD)
+// 📸 CAPTURA DE FOTO CON MAPA INCRUSTADO
 // ==========================================================
 function takeScreenshot() {
-  try {
-    // Flash visual
-    const flash = document.getElementById('capture-flash');
-    if (flash) {
-      flash.classList.add('flash');
-      setTimeout(() => flash.classList.remove('flash'), 200);
-    }
-
-    // Capturar canvas maestro como PNG (calidad máxima)
-    el.masterCanvas.toBlob((blob) => {
-      if (!blob) {
+    try {
+        // Flash visual
+        const flash = document.getElementById('capture-flash');
+        if (flash) {
+            flash.classList.add('flash');
+            setTimeout(() => flash.classList.remove('flash'), 200);
+        }
+        
+        // 🗺️ CRÍTICO: Forzar captura del mapa antes de la foto
+        const mapSlot = document.getElementById('map-container-slot');
+        const hasMap = mapSlot && !mapSlot.classList.contains('map-hidden');
+        
+        if (hasMap && typeof html2canvas !== 'undefined') {
+            // Forzar captura inmediata del mapa
+            lastMapCapture = 0;
+            
+            captureMapToMirror().then(() => {
+                // Esperar 2 frames para que se dibuje el mapa en el master canvas
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        performScreenshot();
+                    });
+                });
+            }).catch((err) => {
+                console.warn('Error capturando mapa:', err);
+                performScreenshot();
+            });
+        } else {
+            performScreenshot();
+        }
+    } catch (err) {
+        console.error('Error captura:', err);
         showToast('❌ ERROR CAPTURA', true);
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      a.download = `OBR_SNAP_${timestamp}.png`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showToast('📸 FOTO GUARDADA (PNG)', false);
+    }
+}
 
-      if (navigator.vibrate) navigator.vibrate(80);
+function performScreenshot() {
+    // 🗺️ CRÍTICO: Asegurar que el mapa esté dibujado antes de capturar
+    const mapSlot = document.getElementById('map-container-slot');
+    if (mapSlot && !mapSlot.classList.contains('map-hidden') && mapMirrorCanvas && mapMirrorCtx) {
+        drawMapToMaster(ctx, el.masterCanvas.width, el.masterCanvas.height);
+    }
+    
+    el.masterCanvas.toBlob((blob) => {
+        if (!blob) {
+            showToast('❌ ERROR CAPTURA', true);
+            return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.download = `OBR_SNAP_${timestamp}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast('📸 FOTO GUARDADA (PNG)', false);
+        if (navigator.vibrate) navigator.vibrate(80);
     }, 'image/png', 1.0);
-  } catch (err) {
-    console.error('Error captura:', err);
-    showToast('❌ ERROR CAPTURA', true);
-  }
 }
 
 // Exponer globalmente
 window.toggleScreenRecording = toggleScreenRecording;
 window.takeScreenshot = takeScreenshot;
+
+
 
 
 </script>
