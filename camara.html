@@ -3420,102 +3420,61 @@ function initMapMirror() {
 async function captureMapToMirror() {
     const now = Date.now();
     if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return;
-    if (typeof html2canvas === 'undefined') return;
+    if (!miniMapInstance || !mapMirrorCtx) return;
     const mapSlot = document.getElementById('map-container-slot');
     if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
-    if (!mapMirrorCtx) initMapMirror();
-    if (!mapMirrorCtx) return;
 
-    // 🔒 CRÍTICO: Sincronizar el espejo con el tamaño REAL del mapa en pantalla
     const rect = mapSlot.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return;
     const w = Math.round(rect.width), h = Math.round(rect.height);
     if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) {
-        mapMirrorCanvas.width = w;
-        mapMirrorCanvas.height = h;
+        mapMirrorCanvas.width = w; mapMirrorCanvas.height = h;
     }
 
-    try {
-        // scale:2 = supersampling (mapa más nítido en foto/video)
-        const canvas = await html2canvas(mapSlot, {
-            backgroundColor: null,
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            width: rect.width,
-            height: rect.height
-        });
-        mapMirrorCtx.clearRect(0, 0, w, h);
-        mapMirrorCtx.drawImage(canvas, 0, 0, w, h);
-        lastMapCapture = now;
-    } catch (err) {
-         console.warn('Error capturando mapa:', err);
-        // Asegurar que los overlays se restauren incluso si hay error
-        const overlay = document.getElementById('mini-map-overlay');
-        const glitch = document.getElementById('mini-map-glitch');
-        const tint = document.getElementById('mini-map-tint');
-        if (overlay) overlay.style.display = '';
-        if (glitch) glitch.style.display = '';
-        if (tint) tint.style.display = '';
+    // Escala (el CSS aplica scale(1.02) en vertical)
+    const sx = rect.width / (mapSlot.offsetWidth || 1);
+    const sy = rect.height / (mapSlot.offsetHeight || 1);
+
+    const c = mapMirrorCtx;
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = '#050505';
+    c.fillRect(0, 0, w, h);
+
+    // 🪞 1) ESPEJO 1:1 DE LOS TILES (mismas imgs, mismas coords → sin volteo)
+    const tiles = mapSlot.querySelectorAll('img.leaflet-tile');
+    for (const img of tiles) {
+        if (!img.complete || !img.naturalWidth) continue;
+        const r = img.getBoundingClientRect();
+        c.drawImage(img, r.left - rect.left, r.top - rect.top, r.width, r.height);
     }
+
+    // 2) RECORRIDO (polyline cian)
+    if (mapPath.length > 1) {
+        c.strokeStyle = '#00ffff';
+        c.lineWidth = 3 * sx;
+        c.setLineDash([6 * sx, 6 * sx]);
+        c.beginPath();
+        for (let i = 0; i < mapPath.length; i++) {
+            const p = miniMapInstance.latLngToContainerPoint(mapPath[i]);
+            i === 0 ? c.moveTo(p.x * sx, p.y * sy) : c.lineTo(p.x * sx, p.y * sy);
+        }
+        c.stroke();
+        c.setLineDash([]);
+    }
+
+    // 3) MARKER (el emoji REAL que ve el usuario)
+    const markerEl = document.querySelector('.ghost-marker');
+    if (markerEl && window._currentGPS) {
+        const p = miniMapInstance.latLngToContainerPoint([window._currentGPS.lat, window._currentGPS.lon]);
+        c.font = `${Math.round(22 * sx)}px serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText(markerEl.textContent.trim() || '👻', p.x * sx, (p.y * sy) - 4 * sy);
+    }
+
+    lastMapCapture = now;
+    rebuildMapSprite(); // alimenta el sprite que va al master canvas
 }
-
-let mapMaskCanvas = null;
-let mapMaskCtx = null;
-
-function drawMapToMaster(masterCtx, masterW, masterH) {
-    const mapSlot = document.getElementById('map-container-slot');
-    if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
-    if (!mapMirrorCanvas || !mapMirrorCanvas.width || !mapMirrorCanvas.height) return;
-
-    // 🔒 CRÍTICO: Posición y tamaño REALES del mapa HTML (incluye scale/transforms)
-    const rect = mapSlot.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) return;
-    const w = Math.round(rect.width);
-    const h = Math.round(rect.height);
-
-    // Canvas auxiliar: mapa + máscara suave (réplica exacta del CSS)
-    if (!mapMaskCanvas) {
-        mapMaskCanvas = document.createElement('canvas');
-        mapMaskCtx = mapMaskCanvas.getContext('2d');
-    }
-    if (mapMaskCanvas.width !== w || mapMaskCanvas.height !== h) {
-        mapMaskCanvas.width = w;
-        mapMaskCanvas.height = h;
-    }
-
-    // Dibujar el mapa espejo
-    mapMaskCtx.globalCompositeOperation = 'source-over';
-    mapMaskCtx.clearRect(0, 0, w, h);
-    mapMaskCtx.drawImage(mapMirrorCanvas, 0, 0, w, h);
-
-    // Máscara vertical (bordes sup/inf difuminados, igual que el CSS)
-    const gV = mapMaskCtx.createLinearGradient(0, 0, 0, h);
-    gV.addColorStop(0, 'rgba(0,0,0,0)');
-    gV.addColorStop(0.2, 'rgba(0,0,0,1)');
-    gV.addColorStop(0.8, 'rgba(0,0,0,1)');
-    gV.addColorStop(1, 'rgba(0,0,0,0)');
-    mapMaskCtx.globalCompositeOperation = 'destination-in';
-    mapMaskCtx.fillStyle = gV;
-    mapMaskCtx.fillRect(0, 0, w, h);
-
-    // Máscara horizontal (bordes izq/der) → intersección = réplica del mask-composite
-    const gH = mapMaskCtx.createLinearGradient(0, 0, w, 0);
-    gH.addColorStop(0, 'rgba(0,0,0,0)');
-    gH.addColorStop(0.2, 'rgba(0,0,0,1)');
-    gH.addColorStop(0.8, 'rgba(0,0,0,1)');
-    gH.addColorStop(1, 'rgba(0,0,0,0)');
-    mapMaskCtx.fillStyle = gH;
-    mapMaskCtx.fillRect(0, 0, w, h);
-
-    // 🔒 Dibujar en el canvas maestro EXACTAMENTE donde está el mapa HTML
-    masterCtx.save();
-    masterCtx.globalCompositeOperation = 'source-over';
-    masterCtx.globalAlpha = 1;
-    masterCtx.drawImage(mapMaskCanvas, rect.left, rect.top);
-    masterCtx.restore();
-}
-
 
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
     // 🔒 NUEVO: Ocultar texto de carga después de 4 segundos sí o sí
@@ -3556,13 +3515,11 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
             }).setView(point, 14);
             
             // 🔒 MAPA TIPO RELIEF/ATLAS (OpenStreetMap estándar - más claro)
-            L.tileLayer(
-                'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                { 
-                    maxZoom: 18,
-                    attribution: '© OpenStreetMap'
-                }
-            ).addTo(miniMapInstance);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+    maxZoom: 18,
+    attribution: '© OpenStreetMap',
+    crossOrigin: 'anonymous' // 🔒 CRÍTICO: tiles limpios para canvas/grabación
+}).addTo(miniMapInstance);
             
             // 🔒 MARKER CON EMOJI (usando la función global)
             mapMarker = L.marker(point, { icon: createGhostIcon() }).addTo(miniMapInstance);
@@ -3655,7 +3612,8 @@ setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
 initMiniMap();
 initMapMirror();
 // 🗺️ Refrescar el espejo del mapa cada 2s (alimenta el video en vivo)
-setInterval(() => { captureMapToMirror(); }, 2000);
+// 🔒 html2canvas es CARO en móvil: cada 6s y a escala 1 (ver Bloque 4)
+setInterval(() => { if (!document.hidden) captureMapToMirror(); }, 6000);
     
     // Esperar un momento para que el navegador procese la solicitud de GPS
     await new Promise(r => setTimeout(r, 300));
@@ -5012,21 +4970,32 @@ ctx.fillRect(0, 0, cW, cH);
       lastVW = vW; lastVH = vH; lastCW = cW; lastCH = cH;
     }
 
-    const { dW, dH, dX, dY } = window.drawCoords;
+            const { dW, dH, dX, dY } = window.drawCoords;
 
-    // 🎯 3. APLICAR FILTROS CSS AL CONTEXTO ANTES DE DIBUJAR
-    ctx.save();
-    ctx.filter = getCanvasVideoFilter();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    
-    //  4. DIBUJAR VIDEO CON FILTROS APLICADOS
-    ctx.drawImage(el.video, dX, dY, dW, dH);
-    ctx.restore();
-    //  5. APLICAR NITIDEZ MANUAL (post-procesado)
-    if (currentSharpness > 0) {
-      applySharpnessToCanvas(ctx, dX, dY, dW, dH, currentSharpness);
-    }
+               // 🎯 3+4+5. FILTRO DE COLOR + NITIDEZ + DIBUJO DEL VIDEO (TODO EN UN PASO)
+        // Construir filtro combinado: color + nitidez (si hay)
+        let combinedFilter = getCanvasVideoFilter();
+        if (currentSharpness > 0) {
+            const sharpFilters = {
+                1: 'contrast(1.08) saturate(1.05)',
+                2: 'contrast(1.15) saturate(1.10)',
+                3: 'contrast(1.25) saturate(1.15)'
+            };
+            const sharp = sharpFilters[currentSharpness] || sharpFilters[1];
+            combinedFilter = (combinedFilter === 'none') ? sharp : combinedFilter + ' ' + sharp;
+        }
+        
+        ctx.save();
+        ctx.filter = combinedFilter !== 'none' ? combinedFilter : 'none';
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // UN SOLO drawImage con todos los filtros (color + nitidez) aplicados SOLO al video
+        ctx.drawImage(el.video, dX, dY, dW, dH);
+        
+        // 🔒 CRÍTICO: Resetear filtro INMEDIATAMENTE para que no afecte HUD/SLS/IA/Mapa
+        ctx.filter = 'none';
+        ctx.restore();
 
     // 🎯 6. LIDAR
     if (state.isLidar) {
@@ -6371,10 +6340,9 @@ function performZoom(e) {
 }
 
 // Touch Surface (área completa excepto zona segura)
+// 🔒 Touch Surface: SOLO muestra menús. NUNCA hace zoom.
 touchSurface.addEventListener('pointerdown', (e) => {
     showMenus();
-    // 🔒 800ms: un toque normal (100-300ms) NUNCA activará el zoom
-    pressTimer = setTimeout(() => performZoom(e), 800);
 });
 touchSurface.addEventListener('pointerup', () => clearTimeout(pressTimer));
 touchSurface.addEventListener('pointermove', () => clearTimeout(pressTimer));
@@ -6385,9 +6353,9 @@ safeTouchZone.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     pressTimer = setTimeout(() => performZoom(e), 800);
 });
-safeTouchZone.addEventListener('pointerup', () => clearTimeout(pressTimer));
-safeTouchZone.addEventListener('pointermove', () => clearTimeout(pressTimer));
-safeTouchZone.addEventListener('pointercancel', () => clearTimeout(pressTimer));
+// 🔒 Limpieza GLOBAL del timer (el pointerup caiga donde caiga, cancela el zoom)
+window.addEventListener('pointerup', () => clearTimeout(pressTimer));
+window.addEventListener('pointercancel', () => clearTimeout(pressTimer));
     
     function resetZoom(btn) { 
         state.zoom = 1; 
@@ -6603,29 +6571,24 @@ let grainCanvas = null;
 let grainCtx = null;
 const GRAIN_SIZE = 256; 
 
+let grainPatterns = [];
 function initGrainCanvas() {
-    if (grainCanvas) return;
-    grainCanvas = document.createElement('canvas');
-    grainCanvas.width = GRAIN_SIZE;
-    grainCanvas.height = GRAIN_SIZE;
-    grainCtx = grainCanvas.getContext('2d', { alpha: true });
-    generateGrainPattern();
-}
-
-function generateGrainPattern() {
-    if (!grainCtx) return;
-    const imgData = grainCtx.createImageData(GRAIN_SIZE, GRAIN_SIZE);
-    const data = imgData.data;
-    for (let i = 0; i < data.length; i += 4) {
-        const noise = Math.random() * 255;
-        data[i] = noise;
-        data[i + 1] = noise;
-        data[i + 2] = noise;
-        data[i + 3] = 255;
+    if (grainPatterns.length) return;
+    // 🔒 3 patrones estáticos generados UNA vez (cero putImageData por frame)
+    for (let g = 0; g < 3; g++) {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const cx = c.getContext('2d');
+        const img = cx.createImageData(256, 256);
+        for (let i = 0; i < img.data.length; i += 4) {
+            const n = Math.random() * 255;
+            img.data[i] = n; img.data[i + 1] = n; img.data[i + 2] = n; img.data[i + 3] = 255;
+        }
+        cx.putImageData(img, 0, 0);
+        grainPatterns.push(c);
     }
-    grainCtx.putImageData(imgData, 0, 0);
+    grainCanvas = grainPatterns[0];
 }
-
 // BUSCAR LA FUNCIÓN applySharpnessToCanvas Y REEMPLAZAR COMPLETA CON:
 function applySharpnessToCanvas(ctx, x, y, w, h, level) {
   if (level <= 0 || w === 0 || h === 0) return;
@@ -6707,8 +6670,9 @@ async function toggleScreenRecording() {
 
 async function startScreenRecording() {
     try {
-        // 1. Stream del canvas maestro a 30 FPS (coherente con cámara 4K@30)
-        const canvasStream = el.masterCanvas.captureStream(30);
+        // 🔒 CRÍTICO: captureStream(0) captura EXACTAMENTE cuando el canvas pinta.
+        // Evita interpolación, frames duplicados y pérdida de evidencia.
+        const canvasStream = el.masterCanvas.captureStream(30); 
         const videoTrack = canvasStream.getVideoTracks()[0];
 
         // 2. Audio SOLO si la pista está VIVA (evita grabaciones vacías/corruptas)
@@ -6743,9 +6707,9 @@ async function startScreenRecording() {
 
         recordedChunks = [];
         mediaRecorder = new MediaRecorder(combinedStream, {
-            mimeType: selectedMime || undefined,
-            videoBitsPerSecond: 8_000_000,
-            audioBitsPerSecond: 192_000
+            mimeType: selectedMime,
+            videoBitsPerSecond: 8_000_000,  // 8 Mbps (Alta calidad)
+            audioBitsPerSecond: 192_000     // 192 kbps
         });
         mediaRecorder._ext = (mediaRecorder.mimeType || selectedMime || '').includes('mp4') ? 'mp4' : 'webm';
 
@@ -6881,7 +6845,39 @@ function performScreenshot() {
 window.toggleScreenRecording = toggleScreenRecording;
 window.takeScreenshot = takeScreenshot;
 
+let mapSpriteCanvas = null, mapSpriteCtx = null, mapSpriteX = 0, mapSpriteY = 0;
 
+function rebuildMapSprite() {
+    const mapSlot = document.getElementById('map-container-slot');
+    if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
+    if (!mapMirrorCanvas || !mapMirrorCanvas.width) return;
+    const rect = mapSlot.getBoundingClientRect();
+    if (rect.width < 2) return;
+    const w = Math.round(rect.width), h = Math.round(rect.height);
+    if (!mapSpriteCanvas) { mapSpriteCanvas = document.createElement('canvas'); mapSpriteCtx = mapSpriteCanvas.getContext('2d'); }
+    if (mapSpriteCanvas.width !== w || mapSpriteCanvas.height !== h) { mapSpriteCanvas.width = w; mapSpriteCanvas.height = h; }
+    const c = mapSpriteCtx;
+    c.globalCompositeOperation = 'source-over';
+    c.clearRect(0, 0, w, h);
+    c.drawImage(mapMirrorCanvas, 0, 0, w, h);
+    const gV = c.createLinearGradient(0, 0, 0, h);
+    gV.addColorStop(0,'rgba(0,0,0,0)'); gV.addColorStop(0.2,'rgba(0,0,0,1)');
+    gV.addColorStop(0.8,'rgba(0,0,0,1)'); gV.addColorStop(1,'rgba(0,0,0,0)');
+    c.globalCompositeOperation = 'destination-in'; c.fillStyle = gV; c.fillRect(0, 0, w, h);
+    const gH = c.createLinearGradient(0, 0, w, 0);
+    gH.addColorStop(0,'rgba(0,0,0,0)'); gH.addColorStop(0.2,'rgba(0,0,0,1)');
+    gH.addColorStop(0.8,'rgba(0,0,0,1)'); gH.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle = gH; c.fillRect(0, 0, w, h);
+    c.globalCompositeOperation = 'source-over';
+    mapSpriteX = rect.left; mapSpriteY = rect.top;
+}
+
+// Por frame: UN drawImage (baratísimo)
+function drawMapToMaster(tctx, W, H) {
+    if (!mapSpriteCanvas || !mapSpriteCanvas.width) return;
+    const s = W / window.innerWidth;
+    tctx.drawImage(mapSpriteCanvas, mapSpriteX * s, mapSpriteY * s, mapSpriteCanvas.width * s, mapSpriteCanvas.height * s);
+}
 
 
 </script>
