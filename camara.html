@@ -28,7 +28,6 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -878,6 +877,9 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     height: 0;
     pointer-events: none;
 }
+
+/* 🔒 Los scan boxes ahora viven SOLO en el canvas; el DOM causaba el doble recuadro */
+#ai-scan-overlay { display: none !important; }
     </style>
 </head>
 <body>
@@ -3009,6 +3011,27 @@ function handleOrientationChange() {
         applyPortraitStyles();            // Aplicar clases CSS (ya existe)
         checkSmallScreen();               // Ajustar para pantallas muy pequeñas
         console.log('[ORIENTACIÓN] Ajustado a:', window.innerWidth, 'x', window.innerHeight);
+        
+        // 🔒 Re-sincronizar el mapa del canvas con la nueva orientación
+        // IMPORTANTE: captureMapToMirror es async, manejar con .catch()
+        lastMapCapture = 0; // Forzar nueva captura
+        
+        // Esperar un frame adicional para que el DOM esté completamente actualizado
+        setTimeout(() => {
+            if (typeof captureMapToMirror === 'function') {
+                // captureMapToMirror es async, manejar la promesa
+                const result = captureMapToMirror();
+                if (result && typeof result.catch === 'function') {
+                    result.catch(err => {
+                        console.warn('[MAPA] Error capturando mapa en rotación:', err);
+                    });
+                }
+            }
+            if (typeof rebuildMapSprite === 'function') {
+                rebuildMapSprite();
+            }
+        }, 100); // 100ms adicionales para que el mapa termine de renderizar
+        
     }, 300);
 }
 
@@ -3428,7 +3451,8 @@ async function captureMapToMirror() {
     if (rect.width < 2 || rect.height < 2) return;
     const w = Math.round(rect.width), h = Math.round(rect.height);
     if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) {
-        mapMirrorCanvas.width = w; mapMirrorCanvas.height = h;
+        mapMirrorCanvas.width = w;
+        mapMirrorCanvas.height = h;
     }
 
     // Escala (el CSS aplica scale(1.02) en vertical)
@@ -3473,7 +3497,7 @@ async function captureMapToMirror() {
     }
 
     lastMapCapture = now;
-    rebuildMapSprite(); // alimenta el sprite que va al master canvas
+    rebuildMapSprite(); // 🔒 alimenta el sprite que va al master canvas
 }
 
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
@@ -3515,7 +3539,7 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
             }).setView(point, 14);
             
             // 🔒 MAPA TIPO RELIEF/ATLAS (OpenStreetMap estándar - más claro)
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
     maxZoom: 18,
     attribution: '© OpenStreetMap',
     crossOrigin: 'anonymous' // 🔒 CRÍTICO: tiles limpios para canvas/grabación
@@ -3613,7 +3637,11 @@ initMiniMap();
 initMapMirror();
 // 🗺️ Refrescar el espejo del mapa cada 2s (alimenta el video en vivo)
 // 🔒 html2canvas es CARO en móvil: cada 6s y a escala 1 (ver Bloque 4)
-setInterval(() => { if (!document.hidden) captureMapToMirror(); }, 6000);
+setInterval(() => {
+    if (document.hidden) return;
+    if ('requestIdleCallback' in window) requestIdleCallback(() => captureMapToMirror(), { timeout: 1500 });
+    else captureMapToMirror();
+}, 6000);
     
     // Esperar un momento para que el navegador procese la solicitud de GPS
     await new Promise(r => setTimeout(r, 300));
@@ -4405,13 +4433,13 @@ function drawAudioVisualizer(c, w, h) {
 function drawLidarEffect(c, width, height, currentFrame) {
     const maskToUse = lidarMask || lastLidarMask;
     
-    // 🔒 CRÍTICO: Grid más pequeño para menos círculos (16x12 en lugar de 24x18)
-    const gridW = 12, gridH = 9; // 🔒 Grid más pequeño = menos círculos = más rápido
+    // 🔒 Grid más pequeño para menos círculos
+    const gridW = 12, gridH = 9;
     
     // 1. Decaimiento rápido si no hay máscara
     if (!maskToUse) {
-        for(let i = 0; i < lidarActivityGrid.length; i++) {
-            lidarActivityGrid[i] *= 0.60; // 🔒 Más agresivo (era 0.70)
+        for (let i = 0; i < lidarActivityGrid.length; i++) {
+            lidarActivityGrid[i] *= 0.60;
         }
     } else {
         // 2. Analizar la máscara en grid de baja resolución
@@ -4427,23 +4455,29 @@ function drawLidarEffect(c, width, height, currentFrame) {
                 if (presence) {
                     lidarActivityGrid[gridIdx] = Math.min(1.0, lidarActivityGrid[gridIdx] + 0.35);
                 } else {
-                    lidarActivityGrid[gridIdx] *= 0.70; // 🔒 Más agresivo (era 0.80)
+                    lidarActivityGrid[gridIdx] *= 0.70;
                 }
             }
         }
     }
     
-    // 3. Dibujar efecto LiDAR
+    // 🔒 CRÍTICO: Escalar el contexto LiDAR al "espacio de pantalla".
+    // Todo lo que se dibuje con coordenadas width/height se mapea al canvas real,
+    // aunque este sea más pequeño (auto-calidad) → NADA queda recortado.
+    const lw = el.lidarCanvas.width, lh = el.lidarCanvas.height;
+    if (lw < 2 || lh < 2 || width < 2 || height < 2) return;
+    lidarCtx.setTransform(lw / width, 0, 0, lh / height, 0, 0);
     lidarCtx.clearRect(0, 0, width, height);
     lidarCtx.save();
-    const time = performance.now() * 0.002;
-    const cellW = width / gridW;
-    const cellH = height / gridH;
     
+    const time = performance.now() * 0.002;
+    const cellW = width / gridW;   // ← vuelve a width (espacio de pantalla)
+    const cellH = height / gridH;  // ← vuelve a height
+    
+    // 3. Dibujar círculos de actividad
     for (let y = 0; y < gridH; y++) {
         for (let x = 0; x < gridW; x++) {
             const activity = lidarActivityGrid[y * gridW + x];
-            //  Umbral más alto para menos círculos (0.25 en lugar de 0.15)
             if (activity > 0.25) {
                 const cx = x * cellW + (cellW / 2);
                 const cy = y * cellH + (cellH / 2);
@@ -4467,7 +4501,7 @@ function drawLidarEffect(c, width, height, currentFrame) {
         }
     }
     
-    // 4. Línea de escaneo
+    // 4. Línea de escaneo (ahora con width/height → recorre TODA la pantalla)
     const scanX = (time * 250) % (width + 200) - 100;
     const scanGrad = lidarCtx.createLinearGradient(scanX - 100, 0, scanX + 100, 0);
     scanGrad.addColorStop(0, 'rgba(0, 255, 255, 0)');
@@ -4488,10 +4522,17 @@ function drawLidarEffect(c, width, height, currentFrame) {
     lidarCtx.stroke();
     lidarCtx.restore();
     
-    ctx.globalCompositeOperation = 'screen';
-ctx.drawImage(el.lidarCanvas, 0, 0, width, height);
-ctx.globalCompositeOperation = 'source-over';
+    // 🔒 CRÍTICO: Resetear el transform ANTES de componer
+    lidarCtx.setTransform(1, 0, 0, 1, 0, 0);
+    
+    // 🔒 Componer con `c` (el contexto que llama), NO con el global `ctx`.
+    // Así funciona igual en la vista en vivo y en la composición 4K.
+    c.globalCompositeOperation = 'screen';
+    c.drawImage(el.lidarCanvas, 0, 0, width, height);
+    c.globalCompositeOperation = 'source-over';
 }
+
+
 
     function initScanlines(w, h) {
          if(scanlineCanvas && scanlineCanvas.width === w) return;
@@ -4500,34 +4541,30 @@ ctx.globalCompositeOperation = 'source-over';
          for(let i=0; i<h; i+=4) sCtx.rect(0, i, w, 1.5); sCtx.fill();
     }
 
-function resize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    
-    // 🎯 CANVAS MAESTRO
-    el.masterCanvas.width = w;
-    el.masterCanvas.height = h;
-    
-    // Buffers internos
-    el.lidarCanvas.width = w;
-    el.lidarCanvas.height = h;
-    
-    // 🗺️ Actualizar tamaño del canvas espejo del mapa
-    if (mapMirrorCanvas) {
-        const isPortrait = h > w;
-        const mapSize = isPortrait ? 140 : 156; // 🔒 140px = mismo tamaño que el CSS
-        mapMirrorCanvas.width = mapSize;
-        mapMirrorCanvas.height = mapSize;
+function applyQualityScale() {
+    el.masterCanvas.width = Math.round(window.innerWidth * qualityScale);
+    el.masterCanvas.height = Math.round(window.innerHeight * qualityScale);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high'; // 🔒 siempre alto: el escalado no ablanda la imagen
+    // 🔒 LiDAR del mismo tamaño que el maestro (evita recortes de la línea de escaneo)
+    if (el.lidarCanvas) {
+        el.lidarCanvas.width = el.masterCanvas.width;
+        el.lidarCanvas.height = el.masterCanvas.height;
     }
-    
     lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
 }
 
-function drawFallbackSilhouette() {
-  ctx.globalAlpha = 0.20;
-  ctx.fillStyle = "#00ffff";
-  ctx.fillRect(0, 0, el.masterCanvas.width, el.masterCanvas.height);
-  ctx.globalAlpha = 1;
+function resize() {
+    applyQualityScale();
+    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+}
+
+function drawFallbackSilhouette(tctx) {
+    const t = tctx || ctx;
+    t.globalAlpha = 0.20;
+    t.fillStyle = "#00ffff";
+    t.fillRect(0, 0, t.canvas.width, t.canvas.height);
+    t.globalAlpha = 1;
 }
 
 function updateProgress(p, t) { 
@@ -4541,7 +4578,7 @@ function drawBurnInHUD(ctx, width, height, scale) {
     // 🔒 VERIFICAR SI EL USUARIO OCULTÓ EL TEXTO DEL HUD
     const hideText = document.body.classList.contains('hide-hud-text');
     
-    const isPortrait = window.innerHeight > window.innerWidth;
+    const isPortrait = height > width;
     
     // Factores de escala para reducciones
     const verticalYFactor = 0.864;
@@ -4845,16 +4882,18 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
     }
 
     const _smoothBBox = {};
-    function drawHybrid(targetCtx, pose, targetIdx) {
-        if (!window.drawCoords) return; 
-        const { dW, dH, dX, dY } = window.drawCoords; 
-        const mapX = (x) => (x * dW) + dX; 
-        const mapY = (y) => (y * dH) + dY; 
-        const now = performance.now();
-        const pulse = (Math.sin(now * 0.008) + 1) / 2;
+    
+    function drawHybrid(targetCtx, pose, targetIdx, coords) {
+    const C = coords || window.drawCoords;
+    if (!C) return;
+    const { dW, dH, dX, dY } = C;
+    const mapX = (x) => (x * dW) + dX;
+    const mapY = (y) => (y * dH) + dY;
+    const now = performance.now();
+    const pulse = (Math.sin(now * 0.008) + 1) / 2;
 
-        let drewPose = false;
-        let poseBBox = null;
+    let drewPose = false;
+    let poseBBox = null;
 
         if (pose && pose.keypoints && pose.keypoints.length > 0) {
             drewPose = true;
@@ -4931,118 +4970,191 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         if (!drewPose && window.motionLevel > 0.025) { targetCtx.save(); targetCtx.strokeStyle = `rgba(255,0,0,${0.2 + pulse * 0.25})`; targetCtx.lineWidth = 1.5; targetCtx.shadowBlur = 8 + pulse * 8; targetCtx.shadowColor = "rgba(255,0,0,0.5)"; targetCtx.strokeRect(dW * 0.35 + dX, dH * 0.2 + dY, dW * 0.3, dH * 0.6); targetCtx.restore(); }
     }
 
-function renderLoop(now, metadata) {
-  if (!now) now = performance.now();
-  const delta = now - lastFrameTime;
-  if (delta < fpsInterval) { 
-    if ('requestVideoFrameCallback' in el.video) 
-      el.video.requestVideoFrameCallback(renderLoop); 
-    else 
-      requestAnimationFrame(renderLoop); 
-    return; 
-  }
-  if (document.hidden) return;
 
-  lastFrameUpdateTime = now;
-  lastFrameTime = now; 
-  frameCount++;
+function computeLetterbox(vw, vh, W, H) {
+    // 🔒 MODO COVER: llena toda la pantalla (recorta sobrante), igual que el CSS
+    const scale = Math.max(W / vw, H / vh);
+    const dW = vw * scale, dH = vh * scale;
+    return { dW, dH, dX: (W - dW) / 2, dY: (H - dH) / 2 };
+}
 
-  const vW = el.video.videoWidth, vH = el.video.videoHeight;
-  const cW = el.masterCanvas.width, cH = el.masterCanvas.height;
+// 🔒 Todos los overlays en CUALQUIER resolución (pantalla o 4K)
+function renderOverlays(tctx, W, H) {
+    const vW = el.video.videoWidth, vH = el.video.videoHeight;
+    const coords = (vW && vH) ? computeLetterbox(vW, vH, W, H) : null;
+    if (coords) window.drawCoords = Object.assign({}, coords, { vW, vH });
 
-  // 🎯 1. LIMPIAR COMPLETAMENTE (fondo negro sólido, NO transparente)
-  ctx.fillStyle = '#000000';
-ctx.fillRect(0, 0, cW, cH);
-  
-  updateSmoothing();
-
-  // 🎯 2. CALCULAR COORDENADAS (letterbox/pillarbox)
-  if (vW && vH) {
-    if (vW !== lastVW || vH !== lastVH || cW !== lastCW || cH !== lastCH) {
-      const vRatio = vW / vH, cRatio = cW / cH;
-      let dW, dH, dX, dY;
-      if (cRatio > vRatio) {
-        dW = cW; dH = cW / vRatio; dX = 0; dY = (cH - dH) / 2;
-      } else {
-        dW = cH * vRatio; dH = cH; dX = (cW - dW) / 2; dY = 0;
-      }
-      window.drawCoords = { dW, dH, dX, dY, vW, vH };
-      lastVW = vW; lastVH = vH; lastCW = cW; lastCH = cH;
+    if (state.isLidar) drawLidarEffect(tctx, W, H, frameCount);
+    if (state.isSLS && !state.isLidar) {
+        const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
+        if (!renderPoses.length && (Date.now() - (window._slsStartTime || 0)) > 800) drawFallbackSilhouette(tctx);
+        for (let ti = 0; ti < renderPoses.length; ti++) drawHybrid(tctx, renderPoses[ti], ti, coords);
     }
+    if (state.isPareidolia) drawCanvasScanBoxes(tctx, W, H);
+    drawBurnInHUD(tctx, W, H, animState.hudScale);
+    if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) drawAIBurnIn(tctx, W, H, animState.aiScale);
+    if (state.isAudioScan) drawAudioVisualizer(tctx, W, H);
+    drawTallyBorder(tctx, W, H);
+    drawMapToMaster(tctx, W, H);
+}
 
-            const { dW, dH, dX, dY } = window.drawCoords;
-
-               // 🎯 3+4+5. FILTRO DE COLOR + NITIDEZ + DIBUJO DEL VIDEO (TODO EN UN PASO)
-        // Construir filtro combinado: color + nitidez (si hay)
-        let combinedFilter = getCanvasVideoFilter();
+// 🎥 Compone frame COMPLETO (video + filtros + nitidez + overlays) en el contexto dado
+function composeFullFrame(g, W, H) {
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1; g.filter = 'none';
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const vW = el.video.videoWidth, vH = el.video.videoHeight;
+    if (vW && vH) {
+        const { dW, dH, dX, dY } = computeLetterbox(vW, vH, W, H);
+        let f = getCanvasVideoFilter();
         if (currentSharpness > 0) {
-            const sharpFilters = {
-                1: 'contrast(1.08) saturate(1.05)',
-                2: 'contrast(1.15) saturate(1.10)',
-                3: 'contrast(1.25) saturate(1.15)'
-            };
-            const sharp = sharpFilters[currentSharpness] || sharpFilters[1];
-            combinedFilter = (combinedFilter === 'none') ? sharp : combinedFilter + ' ' + sharp;
+            const sharp = { 1: 'contrast(1.08) saturate(1.05)', 2: 'contrast(1.15) saturate(1.10)', 3: 'contrast(1.25) saturate(1.15)' }[currentSharpness];
+            f = (f === 'none') ? sharp : f + ' ' + sharp;
         }
-        
+        g.save();
+        if (f !== 'none') g.filter = f;
+        g.imageSmoothingEnabled = true;
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(el.video, dX, dY, dW, dH);
+        if (f !== 'none') g.filter = 'none';
+        g.restore();
+        if (currentSharpness > 0 && !disableGrainOnIOS && grainPatterns && grainPatterns.length) {
+            g.save();
+            g.globalCompositeOperation = 'overlay';
+            g.globalAlpha = 0.06;
+            const pat = g.createPattern(grainPatterns[(frameCount >> 3) % 3], 'repeat');
+            if (pat) { g.fillStyle = pat; g.fillRect(dX, dY, dW, dH); }
+            g.restore();
+        }
+    }
+    renderOverlays(g, W, H);
+}
+
+
+// aqui Inicoa RENDERLOPP //
+// 🔒 Cadena de overlays: se dibuja UNA sola vez, calibrada a la ventana
+function drawOverlayChain(tctx, W, H) {
+    if (state.isLidar) drawLidarEffect(tctx, W, H, frameCount);
+    if (state.isSLS && !state.isLidar) {
+        const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
+        if (!renderPoses.length && (Date.now() - (window._slsStartTime || 0)) > 800) drawFallbackSilhouette(tctx);
+        for (let ti = 0; ti < renderPoses.length; ti++) drawHybrid(tctx, renderPoses[ti], ti);
+    }
+    if (state.isPareidolia) drawCanvasScanBoxes(tctx, W, H);
+    drawBurnInHUD(tctx, W, H, animState.hudScale);
+    if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) drawAIBurnIn(tctx, W, H, animState.aiScale);
+    if (state.isAudioScan) drawAudioVisualizer(tctx, W, H);
+    drawTallyBorder(tctx, W, H);
+    drawMapToMaster(tctx, W, H);
+}
+
+function renderLoop(now, metadata) {
+    if (!now) now = performance.now();
+    const delta = now - lastFrameTime;
+    if (delta < fpsInterval) {
+        if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop);
+        else requestAnimationFrame(renderLoop);
+        return;
+    }
+    if (document.hidden) return;
+    lastFrameUpdateTime = now; lastFrameTime = now; frameCount++;
+
+    const cW = el.masterCanvas.width, cH = el.masterCanvas.height;
+    const W = window.innerWidth, H = window.innerHeight;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cW, cH);
+    // 🔒 ESPACIO DE PANTALLA: todo se calibra a la ventana aunque el canvas sea menor (auto-calidad)
+    ctx.setTransform(cW / W, 0, 0, cH / H, 0, 0);
+
+    updateSmoothing();
+
+       const vW = el.video.videoWidth, vH = el.video.videoHeight;
+    if (vW && vH) {
+        // COVER: llena pantalla y alinea overlays con lo visible
+        const sc = Math.max(W / vW, H / vH);
+        const dW = vW * sc, dH = vH * sc, dX = (W - dW) / 2, dY = (H - dH) / 2;
+        window.drawCoords = { dW, dH, dX, dY, vW, vH };
+
+        // 🔒 NITIDEZ COMPENSADA POR CAÍDA DE RESOLUCIÓN:
+        // Si la auto-calidad bajó el canvas interno, la nitidez sube sola
+        // para enmascarar el velo borroso → siempre disponible y mejora el video si bajó
+        let effSharp = currentSharpness;
+        if (qualityScale < 0.95 && effSharp === 0) effSharp = 1;                     // velo leve → nitidez mínima
+        else if (qualityScale < 0.90) effSharp = Math.min(3, Math.max(effSharp, 1) + 1); // velo mayor → +1 nivel
+
+        let f = getCanvasVideoFilter();
+        if (effSharp > 0) {
+            const sharp = { 1: 'contrast(1.08) saturate(1.05)', 2: 'contrast(1.15) saturate(1.10)', 3: 'contrast(1.25) saturate(1.15)' }[effSharp];
+            f = (f === 'none') ? sharp : f + ' ' + sharp;
+        }
         ctx.save();
-        ctx.filter = combinedFilter !== 'none' ? combinedFilter : 'none';
+        if (f !== 'none') ctx.filter = f;
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        
-        // UN SOLO drawImage con todos los filtros (color + nitidez) aplicados SOLO al video
+        ctx.imageSmoothingQuality = 'high'; // 🔒 siempre alto
         ctx.drawImage(el.video, dX, dY, dW, dH);
-        
-        // 🔒 CRÍTICO: Resetear filtro INMEDIATAMENTE para que no afecte HUD/SLS/IA/Mapa
-        ctx.filter = 'none';
+        if (f !== 'none') ctx.filter = 'none';
         ctx.restore();
 
-    // 🎯 6. LIDAR
-    if (state.isLidar) {
-      drawLidarEffect(ctx, cW, cH, frameCount);
+        // Grano de película sutil (sigue a la nitidez efectiva)
+        if (effSharp > 0 && !disableGrainOnIOS && grainPatterns && grainPatterns.length) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'overlay';
+            ctx.globalAlpha = 0.06;
+            const pat = ctx.createPattern(grainPatterns[(frameCount >> 3) % 3], 'repeat');
+            if (pat) { ctx.fillStyle = pat; ctx.fillRect(dX, dY, dW, dH); }
+            ctx.restore();
+        }
     }
-  }
 
-  //  7. SLS
-  if (state.isSLS && !state.isLidar) {
-    const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
-    if (!renderPoses.length && (Date.now() - (window._slsStartTime||0)) > 800) {
-      drawFallbackSilhouette();
+    const speed = 0.25;
+    animState.hudScale += (animState.hudTarget - animState.hudScale) * speed;
+    animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
+
+    drawOverlayChain(ctx, W, H);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // 🎬 Grabación 4K: compone en el canvas dedicado
+    if (isRecordingActive && recCtx4K && recCanvas4K) {
+        composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
     }
-    for (let ti = 0; ti < renderPoses.length; ti++) {
-      drawHybrid(ctx, renderPoses[ti], ti);
+
+    if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop);
+    else requestAnimationFrame(renderLoop);
+}
+
+function composeFullFrame(g, W, H) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1; g.filter = 'none';
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+
+    // Escala uniforme + centrado vertical (espacio de pantalla → 4K)
+    const s = W / window.innerWidth;
+    const offY = (H - window.innerHeight * s) / 2;
+    g.setTransform(s, 0, 0, s, 0, offY);
+    const WW = window.innerWidth, WH = window.innerHeight;
+
+    const vW = el.video.videoWidth, vH = el.video.videoHeight;
+    if (vW && vH) {
+        const sc = Math.max(WW / vW, WH / vH);
+        const dW = vW * sc, dH = vH * sc, dX = (WW - dW) / 2, dY = (WH - dH) / 2;
+        window.drawCoords = { dW, dH, dX, dY, vW, vH };
+        let f = getCanvasVideoFilter();
+        if (currentSharpness > 0) {
+            const sharp = { 1: 'contrast(1.08) saturate(1.05)', 2: 'contrast(1.15) saturate(1.10)', 3: 'contrast(1.25) saturate(1.15)' }[currentSharpness];
+            f = (f === 'none') ? sharp : f + ' ' + sharp;
+        }
+        g.save();
+        if (f !== 'none') g.filter = f;
+        g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+        g.drawImage(el.video, dX, dY, dW, dH);
+        if (f !== 'none') g.filter = 'none';
+        g.restore();
     }
-  }
-
-  // 🎯 8. SCAN BOXES DE IA VISION
-  if (state.isPareidolia) {
-    drawCanvasScanBoxes(ctx, cW, cH);
-  }
-
-  //  9. HUD + AI
-  const speed = 0.25;
-  animState.hudScale += (animState.hudTarget - animState.hudScale) * speed;
-  animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
-
-  drawBurnInHUD(ctx, cW, cH, animState.hudScale);
-  if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) {
-    drawAIBurnIn(ctx, cW, cH, animState.aiScale);
-  }
-
-  // 🎯 10. AUDIO VISUALIZER
-  if (state.isAudioScan) {
-    drawAudioVisualizer(ctx, cW, cH);
-  }
-
-  //  11. MARCO TALLY (dibujado en canvas)
-drawTallyBorder(ctx, cW, cH);
-// 🗺️ 12. MAPA GPS (dibujado desde el espejo → sale en foto Y en video grabado)
-drawMapToMaster(ctx, cW, cH);
-// Siguiente frame
-  if ('requestVideoFrameCallback' in el.video)
-    el.video.requestVideoFrameCallback(renderLoop);
-  else 
-    requestAnimationFrame(renderLoop);
+    drawOverlayChain(g, WW, WH);
+    g.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 //AQUI FUNALIZA  renderLoop
@@ -5192,6 +5304,26 @@ function telemetryLoop() {
         }
     }
     
+// 🎮 AUTO-CALIDAD PROTEGIDA:
+// Gama alta (6+ núcleos, ej. iPhone 15) → SIEMPRE al 100%: el velo NUNCA aparece
+// Gama baja/media (≤4 núcleos) → baja como máximo a 85% (casi imperceptible)
+const cores = navigator.hardwareConcurrency || 4;
+if (cores <= 4) {
+    if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
+    else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
+    else { lowFpsTime = 0; highFpsTime = 0; }
+    if (lowFpsTime >= 3 && qualityScale > 0.85) {
+        qualityScale = Math.max(0.85, qualityScale - 0.15);
+        applyQualityScale(); lowFpsTime = 0;
+    } else if (highFpsTime >= 8 && qualityScale < 1) {
+        qualityScale = Math.min(1, qualityScale + 0.15);
+        applyQualityScale(); highFpsTime = 0;
+    }
+} else if (qualityScale !== 1) {
+    qualityScale = 1; // 🔒 gama alta: resolución completa siempre
+    applyQualityScale();
+}
+
     // 🎨 ACTUALIZAR COLOR DEL ENGRANAJE
     updateSettingsIndicator();
     
@@ -6660,6 +6792,12 @@ let recordingStartTime = 0;
 let recordingTimer = null;
 let isRecording = false;
 
+// 🎬 GRABACIÓN 4K HÍBRIDA
+let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCount = 0;
+// 🎮 AUTO-CALIDAD (resolución dinámica)
+let qualityScale = 1, lowFpsTime = 0, highFpsTime = 0;
+const isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 async function toggleScreenRecording() {
   if (isRecording) {
     stopScreenRecording();
@@ -6668,14 +6806,30 @@ async function toggleScreenRecording() {
   }
 }
 
+function chooseRecResolution() {
+    const cores = navigator.hardwareConcurrency || 4;
+    const vW = el.video.videoWidth || 1920, vH = el.video.videoHeight || 1080;
+    // 🔒 4K real solo si el sensor lo da Y el equipo es gama alta (iPhone 15 = 6 núcleos)
+    if (vW >= 3840 && vH >= 2160 && cores >= 6) return { W: vW, H: vH };
+    return { W: Math.min(vW, 1920), H: Math.min(vH, 1080) }; // gama media: 1080p fluido
+}
+
+function cleanupRecording() {
+    isRecordingActive = false;
+    recCanvas4K = null; recCtx4K = null;
+}
+
 async function startScreenRecording() {
+    if (isRecording) return;
     try {
-        // 🔒 CRÍTICO: captureStream(0) captura EXACTAMENTE cuando el canvas pinta.
-        // Evita interpolación, frames duplicados y pérdida de evidencia.
-        const canvasStream = el.masterCanvas.captureStream(30); 
+        const { W, H } = chooseRecResolution();
+        recCanvas4K = document.createElement('canvas');
+        recCanvas4K.width = W; recCanvas4K.height = H;
+        recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
+
+        const canvasStream = recCanvas4K.captureStream(30); // 🔒 30fps = más luz nocturna
         const videoTrack = canvasStream.getVideoTracks()[0];
 
-        // 2. Audio SOLO si la pista está VIVA (evita grabaciones vacías/corruptas)
         let audioTrack = null;
         if (mixDestination && mixDestination.stream.getAudioTracks().length > 0) {
             const t = mixDestination.stream.getAudioTracks()[0];
@@ -6685,62 +6839,42 @@ async function startScreenRecording() {
             const t = audioStream.getAudioTracks()[0];
             if (t.readyState === 'live') audioTrack = t;
         }
-
         const tracks = [videoTrack];
         if (audioTrack) tracks.push(audioTrack);
         const combinedStream = new MediaStream(tracks);
 
-        // 3. PRIORIDAD DE FORMATO: MP4 (compatible con todos los reproductores)
-        //    y WebM como respaldo
-        const mimeTypes = [
-            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-            'video/mp4;codecs=avc1',
-            'video/mp4',
-            'video/webm;codecs=vp9,opus',
-            'video/webm;codecs=vp8,opus',
-            'video/webm'
-        ];
+        const mimeTypes = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4',
+            'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
         let selectedMime = '';
-        for (const mime of mimeTypes) {
-            if (window.MediaRecorder && MediaRecorder.isTypeSupported(mime)) { selectedMime = mime; break; }
-        }
+        for (const m of mimeTypes) { try { if (MediaRecorder.isTypeSupported(m)) { selectedMime = m; break; } } catch (e) {} }
 
+        const bits = Math.max(8_000_000, Math.round(20_000_000 * (W * H) / (3840 * 2160)));
         recordedChunks = [];
         mediaRecorder = new MediaRecorder(combinedStream, {
-            mimeType: selectedMime,
-            videoBitsPerSecond: 8_000_000,  // 8 Mbps (Alta calidad)
-            audioBitsPerSecond: 192_000     // 192 kbps
+            mimeType: selectedMime || undefined,
+            videoBitsPerSecond: bits,
+            audioBitsPerSecond: 192_000
         });
         mediaRecorder._ext = (mediaRecorder.mimeType || selectedMime || '').includes('mp4') ? 'mp4' : 'webm';
 
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-        };
-        mediaRecorder.onerror = (e) => console.error('[REC] Error:', e);
-
+        mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
         mediaRecorder.onstop = () => {
             const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
-            if (totalSize < 8000) {
-                showToast('⚠️ GRABACIÓN VACÍA — REINTENTA', true);
-                return;
-            }
-            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            a.download = `OBR_REC_${timestamp}.${mediaRecorder._ext}`;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
-            showToast(`✅ VIDEO GUARDADO (${mediaRecorder._ext.toUpperCase()} · ${(totalSize/1048576).toFixed(1)}MB)`, false);
+            if (totalSize > 8000) {
+                const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `OBR_REC_${new Date().toISOString().replace(/[:.]/g, '-')}.${mediaRecorder._ext}`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                showToast(`✅ VIDEO ${W}×${H} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
+            } else showToast('⚠️ GRABACIÓN VACÍA', true);
+            recordedChunks = [];
         };
 
-        // Forzar un paint antes de arrancar (garantiza primer frame con contenido)
-        requestAnimationFrame(() => {
-            mediaRecorder.start(1000);
-        });
-
-        isRecording = true;
+        composeFullFrame(recCtx4K, W, H); // primer frame inmediato
+        mediaRecorder.start(1000);
+        isRecording = true; isRecordingActive = true;
         recordingStartTime = Date.now();
 
         const recInd = document.getElementById('recording-indicator');
@@ -6749,16 +6883,24 @@ async function startScreenRecording() {
         if (btn) btn.classList.add('active-state');
 
         recordingTimer = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-            const recTime = document.getElementById('rec-time');
-            if (recTime) recTime.innerText = `${String(Math.floor(elapsed/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
+            const s = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const rt = document.getElementById('rec-time');
+            if (rt) rt.innerText = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+            // 🌡️ Perro guardián: avisa si el equipo sufre con 4K
+            if (typeof currentFps !== 'undefined' && currentFps < 22) lowRecFpsCount++;
+            else lowRecFpsCount = 0;
+            if (lowRecFpsCount >= 5) {
+                lowRecFpsCount = 0;
+                showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 4K fluido', true);
+            }
         }, 1000);
 
-        showToast(`🔴 GRABANDO (30FPS · ${mediaRecorder._ext.toUpperCase()})`, false);
+        showToast(`🔴 REC ${W}×${H}·30FPS + AUDIO`, false);
         mediaRecorder._canvasStream = canvasStream;
     } catch (err) {
         console.error('Error grabando:', err);
         showToast('❌ ERROR AL GRABAR: ' + err.message, true);
+        cleanupRecording();
     }
 }
 
@@ -6766,10 +6908,9 @@ function stopScreenRecording() {
     if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
     mediaRecorder.stop();
     isRecording = false;
-    if (mediaRecorder._canvasStream) {
-        mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
-    }
+    if (mediaRecorder._canvasStream) mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
     clearInterval(recordingTimer);
+    cleanupRecording();
     const recInd = document.getElementById('recording-indicator');
     if (recInd) recInd.classList.remove('active');
     const btn = document.getElementById('btn-record');
@@ -6818,25 +6959,28 @@ function takeScreenshot() {
 }
 
 function performScreenshot() {
-    // 🗺️ CRÍTICO: Asegurar que el mapa esté dibujado antes de capturar
-    const mapSlot = document.getElementById('map-container-slot');
-    if (mapSlot && !mapSlot.classList.contains('map-hidden') && mapMirrorCanvas && mapMirrorCtx) {
-        drawMapToMaster(ctx, el.masterCanvas.width, el.masterCanvas.height);
+    let canvas, g;
+    if (isRecordingActive && recCanvas4K && recCtx4K) {
+        // Reutiliza el canvas 4K que ya está activo durante la grabación
+        canvas = recCanvas4K;
+        g = recCtx4K;
+        composeFullFrame(g, canvas.width, canvas.height);
+    } else {
+        // Crea canvas 4K temporal solo para la foto
+        canvas = document.createElement('canvas');
+        canvas.width = el.video.videoWidth || 1920;
+        canvas.height = el.video.videoHeight || 1080;
+        g = canvas.getContext('2d', { alpha: false });
+        composeFullFrame(g, canvas.width, canvas.height);
     }
-    
-    el.masterCanvas.toBlob((blob) => {
-        if (!blob) {
-            showToast('❌ ERROR CAPTURA', true);
-            return;
-        }
-        const url = URL.createObjectURL(blob);
+    canvas.toBlob((blob) => {
+        if (!blob) { showToast('❌ ERROR CAPTURA', true); return; }
         const a = document.createElement('a');
-        a.href = url;
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        a.download = `OBR_SNAP_${timestamp}.png`;
+        a.href = URL.createObjectURL(blob);
+        a.download = `OBR_SNAP_4K_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
         a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        showToast('📸 FOTO GUARDADA (PNG)', false);
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        showToast(`📸 FOTO ${canvas.width}×${canvas.height} GUARDADA`, false);
         if (navigator.vibrate) navigator.vibrate(80);
     }, 'image/png', 1.0);
 }
