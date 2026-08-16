@@ -863,16 +863,9 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
 }
     
-    /* Filtros de video - Nitidez */
-#shared-video-element.filter-sharp-low {
-    filter: contrast(1.1) saturate(1.1) url('#sharpen-low');
-}
-#shared-video-element.filter-sharp-medium {
-    filter: contrast(1.15) saturate(1.15) url('#sharpen-medium');
-}
-#shared-video-element.filter-sharp-high {
-    filter: contrast(1.2) saturate(1.2) url('#sharpen-high');
-}
+#shared-video-element.filter-sharp-low    { filter: contrast(1.12) saturate(1.18) url('#sharpen-low'); }
+#shared-video-element.filter-sharp-medium { filter: contrast(1.22) saturate(1.32) url('#sharpen-medium'); }
+#shared-video-element.filter-sharp-high   { filter: contrast(1.35) saturate(1.48) url('#sharpen-high'); }
 
 /* SVG Filters ocultos para sharpening */
 .svg-filters {
@@ -918,9 +911,25 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
     100% { box-shadow: 0 0 10px 4px rgba(255,60,60,.9), 0 0 22px 9px rgba(255,0,0,.5); transform: translateY(-50%) scale(1); }
 }
 
+body.gl-active #shared-video-element { opacity: 0 !important; }
+
 /* 🔒 El motor GL va entre el video (oculto detrás) y los overlays */
-#obr-gl-video { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
-#master-canvas { z-index: 3 !important; }
+#obr-gl-video { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; object-fit: cover; }
+
+
+/* === LIDAR ESPECTRAL: UI propia → se oculta el UI principal === */
+body.lidar-fx-active #hud-layer,
+body.lidar-fx-active #map-container-slot,
+body.lidar-fx-active #telemetry-container,
+body.lidar-fx-active #status-indicators,
+body.lidar-fx-active #local-media-controls,
+body.lidar-fx-active #btn-media-toggle,
+body.lidar-fx-active #top-right-group { display: none !important; }
+/* === AUDIO SCAN en vertical: sin mapa → gráfica más grande === */
+@media (orientation: portrait) {
+body.audio-scan-active #map-container-slot { display: none !important; }
+}
+
 
     </style>
 </head>
@@ -1316,7 +1325,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '15'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '23'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -1485,13 +1494,15 @@ function _incrementVoiceRSS() {
 
 // ✅ AUMENTAR TIEMPO DE ESPERA Y MEJORAR GESTIÓN DE ERRORES
 let loadingTimer = setTimeout(() => {
-    const loader = document.getElementById('loading');
-    if (loader && loader.style.display !== 'none') {
-        // 🔒 CRÍTICO: Reinicio silencioso para evitar mostrar paneles de error en pantalla compartida
-        console.warn('[OBR] Carga lenta detectada. Reiniciando silenciosamente...');
-        location.reload(); 
-    }
-}, 60000); // 60 segundos
+  const loader = document.getElementById('loading');
+  const bar = document.getElementById('progress-bar');
+  const bootStarted = bar && parseFloat(bar.style.width || '0') > 0;
+  const modalOpen = !!document.querySelector('.modal-bg.active');
+  if (loader && loader.style.display !== 'none' && bootStarted && !modalOpen) {
+    console.warn('[OBR] Carga lenta detectada. Reiniciando silenciosamente...');
+    location.reload();
+  }
+}, 60000);
 
 
 // ✅ PREVENIR RECARGAS DURANTE CONFIGURACIÓN
@@ -1896,16 +1907,17 @@ self.addEventListener('fetch', e => {
 
     // --- NUEVA LÓGICA DE ESCANEO DE CONTEXTO POR IA (SEGUNDO PLANO) ---
     async function fetchBackgroundAIContext() {
-    if (!state.isAudioScan || isAIProcessing) return;
-    const cfg = getActiveAIConfig();
-    if (!cfg) return;
+if (!state.isAudioScan || isAIProcessing) return;
+if (Date.now() < (window._aiContextCooldown || 0)) return; // 🔒 cooldown tras fallo
+const cfg = getActiveAIConfig();
+if (!cfg) return;
     const video = el.video;
     if (!video || video.videoWidth === 0) return;
     
     const snapC = document.createElement('canvas');
     snapC.width = 320; snapC.height = 240;
     const ctxC = snapC.getContext('2d');
-    ctxC.drawImage(video, 0, 0, 320, 240);
+    if (!fillAiSnapshot(ctxC, 320, 240)) return; // 🔒 mismo frame procesado, aspect correcto
     const base64 = snapC.toDataURL('image/jpeg', 0.6).split(',')[1];
     
     // Prompt más estricto contra el "thinking"
@@ -1947,9 +1959,11 @@ self.addEventListener('fetch', e => {
                 console.warn("[AI Context] Fallo al parsear JSON. Texto recibido:", cleanText);
             }
         }
-    } catch(e) { 
-        console.warn("[AI Context] Error:", e); 
-    }
+    } catch(e) {
+// 🔒 Fallo silencioso: avisa una vez y aplica cooldown de 2 min (no satura la API ni la consola)
+window._aiContextCooldown = Date.now() + 120000;
+console.warn('[AI Context] IA sin respuesta (cooldown 2 min):', (e && e.message) || e);
+}
 }
     
     function scheduleBackgroundAIContext(isImmediate = false) {
@@ -2384,6 +2398,7 @@ self.addEventListener('fetch', e => {
         
         if (!blobUrl) { isTtsPlaying = false; isSpookySpeaking = false; clearTimeout(_ttsWatchdog); ttsNoDisponible('EL + VoiceRSS agotados'); return; }
         updateTTSStatusUI(); await playResponseIntro(); await initAudioEngine();
+lastSpokenText = safeText; clearTimeout(speechTimer); speechTimer = setTimeout(() => { lastSpokenText = ""; }, 3500); // 🔒 texto EVP visible aunque el audio tarde
 
         if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
 
@@ -2653,9 +2668,7 @@ const paranormalQuestions = [
     const sweepAudio    = new Audio('./barrido.mp3'); sweepAudio.loop = true; sweepAudio.volume = VOLUMEN_BARRIDO; sweepAudio.preload = 'auto';
     const responseAudio = new Audio('./respuesta.mp3'); responseAudio.loop = true; responseAudio.volume = VOLUMEN_RESPUESTA; responseAudio.preload = 'auto';
 
-    let sweepFileAvailable = false; let responseFileAvailable = false;
-    fetch('./barrido.mp3', { method: 'HEAD' }).then(r => { sweepFileAvailable = r.ok; }).catch(() => {});
-    fetch('./respuesta.mp3', { method: 'HEAD' }).then(r => { responseFileAvailable = r.ok; }).catch(() => {});
+    let sweepFileAvailable = true; let responseFileAvailable = true; // 🔒 optimista: play() con catch detecta ausencia
 
     const _xfadeTimers = new WeakMap();
     function _fadeVolume(audio, targetVol, durationMs) {
@@ -2667,18 +2680,15 @@ const paranormalQuestions = [
     }
 
     function playResponseStart() {
-        return new Promise(resolve => {
-            if (responseFileAvailable) {
-                if (state.isAudioScan) _fadeVolume(sweepAudio, 0.60, 200);
-                
-                responseAudio.volume = VOLUMEN_RESPUESTA; 
-                responseAudio.currentTime = 0; 
-                responseAudio.play().catch(() => {});
-                
-                resolve();
-            } else resolve();
-        });
-    }
+return new Promise(resolve => {
+_ensureSweepRouting();
+if (state.isAudioScan) _fadeVolume(sweepAudio, 0.60, 200);
+responseAudio.volume = VOLUMEN_RESPUESTA;
+responseAudio.currentTime = 0;
+responseAudio.play().catch(() => { responseFileAvailable = false; console.warn('[AUDIO] respuesta.mp3 no disponible'); });
+resolve();
+});
+}
 
     function playResponseEnd() {
         if (!responseFileAvailable) return;
@@ -2694,7 +2704,20 @@ const paranormalQuestions = [
 
     function playResponseIntro() { return playResponseStart(); }
 
-    function startSweepAudio() { if (sweepFileAvailable) { sweepAudio.volume = VOLUMEN_BARRIDO; sweepAudio.currentTime = 0; sweepAudio.play().catch(() => {}); } }
+    function _ensureSweepRouting() {
+const ctxA = audioCtx || evpAudioCtx; if (!ctxA) return;
+try { if (!window._sweepSource) window._sweepSource = ctxA.createMediaElementSource(sweepAudio); } catch(e){}
+try { if (!window._respSource)  window._respSource  = ctxA.createMediaElementSource(responseAudio); } catch(e){}
+try { if (window._sweepSource) { window._sweepSource.connect(ctxA.destination); if (mixDestination) window._sweepSource.connect(mixDestination); } } catch(e){}
+try { if (window._respSource)  { window._respSource.connect(ctxA.destination);  if (mixDestination) window._respSource.connect(mixDestination); } } catch(e){}
+}
+function startSweepAudio() {
+_ensureSweepRouting();
+if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+sweepAudio.volume = VOLUMEN_BARRIDO; sweepAudio.currentTime = 0;
+sweepAudio.play().catch(() => { sweepFileAvailable = false; console.warn('[AUDIO] barrido.mp3 no disponible'); });
+}
+
     function stopSweepAudio() {
         if (_xfadeTimers.has(sweepAudio)) {
             clearInterval(_xfadeTimers.get(sweepAudio));
@@ -3244,6 +3267,7 @@ function toggleUIHideOption(key) {
     
     // 3. Guardar en localStorage
     localStorage.setItem('obr_' + key, isActive ? 'true' : 'false');
+if (key === 'hide-map' && !isActive) lastMapCapture = 0; // 🔒 re-captura al volver a mostrar
     
     // 4. Actualizar el estilo visual del botón en el modal
     updateUIHideButtons();
@@ -3461,6 +3485,7 @@ function initMiniMap() {
 let mapMirrorCanvas = null;
 let mapMirrorCtx = null;
 let lastMapCapture = 0;
+let mapMirrorGood = false; // 🔒 nunca se publica un espejo negro
 const MAP_CAPTURE_INTERVAL = 2000; // Capturar mapa cada 1 segundo (rendimiento)
 
 function initMapMirror() {
@@ -3479,52 +3504,62 @@ function initMapMirror() {
 }
 
 async function captureMapToMirror() {
-    const now = Date.now();
-    if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return;
-    if (!miniMapInstance || !mapMirrorCtx) return;
-    const mapSlot = document.getElementById('map-container-slot');
-    if (!mapSlot || mapSlot.classList.contains('map-hidden')) return;
-    const rect = mapSlot.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) return;
-    const w = Math.round(rect.width), h = Math.round(rect.height);
-    if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) { mapMirrorCanvas.width = w; mapMirrorCanvas.height = h; }
-    const sx = rect.width / (mapSlot.offsetWidth || 1);
-    const sy = rect.height / (mapSlot.offsetHeight || 1);
-    const c = mapMirrorCtx;
-    c.clearRect(0, 0, w, h);
-    c.fillStyle = '#050505';
-    c.fillRect(0, 0, w, h);
-    // Tiles (CORS limpios gracias a ?obr=1 + crossOrigin)
-    const tiles = mapSlot.querySelectorAll('img.leaflet-tile');
-    for (const img of tiles) {
-        if (!img.complete || !img.naturalWidth) continue;
-        const r = img.getBoundingClientRect();
-        c.drawImage(img, r.left - rect.left, r.top - rect.top, r.width, r.height);
-    }
-    // Recorrido cian
-    if (mapPath.length > 1) {
-        c.strokeStyle = '#00ffff';
-        c.lineWidth = 3 * sx;
-        c.setLineDash([6 * sx, 6 * sx]);
-        c.beginPath();
-        for (let i = 0; i < mapPath.length; i++) {
-            const p = miniMapInstance.latLngToContainerPoint(mapPath[i]);
-            i === 0 ? c.moveTo(p.x * sx, p.y * sy) : c.lineTo(p.x * sx, p.y * sy);
-        }
-        c.stroke();
-        c.setLineDash([]);
-    }
-    // Emoji del marker
-    const markerEl = document.querySelector('.ghost-marker');
-    if (markerEl && window._currentGPS) {
-        const p = miniMapInstance.latLngToContainerPoint([window._currentGPS.lat, window._currentGPS.lon]);
-        c.font = `${Math.round(22 * sx)}px serif`;
-        c.textAlign = 'center';
-        c.textBaseline = 'middle';
-        c.fillText(markerEl.textContent.trim() || '👻', p.x * sx, (p.y * sy) - 4 * sy);
-    }
-    lastMapCapture = now;
-    if (typeof rebuildMapSprite === 'function') rebuildMapSprite();
+const now = Date.now();
+if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return;
+if (!miniMapInstance || !mapMirrorCtx) return;
+const mapSlot = document.getElementById('map-container-slot');
+if (!mapSlot || mapSlot.classList.contains('map-hidden') || document.body.classList.contains('hide-map')) return;
+const rect = mapSlot.getBoundingClientRect();
+if (rect.width < 2 || rect.height < 2) return;
+const w = Math.round(rect.width), h = Math.round(rect.height);
+// 🔒 ANTES de tocar el espejo: reunir teselas REALMENTE visibles en el slot
+const tiles = mapSlot.querySelectorAll('img.leaflet-tile');
+const readyTiles = [];
+for (const img of tiles) {
+if (img.complete && img.naturalWidth > 0) {
+const r = img.getBoundingClientRect();
+if (r.width > 1 && r.height > 1 && r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom) readyTiles.push({ img, r });
+}
+}
+// 🔒 Menos de 4 teselas visibles → CONSERVA el último espejo bueno (nunca negro)
+if (readyTiles.length < 4) return;
+lastMapCapture = now;
+if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) { mapMirrorCanvas.width = w; mapMirrorCanvas.height = h; }
+const c = mapMirrorCtx;
+c.clearRect(0, 0, w, h);
+c.fillStyle = '#050505';
+c.fillRect(0, 0, w, h);
+let drawn = 0;
+for (const t of readyTiles) {
+try { c.drawImage(t.img, t.r.left - rect.left, t.r.top - rect.top, t.r.width, t.r.height); drawn++; } catch(e) {}
+}
+if (drawn < 4) return; // 🔒 espejo incompleto: no se publica
+// Recorrido cian
+if (mapPath.length > 1) {
+const sx = rect.width / (mapSlot.offsetWidth || 1), sy = rect.height / (mapSlot.offsetHeight || 1);
+c.strokeStyle = '#00ffff';
+c.lineWidth = 3 * sx;
+c.setLineDash([6 * sx, 6 * sx]);
+c.beginPath();
+for (let i = 0; i < mapPath.length; i++) {
+const p = miniMapInstance.latLngToContainerPoint(mapPath[i]);
+i === 0 ? c.moveTo(p.x * sx, p.y * sy) : c.lineTo(p.x * sx, p.y * sy);
+}
+c.stroke();
+c.setLineDash([]);
+}
+// Emoji del marker
+const markerEl = document.querySelector('.ghost-marker');
+if (markerEl && window._currentGPS) {
+const sx2 = rect.width / (mapSlot.offsetWidth || 1), sy2 = rect.height / (mapSlot.offsetHeight || 1);
+const p = miniMapInstance.latLngToContainerPoint([window._currentGPS.lat, window._currentGPS.lon]);
+c.font = `${Math.round(22 * sx2)}px serif`;
+c.textAlign = 'center';
+c.textBaseline = 'middle';
+c.fillText(markerEl.textContent.trim() || '👻', p.x * sx2, (p.y * sy2) - 4 * sy2);
+}
+mapMirrorGood = true;
+if (typeof rebuildMapSprite === 'function') rebuildMapSprite();
 }
 
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
@@ -3572,6 +3607,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?obr=1', {
 }).addTo(miniMapInstance);
 // 🔒 Actualiza el espejo en cuanto las teselas terminan de cargar
 miniMapInstance.on('load', () => { lastMapCapture = 0; captureMapToMirror(); });
+miniMapInstance.on('tileload', () => { if (!mapMirrorGood) { lastMapCapture = 0; captureMapToMirror(); } }); // 🔒 primer espejo bueno cuanto antes
             
             // 🔒 MARKER CON EMOJI (usando la función global)
             mapMarker = L.marker(point, { icon: createGhostIcon() }).addTo(miniMapInstance);
@@ -3747,7 +3783,8 @@ updateProgress(94, "SINCRONIZANDO INTERFAZ...");
             initDOMCache();
             if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); 
             else requestAnimationFrame(renderLoop);
-            setInterval(telemetryLoop, 2000); // 🔒 Cada 2 segundos en vez de 1 
+            setInterval(telemetryLoop, 2000);
+setInterval(updateClock, 1000); // 🔒 reloj fluido, independiente de la telemetría
             requestAnimationFrame(detectionLoop);
             initRTM();
             initRemoteMicReceiverAgora();
@@ -4114,32 +4151,21 @@ updateProgress(94, "SINCRONIZANDO INTERFAZ...");
         lastValidAudioTime = Date.now();
         window._isAnnouncement = true;
         
-        speakAnnouncement('ESPIRIT BOX ACTIVADO').then(() => {
-            if (!state.isAudioScan) return;
-            sweepAudio.volume = 0; sweepAudio.currentTime = 0; sweepAudio.play().catch(() => {});
-            _fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200);
-            setTimeout(() => {
-                if (!state.isAudioScan) return;
-                lastReconnectTime = 0;
-                reconnectAudioNode();
-                window._isAnnouncement = false;
-                lastEvpTime = Date.now();
-                scheduleBackgroundAIContext(true);
-            }, 150);
-        }).catch(() => {
-            if (!state.isAudioScan) return;
-            startSweepAudio();
-            setTimeout(() => {
-                if (!state.isAudioScan) return;
-                lastReconnectTime = 0;
-                reconnectAudioNode();
-                window._isAnnouncement = false;
-                lastEvpTime = Date.now();
-                scheduleBackgroundAIContext(true);
-            }, 150);
-        });
+await _ensureContextRunning();      // 🔒 contexto despierto antes de sonar
+startSweepAudio();                  // 🔒 el barrido suena YA, no espera al anuncio
+_fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200);
+speakAnnouncement('ESPIRIT BOX ACTIVADO').catch(() => {});
+setTimeout(() => {
+if (!state.isAudioScan) return;
+lastReconnectTime = 0;
+reconnectAudioNode();
+window._isAnnouncement = false;
+lastEvpTime = Date.now();
+scheduleBackgroundAIContext(true);
+}, 150);
     }
 }
+
 
 function executeAudioScanDeactivation(btnMenu) {
     state.isAudioScan = false;
@@ -4208,23 +4234,23 @@ function drawAudioVisualizer(c, w, h) {
     const isPortrait = h > w;
     let screenScale, waveHeight, bottomY, displayWidth, startX, textFS, evpFS;
     if (isPortrait) {
-        // Hueco entre MAPA (izq ~150px) y TELEMETRÍA (der ~118px)
-        const leftSpace = 150, rightSpace = 118;
-        displayWidth = Math.max(110, w - leftSpace - rightSpace);
-        startX = leftSpace + ((w - leftSpace - rightSpace) - displayWidth) / 2;
-        bottomY = h - 34;                 // centro inferior, entre mapa y telemetría
-        waveHeight = 26;
-        textFS = 10;                      // 🔒 texto usuario pequeño
-        evpFS = 11;                       // 🔒 texto EVP pequeño
-        screenScale = 1;
-    } else {
+// 🔒 Con EVP activo el mapa se oculta por CSS → la gráfica ocupa ese hueco
+const leftSpace = 20, rightSpace = 20;
+displayWidth = Math.max(110, w - leftSpace - rightSpace);
+startX = leftSpace + ((w - leftSpace - rightSpace) - displayWidth) / 2;
+bottomY = h - 34;
+waveHeight = 28;                  // 🔒 +8%
+textFS = 10.8;                    // 🔒 +8%
+evpFS = 11.9;                     // 🔒 +8%
+screenScale = 1;
+} else {
         screenScale = Math.max(1.2, Math.min(4, 1920 / (w || 1920)));
         displayWidth = w * 0.465;
         startX = (w - displayWidth) / 2;
         bottomY = h * 0.88;
         waveHeight = 55 * screenScale;
-        textFS = Math.round(13 * screenScale);
-        evpFS = Math.round(14 * screenScale);
+        textFS = Math.round(13 * screenScale * 1.08); // 🔒 +8%
+evpFS = Math.round(14 * screenScale * 1.08);  // 🔒 +8%
     }
     const visualBins = isPortrait ? 48 : (w < 600 ? 64 : 128);
     const step = Math.max(1, Math.floor(bufferLength / visualBins));
@@ -4263,11 +4289,12 @@ function drawAudioVisualizer(c, w, h) {
     const rawYValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         let v = (audioDataArray[i * step] / 128.0) - 1;
-        if (isSpookySpeaking || isTtsPlaying) {
-            v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
-        }
-        rawYValues[i] = v;
-    }
+if (isSpookySpeaking || isTtsPlaying) {
+v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
+}
+if (isHardwareDead) v += Math.sin(nowAnim * 0.002 + i * 0.35) * 0.03; // 🔒 respiración de reposo: la gráfica nunca parece muerta
+rawYValues[i] = v;
+}
     const yValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         const prev = i > 0 ? rawYValues[i-1] : 0;
@@ -4463,111 +4490,263 @@ function drawAudioVisualizer(c, w, h) {
 
     function onLidarResults(results) { if(results && results.segmentationMask) lidarMask = results.segmentationMask; }
     
-    const lidarAnalysisCanvas = document.createElement('canvas'); lidarAnalysisCanvas.width = 64; lidarAnalysisCanvas.height = 48; const lidarACtx = lidarAnalysisCanvas.getContext('2d', { willReadFrequently: true });
 
+// ==========================================================
+// 👻 LIDAR ESPECTRAL v4 — buffers con aspect de pantalla (sin aplastado)
+// ==========================================================
+const lfxMaskC = document.createElement('canvas');
+const lfxMaskX = lfxMaskC.getContext('2d', { willReadFrequently: true });
+const lfxReliefC = document.createElement('canvas');
+const lfxReliefX = lfxReliefC.getContext('2d', { willReadFrequently: true });
+const lfxTintC = document.createElement('canvas');
+const lfxTintX = lfxTintC.getContext('2d');
+const lfxRimC = document.createElement('canvas');
+const lfxRimX = lfxRimC.getContext('2d');
+let lfxLum = null, lfxLumPrev = null, lfxLumN = 0;
+const lfxSpark = new Float32Array(96); let lfxSparkI = 0;
+const LFX = { coverage:0, perturb:0, cx:.5, cy:.4, topY:.12, personH:.7, footX:.5, footY:.85, hasPerson:false, hasFeet:false, vortex:0, vx:.5, vy:.5, rot:0, motion:0 };
 
 function drawLidarEffect(c, width, height, currentFrame) {
-    const maskToUse = lidarMask || lastLidarMask;
-    
-    // 🔒 Grid más pequeño para menos círculos
-    const gridW = 12, gridH = 9;
-    
-    // 1. Decaimiento rápido si no hay máscara
-    if (!maskToUse) {
-        for (let i = 0; i < lidarActivityGrid.length; i++) {
-            lidarActivityGrid[i] *= 0.60;
-        }
-    } else {
-        // 2. Analizar la máscara en grid de baja resolución
-        lidarACtx.drawImage(maskToUse, 0, 0, gridW, gridH);
-        const px = lidarACtx.getImageData(0, 0, gridW, gridH).data;
-        
-        for (let y = 0; y < gridH; y++) {
-            for (let x = 0; x < gridW; x++) {
-                const idx = (y * gridW + x) * 4 + 3;
-                const presence = px[idx] > 120 ? 1.0 : 0.0;
-                const gridIdx = y * gridW + x;
-                
-                if (presence) {
-                    lidarActivityGrid[gridIdx] = Math.min(1.0, lidarActivityGrid[gridIdx] + 0.35);
-                } else {
-                    lidarActivityGrid[gridIdx] *= 0.70;
-                }
-            }
-        }
-    }
-    
-    // 🔒 CRÍTICO: Escalar el contexto LiDAR al "espacio de pantalla".
-    // Todo lo que se dibuje con coordenadas width/height se mapea al canvas real,
-    // aunque este sea más pequeño (auto-calidad) → NADA queda recortado.
-    const lw = el.lidarCanvas.width, lh = el.lidarCanvas.height;
-    if (lw < 2 || lh < 2 || width < 2 || height < 2) return;
-    lidarCtx.setTransform(lw / width, 0, 0, lh / height, 0, 0);
-    lidarCtx.clearRect(0, 0, width, height);
-    lidarCtx.save();
-    
-    const time = performance.now() * 0.002;
-    const cellW = width / gridW;   // ← vuelve a width (espacio de pantalla)
-    const cellH = height / gridH;  // ← vuelve a height
-    
-    // 3. Dibujar círculos de actividad
-    for (let y = 0; y < gridH; y++) {
-        for (let x = 0; x < gridW; x++) {
-            const activity = lidarActivityGrid[y * gridW + x];
-            if (activity > 0.25) {
-                const cx = x * cellW + (cellW / 2);
-                const cy = y * cellH + (cellH / 2);
-                const pulse = (Math.sin(time + (x * 0.3) + (y * 0.3)) + 1) / 2;
-                const radius = (cellW * 0.6) * activity * (0.8 + pulse * 0.4);
-                const alpha = Math.min(0.85, activity * 1.2);
-                const lightness = 40 + (activity * 50);
-                
-                lidarCtx.beginPath();
-                lidarCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-                lidarCtx.fillStyle = `hsla(190, 100%, ${lightness}%, ${alpha})`;
-                
-                if (activity > 0.45) {
-                    lidarCtx.shadowBlur = radius * 1.5;
-                    lidarCtx.shadowColor = `hsla(190, 100%, 70%, ${alpha * 0.8})`;
-                } else {
-                    lidarCtx.shadowBlur = 0;
-                }
-                lidarCtx.fill();
-            }
-        }
-    }
-    
-    // 4. Línea de escaneo (ahora con width/height → recorre TODA la pantalla)
-    const scanX = (time * 250) % (width + 200) - 100;
-    const scanGrad = lidarCtx.createLinearGradient(scanX - 100, 0, scanX + 100, 0);
-    scanGrad.addColorStop(0, 'rgba(0, 255, 255, 0)');
-    scanGrad.addColorStop(0.4, 'rgba(0, 255, 255, 0.08)');
-    scanGrad.addColorStop(0.5, 'rgba(0, 255, 255, 0.5)');
-    scanGrad.addColorStop(0.6, 'rgba(0, 255, 255, 0.08)');
-    scanGrad.addColorStop(1, 'rgba(0, 255, 255, 0)');
-    lidarCtx.fillStyle = scanGrad;
-    lidarCtx.fillRect(scanX - 100, 0, 200, height);
-    
-    lidarCtx.beginPath();
-    lidarCtx.moveTo(scanX, 0);
-    lidarCtx.lineTo(scanX, height);
-    lidarCtx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
-    lidarCtx.lineWidth = 2;
-    lidarCtx.shadowBlur = 15;
-    lidarCtx.shadowColor = 'rgba(0, 255, 255, 0.9)';
-    lidarCtx.stroke();
-    lidarCtx.restore();
-    
-    // 🔒 CRÍTICO: Resetear el transform ANTES de componer
-    lidarCtx.setTransform(1, 0, 0, 1, 0, 0);
-    
-    // 🔒 Componer con `c` (el contexto que llama), NO con el global `ctx`.
-    // Así funciona igual en la vista en vivo y en la composición 4K.
-    c.globalCompositeOperation = 'screen';
-    c.drawImage(el.lidarCanvas, 0, 0, width, height);
-    c.globalCompositeOperation = 'source-over';
+const isHighEnd = (navigator.hardwareConcurrency || 4) >= 6;
+const maskToUse = lidarMask || lastLidarMask;
+const src = (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
+const hasSrc = !!src && (src.videoWidth || src.width) > 2;
+
+// ── 0) Fondo: video atenuado (la escena se ve, no negro total) ──
+c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.filter = 'none';
+c.fillStyle = '#04060a'; c.fillRect(0, 0, width, height);
+if (hasSrc) {
+const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
+const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
+c.save(); c.globalAlpha = 0.5;
+c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)';
+c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
+c.restore(); c.filter = 'none'; c.globalAlpha = 1;
 }
 
+// ── 1) Buffers con aspect EXACTO de pantalla → NUNCA se aplasta al rotar ──
+const BH = 128;
+const BW = Math.max(64, Math.min(224, Math.round(BH * width / height)));
+if (lfxMaskC.width !== BW || lfxMaskC.height !== BH) {
+[lfxMaskC, lfxReliefC, lfxTintC, lfxRimC].forEach(cv => { cv.width = BW; cv.height = BH; });
+lfxLum = null; lfxLumPrev = null;
+}
+const doProc = isHighEnd || (currentFrame % 2 === 0); // 🔒 gama baja: medio framerate
+
+// ── 2) Máscara en COVER al buffer ──
+if (maskToUse) {
+const mw = maskToUse.width || 96, mh = maskToUse.height || 72;
+const sc2 = Math.max(BW/mw, BH/mh), dW2 = mw*sc2, dH2 = mh*sc2;
+lfxMaskX.clearRect(0, 0, BW, BH);
+lfxMaskX.drawImage(maskToUse, (BW-dW2)/2, (BH-dH2)/2, dW2, dH2);
+}
+
+// ── 3) RELIEVE CIAN interno (normal-map del video) + motion ──
+if (hasSrc && doProc) {
+const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
+const sc3 = Math.max(BW/sw, BH/sh), dW3 = sw*sc3, dH3 = sh*sc3;
+lfxReliefX.drawImage(src, (BW-dW3)/2, (BH-dH3)/2, dW3, dH3);
+const img = lfxReliefX.getImageData(0, 0, BW, BH);
+const d = img.data; const n = BW*BH;
+if (!lfxLum || lfxLumN !== n) { lfxLum = new Float32Array(n); lfxLumPrev = new Float32Array(n); lfxLumN = n; }
+for (let i = 0; i < n; i++) lfxLum[i] = (d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114) / 255;
+let mSum = 0, mX = 0, mY = 0;
+for (let i = 0; i < n; i++) {
+const df = Math.abs(lfxLum[i] - lfxLumPrev[i]);
+if (df > 0.06) { mSum += df; mX += (i % BW)*df; mY += ((i / BW)|0)*df; }
+}
+LFX.motion += (Math.min(1, mSum*10) - LFX.motion)*0.3;
+if (mSum > 0.02) { LFX.vx = mX/mSum/BW; LFX.vy = mY/mSum/BH; }
+for (let y = 1; y < BH-1; y++) for (let x = 1; x < BW-1; x++) {
+const i = y*BW + x;
+const l = lfxLum[i];
+const gx = lfxLum[i+1] - lfxLum[i-1];
+const gy = lfxLum[i+BW] - lfxLum[i-BW];
+const shade = Math.max(0, Math.min(1, 0.25 + l*0.45 + gx*1.8 + gy*1.2));
+d[i*4]   = 10 + 40*l;          // R bajo → cian
+d[i*4+1] = 60 + 195*shade;     // G relieve
+d[i*4+2] = 90 + 165*shade;     // B relieve
+d[i*4+3] = 255;
+}
+lfxReliefX.putImageData(img, 0, 0);
+const tmp = lfxLumPrev; lfxLumPrev = lfxLum; lfxLum = tmp;
+}
+
+// ── 4) Análisis de la máscara (cobertura, pies, centro) ──
+if (maskToUse && doProc) {
+const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
+let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
+for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) {
+const a = md[(y*BW+x)*4+3];
+if (a > 110) { acc++; if (topY < 0) topY = y; botY = y; sx += x; }
+}
+const coverage = acc / (BW*BH);
+const hasPerson = coverage > 0.02 && (botY - topY) > BH*0.2;
+if (hasPerson) {
+for (let y = Math.max(topY, botY-6); y <= botY; y++) for (let x = 0; x < BW; x++) {
+if (md[(y*BW+x)*4+3] > 110) { footN++; footSX += x; }
+}
+LFX.coverage += (coverage - LFX.coverage)*0.3;
+LFX.cx += (sx/acc/BW - LFX.cx)*0.3;
+LFX.topY += (topY/BH - LFX.topY)*0.3;
+LFX.personH += ((botY-topY)/BH - LFX.personH)*0.3;
+LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX)*0.3;
+LFX.footY += (botY/BH - LFX.footY)*0.3;
+LFX.hasFeet = footN >= 8 && botY < BH - 3; // 🔒 sin pies → sin ondas
+} else { LFX.coverage += (coverage - LFX.coverage)*0.3; LFX.hasFeet = false; }
+LFX.hasPerson = hasPerson;
+}
+LFX.perturb += ((LFX.hasPerson ? 1 : 0) - LFX.perturb)*0.08;
+LFX.vortex  += (((LFX.motion > 0.22 && !LFX.hasPerson) ? 1 : 0) - LFX.vortex)*0.15;
+
+// ── 5) Silueta: relieve cian recortado por máscara + rim naranja ──
+if (maskToUse && LFX.hasPerson) {
+// 🔒 RELIEVE CIAN INTERNO: máscara recortada con el relieve del video
+lfxTintX.clearRect(0, 0, BW, BH);
+lfxTintX.drawImage(lfxMaskC, 0, 0);
+lfxTintX.globalCompositeOperation = 'source-in';
+lfxTintX.drawImage(lfxReliefC, 0, 0);
+lfxTintX.globalCompositeOperation = 'source-over';
+// 🔒 RIM NARANJA: dilatación ±1px (MITAD de grosor) − máscara = anillo fino
+lfxRimX.clearRect(0, 0, BW, BH);
+for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+if (ox || oy) lfxRimX.drawImage(lfxMaskC, ox, oy, BW, BH);
+}
+lfxRimX.globalCompositeOperation = 'source-in';
+lfxRimX.fillStyle = 'rgba(255,170,50,1)'; lfxRimX.fillRect(0, 0, BW, BH);
+lfxRimX.globalCompositeOperation = 'destination-out';
+lfxRimX.drawImage(lfxMaskC, 0, 0, BW, BH); // hueca el interior → solo queda el anillo
+lfxRimX.globalCompositeOperation = 'source-over';
+c.save();
+c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+c.globalCompositeOperation = 'screen';
+c.globalAlpha = 0.92; c.drawImage(lfxTintC, 0, 0, width, height);   // cuerpo cian con relieve
+// 🔒 LÍNEA DE LUZ: pasada 1 = bloom/destello, pasada 2 = núcleo aditivo
+c.globalCompositeOperation = 'lighter';
+if (isHighEnd) { c.shadowColor = 'rgba(255,140,20,0.8)'; c.shadowBlur = 10; }
+c.globalAlpha = 0.8; c.drawImage(lfxRimC, 0, 0, width, height);
+c.shadowBlur = 0;
+c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height);
+c.restore(); c.globalAlpha = 1;
+// Anillos (cian, parte del holograma)
+const rx = LFX.cx*width, ry = (LFX.topY + LFX.personH*0.18)*height;
+const R = Math.max(30, LFX.personH*height*0.30);
+LFX.rot += 0.03;
+c.save();
+c.strokeStyle = 'rgba(0,240,255,0.5)'; c.lineWidth = Math.max(1.2, width*0.0016);
+c.beginPath(); c.arc(rx, ry, R, 0, Math.PI*2); c.stroke();
+c.strokeStyle = 'rgba(0,240,255,0.25)';
+c.beginPath(); c.arc(rx, ry, R*1.12, 0, Math.PI*2); c.stroke();
+c.strokeStyle = 'rgba(0,255,255,0.9)'; c.lineWidth = Math.max(2, width*0.0026);
+c.beginPath(); c.arc(rx, ry, R, LFX.rot, LFX.rot+1.1); c.stroke();
+c.beginPath(); c.arc(rx, ry, R, LFX.rot+Math.PI, LFX.rot+Math.PI+1.1); c.stroke();
+c.restore();
+// Ondas de pies SOLO con pies detectados
+if (LFX.hasFeet) {
+const fx = LFX.footX*width, fy = LFX.footY*height, rw = Math.max(26, width*0.10);
+c.save();
+c.strokeStyle = 'rgba(0,255,255,0.6)'; c.lineWidth = Math.max(1.2, width*0.0016);
+c.beginPath(); c.ellipse(fx, fy, rw, rw*0.22, 0, 0, Math.PI*2); c.stroke();
+c.strokeStyle = 'rgba(0,255,255,0.35)';
+c.beginPath(); c.ellipse(fx, fy, rw*1.5, rw*0.33, 0, 0, Math.PI*2); c.stroke();
+c.strokeStyle = 'rgba(0,255,255,0.18)';
+c.beginPath(); c.ellipse(fx, fy, rw*2.1, rw*0.46, 0, 0, Math.PI*2); c.stroke();
+c.restore();
+}
+}
+// Vórtice
+if (LFX.vortex > 0.35) {
+const vx = LFX.vx*width, vy = LFX.vy*height;
+const VR = Math.min(width, height)*0.12*(1 + 0.08*Math.sin(currentFrame*0.3));
+const blink = 0.4 + 0.5*Math.abs(Math.sin(currentFrame*0.25));
+c.save();
+c.strokeStyle = `rgba(255,80,80,${blink})`; c.setLineDash([8,6]); c.lineWidth = 2;
+c.beginPath(); c.arc(vx, vy, VR, 0, Math.PI*2); c.stroke(); c.setLineDash([]);
+c.restore();
+}
+
+// ── 6) HUD — paleta ÚNICA rojo/ámbar (idéntica en vertical y horizontal) ──
+const u = Math.max(1, Math.min(width, height) / 420);
+const fs = Math.round(11*u), fsB = Math.round(13*u), fsT = Math.round(14*u);
+const LT = 'rgba(255,86,86,';   // etiquetas
+const VL = 'rgba(255,196,96,';  // valores
+const dens = Math.min(99, Math.round(LFX.coverage*220));
+const clase = Math.max(1, Math.min(5, 1 + Math.floor(dens/20)));
+const senal = Math.min(100, Math.round(60 + LFX.coverage*300 + LFX.motion*20));
+c.save(); c.textBaseline = 'top';
+// Banner
+const banner = LFX.perturb > 0.5 ? 'PERTURBACIÓN VISUAL DETECTADA' : 'ANALIZANDO ENTORNO';
+const bCol = LFX.perturb > 0.5 ? '255,60,60' : '255,170,60';
+c.font = `bold ${fsT}px 'Share Tech Mono', monospace`;
+const bw = c.measureText(banner).width + 28*u, bx = (width-bw)/2, by = 8*u;
+c.strokeStyle = `rgba(${bCol},0.9)`; c.lineWidth = Math.max(1, u);
+c.strokeRect(bx, by, bw, fsT + 10*u);
+c.fillStyle = `rgba(${bCol},1)`; c.textAlign = 'center';
+c.fillText(banner, width/2, by + 5*u); c.textAlign = 'left';
+// Helper dos colores
+const line2 = (lab, val, x, y, vCol) => {
+c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
+c.fillStyle = LT + '0.95)'; c.fillText(lab, x, y);
+const wl = c.measureText(lab).width;
+c.fillStyle = vCol; c.fillText(val, x + wl + 5*u, y);
+};
+const ly = by + fsT + 20*u, lx = 10*u, rx2 = width - 10*u;
+line2('FLASH: ', 'ON', lx, ly, VL + '1)');
+line2('RANGO: ', (8 - LFX.coverage*6).toFixed(1) + 'm', lx, ly + fs*1.6, VL + '1)');
+line2('DENSIDAD: ', dens + '%' + (dens > 60 ? ' (CRÍTICO)' : ''), lx, ly + fs*3.2, dens > 60 ? 'rgba(255,60,60,1)' : VL + '1)');
+// Columna derecha (valores alineados a la derecha)
+const lineR = (lab, val, y, vCol, big) => {
+c.font = `bold ${big ? fsB : fs}px 'Share Tech Mono', monospace`;
+const wv = c.measureText(val).width;
+c.fillStyle = vCol; c.fillText(val, rx2 - wv, y);
+c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
+const wl = c.measureText(lab).width;
+c.fillStyle = LT + '0.95)'; c.fillText(lab, rx2 - wv - 5*u - wl, y);
+};
+lineR('TIPO DE ANOMALÍA: ', 'CLASE ' + clase, ly, VL + '1)', true);
+lineR('FUERZA DE SEÑAL: ', senal + '%', ly + fs*1.9, VL + '1)', false);
+c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
+c.fillStyle = LT + '0.95)';
+const lm = 'RASTREO DE MOVIMIENTO'; c.fillText(lm, rx2 - c.measureText(lm).width, ly + fs*3.5);
+// Inferior izquierda
+const by2 = height - fs*5.2;
+line2('VECTOR PATH_01: ', 'MEJORADO', lx, by2, VL + '1)');
+line2('VARIANZA TEMP: ', (-2 - LFX.coverage*8).toFixed(1) + '°C', lx, by2 + fs*1.6, VL + '1)');
+line2('VOLUMEN MAPEADO: ', (5 + LFX.coverage*60).toFixed(1) + ' m³', lx, by2 + fs*3.2, VL + '1)');
+
+// ── 7) FRECUENCIA EN VIVO con vida: audio real + jitter + relleno + cursor ──
+let lvl = LFX.motion;
+if (typeof audioAnalyser !== 'undefined' && audioAnalyser && audioDataArray) {
+audioAnalyser.getByteTimeDomainData(audioDataArray);
+let s = 0, cnt = 0;
+for (let i = 0; i < audioDataArray.length; i += 8) { s += Math.abs(audioDataArray[i]-128); cnt++; }
+lvl = Math.max(lvl, Math.min(1, (s/cnt)/45));
+}
+lfxSpark[lfxSparkI++ % 96] = lvl;
+const gw = Math.min(width*0.42, 240*u), gh = Math.round(fs*3.2);
+const gx0 = width - 10*u - gw, gy0 = height - 10*u - gh;
+lineR('FRECUENCIA EN VIVO: ', (lvl*8).toFixed(1) + ' m²', gy0 - fs*1.5, VL + '1)', false);
+c.fillStyle = 'rgba(30,0,0,0.55)'; c.fillRect(gx0, gy0, gw, gh);
+c.strokeStyle = LT + '0.8)'; c.lineWidth = 1; c.strokeRect(gx0, gy0, gw, gh);
+c.strokeStyle = 'rgba(255,86,86,0.15)';
+for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(gx0, gy0 + (gh/4)*i); c.lineTo(gx0+gw, gy0 + (gh/4)*i); c.stroke(); }
+c.beginPath();
+for (let i = 0; i < 96; i++) {
+const v = lfxSpark[(lfxSparkI + i) % 96];
+const jit = Math.sin(currentFrame*0.35 + i*0.7) * 0.035;   // 🔒 vida constante
+const yy = gy0 + gh - 2 - Math.max(0, Math.min(1, v + jit)) * (gh - 4);
+const xx = gx0 + (i/95)*gw;
+i ? c.lineTo(xx, yy) : c.moveTo(xx, yy);
+}
+c.strokeStyle = VL + '1)'; c.lineWidth = Math.max(1.2, u);
+if (isHighEnd) { c.shadowColor = 'rgba(255,150,50,0.7)'; c.shadowBlur = 6; }
+c.stroke(); c.shadowBlur = 0;
+c.lineTo(gx0+gw, gy0+gh); c.lineTo(gx0, gy0+gh); c.closePath();
+c.fillStyle = 'rgba(255,120,50,0.12)'; c.fill();
+const curX = gx0 + ((currentFrame % 96)/95)*gw;              // cursor de barrido
+c.strokeStyle = 'rgba(255,220,150,0.5)'; c.beginPath(); c.moveTo(curX, gy0); c.lineTo(curX, gy0+gh); c.stroke();
+c.restore();
+}
 
 
     function initScanlines(w, h) {
@@ -4652,7 +4831,7 @@ function drawBurnInHUD(ctx2, width, height, scale) {
     }
 
     // 3. Indicador SLS (discreto, arriba al centro)
-    if (state.isSLS) {
+    if (state.isSLS && height <= width) {
         const fs = 12 * uiS;
         ctx2.font = `bold ${fs}px 'Share Tech Mono', monospace`;
         ctx2.textAlign = 'center';
@@ -4955,7 +5134,8 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
 
     // 🔒 BOUNDING BOX con shadowBlur condicional
     if (targetBBox) {
-        const key = targetIdx ?? 0;
+// 🔒 Clave por espacio de dibujo (vivo vs REC): el suavizado YA NO mezcla coordenadas de ambas pasadas
+const key = ((targetCtx.canvas && targetCtx.canvas.width) ? targetCtx.canvas.width : 0) + ':' + (targetIdx ?? 0);
         if (!_smoothBBox[key]) {
             _smoothBBox[key] = { ...targetBBox };
         } else {
@@ -5087,14 +5267,10 @@ function composeFullFrame(g, W, H) {
     g.globalAlpha = 1; g.filter = 'none';
     g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
 
-    if (typeof OBRL !== 'undefined' && OBRL.ready) {
-        // 🔒 Renderiza el shader DIRECTAMENTE a resolución de captura
-        if (OBRL.canvas.width !== W || OBRL.canvas.height !== H) {
-            OBRL.canvas.width = W; OBRL.canvas.height = H;
-            renderGLVideo();
-        }
-        g.drawImage(OBRL.canvas, 0, 0, W, H);
-    } else {
+if (typeof OBRL !== 'undefined' && OBRL.ready) {
+// 🔒 Escala el canvas vivo SIN tocarlo (sin ping-pong de resizing, sin tirones)
+g.drawImage(OBRL.canvas, 0, 0, W, H);
+} else {
         // Fallback 2D seguro (sin url() → nunca negro)
         const vW = el.video.videoWidth, vH = el.video.videoHeight;
         if (vW && vH) {
@@ -5102,7 +5278,7 @@ function composeFullFrame(g, W, H) {
             const dW = vW * sc, dH = vH * sc;
             let f = cachedLiveFilter || 'none';
             if (currentSharpness > 0) {
-                const sharp = { 1: 'contrast(1.10) saturate(1.10)', 2: 'contrast(1.15) saturate(1.15)', 3: 'contrast(1.20) saturate(1.20)' }[currentSharpness];
+                const sharp = { 1: 'contrast(1.12) saturate(1.18)', 2: 'contrast(1.22) saturate(1.32)', 3: 'contrast(1.35) saturate(1.48)' }[currentSharpness];
                 f = (f === 'none') ? sharp : f + ' ' + sharp;
             }
             g.save();
@@ -5163,7 +5339,7 @@ window.takeScreenshot = takeScreenshot;
 
 // 🔒 Cadena de overlays: se dibuja UNA sola vez, calibrada a la ventana
 function drawOverlayChain(tctx, W, H) {
-    if (state.isLidar) drawLidarEffect(tctx, W, H, frameCount);
+if (state.isLidar) { drawLidarEffect(tctx, W, H, frameCount); drawTallyBorder(tctx, W, H); return; }
     if (state.isSLS && !state.isLidar) {
         const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
         for (let ti = 0; ti < renderPoses.length; ti++) drawHybrid(tctx, renderPoses[ti], ti);
@@ -5299,7 +5475,6 @@ function telemetryLoop() {
         frameCount = 0;
         lastTime = now;
     }
-    updateClock();
     if (currentFps < 15) performanceLagging = true;
     else if (currentFps >= 25) performanceLagging = false;
     
@@ -5375,7 +5550,7 @@ function telemetryLoop() {
 // Gama alta (6+ núcleos, ej. iPhone 15) → SIEMPRE al 100%: el velo NUNCA aparece
 // Gama baja/media (≤4 núcleos) → baja como máximo a 85% (casi imperceptible)
 const cores = navigator.hardwareConcurrency || 4;
-if (cores <= 4) {
+if (cores <= 4 && !isRecordingActive) { // 🔒 durante REC no se cambia resolución en caliente
     if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
     else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
     else { lowFpsTime = 0; highFpsTime = 0; }
@@ -5553,9 +5728,12 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     else if (f === 'thermal') document.body.classList.add('filter-thermal');
     else if (f === 'urbex') document.body.classList.add('filter-urbex');
     
-    // Linterna automática en nocturno/térmico
-    if (f === 'night' || f === 'thermal') toggleTorch(true);
-    else toggleTorch(false);
+    // 🔒 TODOS los filtros activan el flash (mejor análisis en oscuridad)
+if (f !== 'normal') toggleTorch(true);
+else toggleTorch(false);
+// 🔒 LIDAR ESPECTRAL: activa su propio UI
+if (f === 'lidar') document.body.classList.add('lidar-fx-active');
+else document.body.classList.remove('lidar-fx-active');
     
     // 🔒 CRÍTICO: limpiar estado de IA al cambiar filtro
     targetPoses = [];
@@ -5588,6 +5766,21 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
 
     function stopScanningEffect() { clearInterval(scanInterval); const overlay = document.getElementById('ai-scan-overlay'); overlay.style.display = 'none'; scanBoxPool.forEach(box => box.style.display = 'none'); canvasScanBoxes = []; }
 
+
+// 🔒 Dibuja la fuente (video crudo o canvas GL procesado) en el snapshot, en COVER (sin aplastar)
+function fillAiSnapshot(destCtx, dw, dh) {
+  const src = (OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
+  const sw = src.videoWidth ?? src.width;
+  const sh = src.videoHeight ?? src.height;
+  if (!sw || !sh) return false;
+  const dAR = dw / dh, sAR = sw / sh;
+  let sW = sw, sH = sh, sx = 0, sy = 0;
+  if (sAR > dAR) { sW = sh * dAR; sx = (sw - sW) / 2; }
+  else           { sH = sw / dAR; sy = (sh - sH) / 2; }
+  destCtx.drawImage(src, sx, sy, sW, sH, 0, 0, dw, dh);
+  return true;
+}
+
     async function triggerPareidolia() {
     const video = el.video;
     if (!AI_API_KEY) return;
@@ -5607,7 +5800,7 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     let pendingAiImgEl = null;
     let pendingAiImageSrc = null;
     
-    aiSnapCtx.drawImage(video, 0, 0, 320, 320);
+    if (!fillAiSnapshot(aiSnapCtx, 320, 320)) return; // 🔒 frame ya nítido/procesado y sin deformar
     aiSnapCanvas.toBlob((blob) => {
         if (blob) {
             const url = URL.createObjectURL(blob);
@@ -6432,8 +6625,7 @@ messages: [{ role: "user", content: promptBase64 ?
 [{ type: "text", text: promptText }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${promptBase64}` } }] :
 promptText
 }],
-max_tokens: maxTokens, temperature: temperature,
-response_format: promptText.includes("JSON") ? { type: "json_object" } : undefined
+max_tokens: maxTokens, temperature: temperature
 }), signal: ac.signal
 });
 clearTimeout(t);
@@ -6863,77 +7055,84 @@ let isRecording = false;
 // 🎬 GRABACIÓN 4K HÍBRIDA + AUDIO MEZCLADO
 // ==========================================================
 let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCount = 0;
+let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
 
 function chooseRecResolution() {
-    const cores = navigator.hardwareConcurrency || 4;
-    const high = cores >= 6;
-    const aspect = window.innerWidth / window.innerHeight; // 🔒 mismo aspecto que ve el usuario
-    let W, H;
-    if (aspect >= 1) { W = high ? 3840 : 1920; H = Math.round(W / aspect / 2) * 2; }
-    else           { H = high ? 3840 : 1920; W = Math.round(H * aspect / 2) * 2; }
-    return { W, H };
+// 🔒 MISMA referencia que los overlays (innerWidth/innerHeight) → encuadre idéntico vivo/REC
+const aspect = window.innerWidth / window.innerHeight;
+const target = 1920; // 🔒 FullHD: seguro para el codificador y fluido
+let W, H;
+if (aspect >= 1) { W = target; H = Math.round(W / aspect); }
+else             { H = target; W = Math.round(H * aspect); }
+W -= W % 2; H -= H % 2; // pares: obligatorio para H.264/MediaRecorder
+return { W, H };
 }
 
 function cleanupRecording() {
-    isRecordingActive = false;
-    recCanvas4K = null;
-    recCtx4K = null;
+  _recAudioNodes.forEach(n => { try { n.disconnect(); } catch(e){} }); // 🔒 sin conexiones fantasma
+  _recAudioNodes = [];
+  isRecordingActive = false;
+  recCanvas4K = null;
+  recCtx4K = null;
 }
 
 // 🎙️ Mezcla dedicada para grabación: voz interna REDUCIDA + micro completo
+// 🎙️ Mezcla dedicada para grabación: interno 50% + micrófono 100% = 1 sola pista
 function buildRecAudioTrack() {
-    try {
-        // Usar el contexto donde suena la voz interna (EVP/TTS) para poder capturarla
-        const ctxA = window.evpAudioCtx || window.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        if (ctxA.state === 'suspended') ctxA.resume();
-        const dest = ctxA.createMediaStreamDestination();
-        let hasAny = false;
+  try {
+    const ctxA = audioCtx || evpAudioCtx; // 🔒 variables reales del scope, NO window.*
+    if (!ctxA) { console.warn('[REC] Sin AudioContext'); return null; }
+    if (ctxA.state === 'suspended') ctxA.resume().catch(()=>{});
 
-        // 1) Voz interna de la app → volumen reducido SOLO en la grabación
-        if (window.ttsMainGain && window.ttsMainGain.context === ctxA) {
-            try {
-                const gInt = ctxA.createGain();
-                gInt.gain.value = 0.5; // 🔒 interno al 50% para mezcla perfecta
-                window.ttsMainGain.connect(gInt);
-                gInt.connect(dest);
-                hasAny = true;
-            } catch (e) { console.warn('[REC] No se pudo rutear TTS:', e); }
-        }
-        // 2) Micrófono (voz del investigador) → nivel completo
-        if (window.audioStream && window.audioStream.getAudioTracks().length) {
-            try {
-                const src = ctxA.createMediaStreamSource(window.audioStream);
-                const gMic = ctxA.createGain();
-                gMic.gain.value = 1.0;
-                src.connect(gMic);
-                gMic.connect(dest);
-                hasAny = true;
-            } catch (e) { console.warn('[REC] No se pudo rutear micro:', e); }
-        }
-        // 3) Fallback: mixDestination o audioStream directo
-        if (!hasAny) {
-            if (window.mixDestination && window.mixDestination.stream.getAudioTracks().length) {
-                return window.mixDestination.stream.getAudioTracks()[0];
-            }
-            if (window.audioStream && window.audioStream.getAudioTracks().length) {
-                return window.audioStream.getAudioTracks()[0];
-            }
-            return null;
-        }
-        return dest.stream.getAudioTracks()[0] || null;
-    } catch (e) {
-        console.warn('[REC] Audio mix no disponible:', e);
-        return null;
+    const dest = ctxA.createMediaStreamDestination();
+
+    // ── BUS INTERNO (todo al 50%) ──────────────────────────────
+    const gInt = ctxA.createGain();
+    gInt.gain.value = 0.5;               // 🔒 voz interna / EVP / barrido al 50%
+    gInt.connect(dest);
+    _recAudioNodes.push(gInt);
+    let hasAny = false;
+
+    if (ttsMainGain)            { try { ttsMainGain.connect(gInt);            hasAny = true; } catch(e){} }
+    if (window._sweepSource)    { try { window._sweepSource.connect(gInt);    hasAny = true; } catch(e){} }
+    if (window._respSource)     { try { window._respSource.connect(gInt);     hasAny = true; } catch(e){} }
+
+    // ── MICRÓFONO (100%) — prioridad MIC SENDER remoto, luego local ──
+    const micStream =
+      (window.remoteMicStream && window.remoteMicStream.getAudioTracks().length) ? window.remoteMicStream :
+      (audioStream && audioStream.getAudioTracks().length) ? audioStream : null;
+
+    if (micStream) {
+      try {
+        const src  = ctxA.createMediaStreamSource(micStream);
+        const gMic = ctxA.createGain();
+        gMic.gain.value = 1.0;           // 🔒 micro al 100%
+        src.connect(gMic); gMic.connect(dest);
+        _recAudioNodes.push(src, gMic);
+        hasAny = true;
+      } catch (e) { console.warn('[REC] micro:', e); }
     }
+
+    // ── Último recurso: la mezcla general ya existente ──
+    if (!hasAny && mixDestination && mixDestination.stream.getAudioTracks().length) {
+      return mixDestination.stream.getAudioTracks()[0];
+    }
+    return dest.stream.getAudioTracks()[0] || null;
+  } catch (e) {
+    console.warn('[REC] Audio mix no disponible:', e);
+    return null;
+  }
 }
 
 async function startScreenRecording() {
     if (isRecording) return;
-    try {
+try {
+  await initAudioEngine(); 
         const { W, H } = chooseRecResolution();
         recCanvas4K = document.createElement('canvas');
         recCanvas4K.width = W; recCanvas4K.height = H;
         recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
+isRecordingActive = true;
 
         const canvasStream = recCanvas4K.captureStream(30); // 🔒 30fps = más luz nocturna
         const videoTrack = canvasStream.getVideoTracks()[0];
@@ -6970,6 +7169,16 @@ async function startScreenRecording() {
         mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) recordedChunks.push(e.data);
         };
+        mediaRecorder.onerror = (e) => {
+console.error('[REC] Error del codificador:', e);
+showToast('❌ ERROR DE CODIFICADOR — REC DETENIDA', true);
+isRecording = false;
+clearInterval(recordingTimer);
+const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
+const br = document.getElementById('btn-record'); if (br) br.classList.remove('active-state');
+try { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(e2) {}
+cleanupRecording();
+};
 
         mediaRecorder.onstop = () => {
             const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
@@ -6987,10 +7196,10 @@ async function startScreenRecording() {
             recordedChunks = [];
         };
 
-        composeFullFrame(recCtx4K, W, H); // primer frame inmediato
+        lastMapCapture = 0; captureMapToMirror(); // 🔒 espejo del mapa fresco antes del 1er frame
+composeFullFrame(recCtx4K, W, H); // primer frame inmediato
         mediaRecorder.start(1000);
-        isRecording = true;
-        isRecordingActive = true;
+isRecording = true;
         recordingStartTime = Date.now();
 
         const recInd = document.getElementById('recording-indicator');
@@ -7028,17 +7237,28 @@ async function startScreenRecording() {
 }
 
 function stopScreenRecording() {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-    mediaRecorder.stop();
-    isRecording = false;
-    if (mediaRecorder._canvasStream) mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
-    clearInterval(recordingTimer);
-    cleanupRecording();
-    const recInd = document.getElementById('recording-indicator');
-    if (recInd) recInd.classList.remove('active');
-    const btn = document.getElementById('btn-record');
-    if (btn) btn.classList.remove('active-state');
-    showToast('⏹ PROCESANDO VIDEO...', false);
+// 🔒 Responde SIEMPRE, aunque el recorder haya muerto por error de codificador
+if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+if (isRecording) {
+isRecording = false;
+clearInterval(recordingTimer);
+const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
+const br = document.getElementById('btn-record'); if (br) br.classList.remove('active-state');
+cleanupRecording();
+showToast('⏹ GRABACIÓN DETENIDA', false);
+}
+return;
+}
+mediaRecorder.stop();
+isRecording = false;
+clearInterval(recordingTimer);
+if (mediaRecorder._canvasStream) mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
+cleanupRecording();
+const recInd = document.getElementById('recording-indicator');
+if (recInd) recInd.classList.remove('active');
+const btn = document.getElementById('btn-record');
+if (btn) btn.classList.remove('active-state');
+showToast('⏹ PROCESANDO VIDEO...', false);
 }
 
 async function toggleScreenRecording() {
@@ -7082,9 +7302,10 @@ function rebuildMapSprite() {
 
 // Por frame: UN drawImage (baratísimo)
 function drawMapToMaster(tctx, W, H) {
-    if (!mapSpriteCanvas || !mapSpriteCanvas.width) return;
-    const s = W / window.innerWidth;
-    tctx.drawImage(mapSpriteCanvas, mapSpriteX * s, mapSpriteY * s, mapSpriteCanvas.width * s, mapSpriteCanvas.height * s);
+if (document.body.classList.contains('hide-map')) return; // 🔒 respeta OCULTAR ELEMENTOS
+if (!mapMirrorGood || !mapSpriteCanvas || !mapSpriteCanvas.width) return; // 🔒 nunca negro
+const s = W / window.innerWidth;
+tctx.drawImage(mapSpriteCanvas, mapSpriteX * s, mapSpriteY * s, mapSpriteCanvas.width * s, mapSpriteCanvas.height * s);
 }
 
 // ==========================================================
@@ -7101,47 +7322,69 @@ uniform sampler2D u_tex; uniform vec2 u_texel; uniform vec2 u_uvScale; uniform v
 uniform float u_sharp; uniform float u_grain; uniform float u_time; uniform float u_filter;
 uniform float u_contrast; uniform float u_saturate; uniform float u_brightness;
 float luma(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }
-float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-
+// 🔒 Hash SIN sin(): seguro en mediump (móviles) — elimina la "malla de cuadritos"
+float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec3 applyFilter(vec3 c, float f){
-    if (f < 0.5) return c;
-    float L = luma(c);
-
-    if (f < 1.5) { // 🌙 NOCT — visión nocturna real (fósforo verde)
-        float Ln = clamp(pow(L, 0.85) * 1.15, 0.0, 1.0);   // amplifica sombras como un tubo NV
-        vec3 nv = vec3(Ln * 0.52, Ln, Ln * 0.60);          // verde dominante; luces NO quemadas
-        return clamp((nv - 0.5) * 1.35 + 0.5, 0.0, 1.0);   // contraste NV
-    }
-
-    if (f < 2.5) { // 🔥 SPEC — térmico INVERTIDO (persona cálida, fondo frío)
-        float T = 1.0 - L;   // 🔒 Si en tu dispositivo se viera al revés, cámbialo a: float T = L;
-        vec3 col = mix(vec3(0.05,0.0,0.35), vec3(0.6,0.0,0.7), smoothstep(0.0,0.35,T)); // frío→morado
-        col = mix(col, vec3(0.95,0.2,0.1),  smoothstep(0.35,0.65,T));                   // templado→rojo
-        col = mix(col, vec3(1.0,0.75,0.1),  smoothstep(0.65,0.85,T));                   // caliente→amarillo
-        col = mix(col, vec3(1.0),           smoothstep(0.85,1.0,T));                    // máximo→blanco
-        return clamp((col - 0.5) * 1.5 + 0.5, 0.0, 1.0);
-    }
-
-    // 👻 URBEX — negativo verdoso (sin cambios)
-    vec3 inv = 1.0 - c;
-    vec3 ux = mix(inv, vec3(luma(inv)), 0.4) * vec3(0.75,1.1,0.95);
-    return clamp((ux - 0.5) * 1.15 + 0.5, 0.0, 1.0);
+if (f < 0.5) return c;
+float L = luma(c);
+if (f < 1.5) {
+float Ln = clamp(pow(L, 0.85) * 1.15, 0.0, 1.0);
+vec3 nv = vec3(Ln * 0.52, Ln, Ln * 0.60);
+return clamp((nv - 0.5) * 1.35 + 0.5, 0.0, 1.0);
 }
-
+if (f < 2.5) {
+float T = 1.0 - L;
+vec3 col = mix(vec3(0.05,0.0,0.35), vec3(0.6,0.0,0.7), smoothstep(0.0,0.35,T));
+col = mix(col, vec3(0.95,0.2,0.1),  smoothstep(0.35,0.65,T));
+col = mix(col, vec3(1.0,0.75,0.1),  smoothstep(0.65,0.85,T));
+col = mix(col, vec3(1.0),           smoothstep(0.85,1.0,T));
+return clamp((col - 0.5) * 1.5 + 0.5, 0.0, 1.0);
+}
+vec3 inv = 1.0 - c;
+vec3 ux = mix(inv, vec3(luma(inv)), 0.4) * vec3(0.75,1.1,0.95);
+return clamp((ux - 0.5) * 1.15 + 0.5, 0.0, 1.0);
+}
 void main(){
-    vec2 uv = u_uvOff + v_uv*u_uvScale;
-    vec3 base = texture2D(u_tex, uv).rgb;
-    if (u_sharp > 0.001) {
-        vec3 n = texture2D(u_tex, uv+vec2(0.0,u_texel.y)).rgb + texture2D(u_tex, uv-vec2(0.0,u_texel.y)).rgb
-               + texture2D(u_tex, uv+vec2(u_texel.x,0.0)).rgb + texture2D(u_tex, uv-vec2(u_texel.x,0.0)).rgb;
-        base = base*(1.0+4.0*u_sharp) - n*u_sharp;
-    }
-    vec3 col = applyFilter(clamp(base,0.0,1.0), u_filter);
-    float L = luma(col);
-    col = mix(vec3(L), col, u_saturate);
-    col = (col-0.5)*u_contrast + 0.5 + (u_brightness-1.0);
-       if (u_grain > 0.001) { col += (hash(gl_FragCoord.xy + vec2(u_time*61.7, u_time*83.3))-0.5)*u_grain; }
-    gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
+vec2 uv = u_uvOff + v_uv*u_uvScale;
+vec3 base = texture2D(u_tex, uv).rgb;
+if (u_sharp > 0.001) {
+// 1) NITIDEZ ISÓTROPICA (8 vecinos): trata igual diagonales y rectas → ADIÓS diente de sierra
+vec2 t = u_texel;
+vec3 n4 = texture2D(u_tex, uv+vec2(0.0,t.y)).rgb
+        + texture2D(u_tex, uv-vec2(0.0,t.y)).rgb
+        + texture2D(u_tex, uv+vec2(t.x,0.0)).rgb
+        + texture2D(u_tex, uv-vec2(t.x,0.0)).rgb;
+vec3 d4 = texture2D(u_tex, uv+t).rgb
+        + texture2D(u_tex, uv-t).rgb
+        + texture2D(u_tex, uv+vec2(t.x,-t.y)).rgb
+        + texture2D(u_tex, uv+vec2(-t.x,t.y)).rgb;
+vec3 blur8 = (n4 + d4) * 0.125;
+vec3 fine = base + (base - blur8) * (u_sharp * 1.7);
+// 2) CLARIDAD SUAVE (micro-contraste solo en luma, sin bordes duros)
+vec2 t2 = t * 2.0;
+float lC = luma(base);
+float lN = (luma(texture2D(u_tex, uv+vec2(0.0,t2.y)).rgb)
+          + luma(texture2D(u_tex, uv-vec2(0.0,t2.y)).rgb)
+          + luma(texture2D(u_tex, uv+vec2(t2.x,0.0)).rgb)
+          + luma(texture2D(u_tex, uv-vec2(t2.x,0.0)).rgb)) * 0.25;
+base = clamp(fine, 0.0, 1.0) + (lC - lN) * (u_sharp * 0.5);
+}
+vec3 col = applyFilter(clamp(base,0.0,1.0), u_filter);
+float L = luma(col);
+col = mix(vec3(L), col, u_saturate);
+col = (col-0.5)*u_contrast + 0.5 + (u_brightness-1.0);
+float sAmt = clamp(u_sharp, 0.0, 1.0) * 0.25; // 🔒 curva S suave: piel natural, no amarilla
+col = mix(col, col*col*(3.0-2.0*col), sAmt);
+if (u_grain > 0.001) {
+// 🔒 GRANO DE PELÍCULA: celda 2×2 "gruesa" + detalle fino, parpadeo a 24fps (cine)
+float ft = floor(u_time * 24.0);
+vec2 cell = floor(gl_FragCoord.xy * 0.5);
+float gA = hash(cell + vec2(ft * 17.0, ft * 29.0)) - 0.5;   // grano grueso
+float gB = hash(gl_FragCoord.xy + vec2(ft * 61.7, ft * 83.3)) - 0.5; // fino
+float g = gA * 0.65 + gB * 0.35;
+col += g * u_grain * (0.45 + 0.55 * (1.0 - L)); // más grano en sombras, como film real
+}
+gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
 }`;
 
 function initGLEngine() {
@@ -7150,7 +7393,7 @@ function initGLEngine() {
         canvas.id = 'obr-gl-video';
         const master = document.getElementById('master-canvas');
         master.parentNode.insertBefore(canvas, master);
-        const gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: true });
+        const gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
         if (!gl) return false;
         const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); return sh; };
         const prog = gl.createProgram();
@@ -7174,20 +7417,25 @@ function initGLEngine() {
             .forEach(n => OBRL.uni[n] = gl.getUniformLocation(prog, n));
         gl.uniform1i(OBRL.uni.u_tex, 0);
         Object.assign(OBRL, { gl, prog, tex, canvas, ready: true });
-        return true;
-    } catch (e) { console.warn('[GL] no disponible, uso fallback 2D:', e); return false; }
+document.body.classList.add('gl-active'); // 🔒 el video crudo ya no se compone (ahorro GPU)
+return true;
+    } catch (e) { console.warn('[GL] no disponible, uso fallback 2D:', e); try { const c = document.getElementById('obr-gl-video'); if (c) c.remove(); } catch(e2){} return false; }
 }
 
 function sizeGLCanvas() {
-    if (!OBRL.ready) return;
-    const cores = navigator.hardwareConcurrency || 4;
-    let w, h;
-    if (isRecordingActive && recCanvas4K) { w = recCanvas4K.width; h = recCanvas4K.height; }
-    else {
-        const dpr = cores >= 6 ? Math.min(window.devicePixelRatio || 1, 1.5) : 1; // 🔒 gama baja: 1x
-        w = Math.round(window.innerWidth * dpr); h = Math.round(window.innerHeight * dpr);
-    }
-    if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w; OBRL.canvas.height = h; }
+if (!OBRL.ready) return;
+const cores = navigator.hardwareConcurrency || 4;
+let w, h;
+if (isRecordingActive && recCanvas4K) {
+// 🔒 Durante REC: el shader se renderiza a resolución de grabación → video NÍTIDO.
+// El aspect de REC es idéntico al de pantalla (innerWidth/innerHeight),
+// así que la vista viva NO se deforma ni se re-encuadra.
+w = recCanvas4K.width; h = recCanvas4K.height;
+} else {
+const dpr = Math.min(window.devicePixelRatio || 1, cores >= 6 ? 2.0 : 1.5); // 🔒 píxel 1:1 con la pantalla = sin dentado por estiramiento
+w = Math.round(window.innerWidth * dpr); h = Math.round(window.innerHeight * dpr);
+}
+if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w; OBRL.canvas.height = h; }
 }
 
 function renderGLVideo() {
@@ -7205,17 +7453,18 @@ function renderGLVideo() {
     gl.uniform2f(OBRL.uni.u_texel, 1 / vW, 1 / vH);
     gl.uniform2f(OBRL.uni.u_uvScale, sX, sY);
     gl.uniform2f(OBRL.uni.u_uvOff, oX, oY);
-    gl.uniform1f(OBRL.uni.u_sharp, [0, 0.3, 0.5, 0.75][currentSharpness] || 0);
-    gl.uniform1f(OBRL.uni.u_grain, (currentSharpness > 0 && !disableGrainOnIOS) ? 0.06 : 0.0);
+    gl.uniform1f(OBRL.uni.u_sharp, [0, 0.35, 0.55, 0.75][currentSharpness] || 0);
+    const grainAmt = [0, 0.05, 0.065, 0.08][currentSharpness] || 0; // 🔒 grano escalonado por nivel
+gl.uniform1f(OBRL.uni.u_grain, disableGrainOnIOS ? 0.0 : grainAmt);
     gl.uniform1f(OBRL.uni.u_time, (performance.now() / 1000) % 10);
     gl.uniform1f(OBRL.uni.u_filter, { normal: 0, night: 1, thermal: 2, urbex: 3 }[state.filter] || 0);
-    const cs = { 1: [1.08, 1.05, 1.02], 2: [1.15, 1.10, 1.03], 3: [1.25, 1.15, 1.05] }[currentSharpness] || [1, 1, 1];
+    const cs = { 1: [1.10, 1.12, 1.00], 2: [1.18, 1.22, 1.00], 3: [1.28, 1.32, 1.00] }[currentSharpness] || [1, 1, 1];
     gl.uniform1f(OBRL.uni.u_contrast, cs[0]);
     gl.uniform1f(OBRL.uni.u_saturate, cs[1]);
     gl.uniform1f(OBRL.uni.u_brightness, cs[2]);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
-window.addEventListener('touchstart', fn, { passive: true });
+
 </script>
 </body>
 </html>
