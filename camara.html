@@ -1122,6 +1122,11 @@ display: none !important;
     <button id="main-cam-btn" class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">▶ INICIAR CÁMARA</button>
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="openChatView()">💬 CHAT DEL DIRECTO</button>
+    <label id="offline-container" title="Modo OFFLINE (oculta IA y ahorra batería)">
+  <input type="checkbox" id="offline-switch-input" onchange="toggleOfflineMode(this.checked)">
+  <span class="off-track"><span class="off-knob"></span></span>
+  <span class="off-txt">ONLINE</span>
+</label>
     <div id="offline-container" class="flex items-center justify-center gap-3 mt-8 mb-4 transition-opacity duration-500">
     </div>
 
@@ -1636,26 +1641,29 @@ const CACHE_NAME = 'obr-cam-v' + (typeof ASSET_VERSION !== 'undefined' ? ASSET_V
 const VERSION = CACHE_NAME; // Para logging
 
 const URLS = [
-  './',
-  'obr-logo.png?v=' + (typeof ASSET_VERSION !== 'undefined' ? ASSET_VERSION : '1'),
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap',
-  'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0',
-  'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3',
-  'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
-  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
-  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
-  'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
-  'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
-  'https://cdn.agora.io/sdk/release/AgoraRTM.js',
-  'https://unpkg.com/leaflet/dist/leaflet.js',
-  'https://unpkg.com/leaflet/dist/leaflet.css',
-  './barrido.mp3',
-  './respuesta.mp3',
-  './INTRO_1.mp4',
-  './FIN_DIRECTO.mp4',
-  './BANNER_1.mp4'
+'./',
+'./index.html',
+'./obr-logo.png',
+'./obr-banner.png',
+'./INTRO_1.mp4',
+'./FIN_DIRECTO.mp4',
+'./BANNER_1.mp4',
+'./barrido.mp3',
+'./respuesta.mp3',
+// 🔒 MISMAS URLs y versiones que pide el <head> (tal cual)
+'https://cdn.tailwindcss.com',
+'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0',
+'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3',
+'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
+'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
+'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
+'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
+'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
+'https://cdn.agora.io/sdk/release/AgoraRTM.js',
+'https://unpkg.com/leaflet/dist/leaflet.js',
+'https://unpkg.com/leaflet/dist/leaflet.css',
+'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap'
 ];
 
 console.log('[SW] Versión:', VERSION);
@@ -2968,10 +2976,25 @@ const lidarCtx = el.lidarCanvas.getContext('2d', {
     const loadedBlobs = {};
 
     async function preloadLocalAssets() {
-        for (const key of Object.keys(LOCAL_ASSETS)) {
-            try { const response = await fetch(LOCAL_ASSETS[key]); if (response.ok) { loadedBlobs[key] = URL.createObjectURL(await response.blob()); } } catch (e) {}
-        }
-    }
+const assets = [
+'./obr-logo.png',
+'./obr-banner.png',
+'./obr-intro.mp4',
+'./obr-outro.mp4'
+];
+
+await Promise.all(assets.map(async (url) => {
+try {
+const resp = await fetch(url, { 
+    cache: 'force-cache', // 🔒 Fuerza usar caché del Service Worker
+    mode: 'no-cors'
+});
+// Procesar el asset...
+} catch (e) {
+console.warn('[ASSETS] No se pudo cargar:', url, e.message);
+}
+}));
+}
 
     function playLocalMedia(type) {
         const src = loadedBlobs[type]; if (!src) { showToast("MEDIO NO DISPONIBLE", true); return; }
@@ -3769,6 +3792,14 @@ setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
 
 
     async function initApp() {
+// 🔒 Detectar offline inmediatamente
+const isOffline = !navigator.onLine || OBR_NET.offline;
+if (isOffline) {
+console.log('[APP] Modo OFFLINE detectado');
+showToast('📴 MODO OFFLINE — Funciones IA desactivadas', true);
+// Aplicar modo offline silenciosamente
+document.body.classList.add('obr-offline');
+}
     unlockAudioContext();
     document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
     document.getElementById('cam-error-panel').style.display = 'none';
@@ -6182,13 +6213,26 @@ if (!hasElevenLabs && !hasVoiceRSS) {
     const status = document.getElementById('api-status-msg');
     const k = input.value.trim();
     
-    if(!k) { status.innerText = "❌ CAMPO VACIO"; status.style.color = "red"; return; }
+    if(!k) { 
+        status.innerText = "❌ CAMPO VACIO"; 
+        status.style.color = "red"; 
+        return; 
+    }
     
     // 🔒 CRÍTICO: Detener el reinicio forzado de 20s para que no interrumpa la validación
     clearTimeout(loadingTimer);
     
     input.disabled = true; 
     btn.disabled = true; 
+    
+    // 🔒 OFFLINE: Detectar si no hay conexión antes de intentar validar
+    if (!navigator.onLine) {
+        status.innerText = "📴 SIN CONEXIÓN — VALIDACIÓN OMITIDA";
+        status.style.color = "#ffaa00";
+        input.disabled = false;
+        btn.disabled = false;
+        return;
+    }
     
     for(const step of ["CONECTANDO...", "IDENTIFICANDO...", "VERIFICANDO..."]) { 
         status.innerText = step; 
@@ -6200,8 +6244,15 @@ if (!hasElevenLabs && !hasVoiceRSS) {
     let workingModel = null;
 
     if (provider === 'elevenlabs') {
-        try { 
-            const r = await fetch('https://api.elevenlabs.io/v1/user', { headers: { 'xi-api-key': k } }); 
+        try {
+            const ac = new AbortController();
+            const timeout = setTimeout(() => ac.abort(), 5000); // 🔒 Timeout 5s
+            const r = await fetch('https://api.elevenlabs.io/v1/user', { 
+                headers: { 'xi-api-key': k },
+                signal: ac.signal 
+            }); 
+            clearTimeout(timeout);
+            
             if (r.ok) { 
                 workingModel = 'eleven_multilingual_v2'; 
                 localStorage.setItem('obr_el_key', k); 
@@ -6212,7 +6263,8 @@ if (!hasElevenLabs && !hasVoiceRSS) {
                 status.style.color = 'red'; 
             } 
         } catch(e) { 
-            status.innerText = '❌ ELEVENLABS: ERROR RED'; 
+            const isTimeout = e.name === 'AbortError';
+            status.innerText = isTimeout ? '⚠️ ELEVENLABS: TIMEOUT (5s)' : '❌ ELEVENLABS: ERROR RED'; 
             status.style.color = 'red'; 
         } 
         input.disabled = false; 
@@ -6223,7 +6275,16 @@ if (!hasElevenLabs && !hasVoiceRSS) {
     if (provider === 'groq') {
         try {
             status.innerText = "⏳ OBTENIENDO MODELOS DE VISIÓN...";
-            const response = await fetch(`https://api.groq.com/openai/v1/models`, { method: 'GET', headers: { 'Authorization': `Bearer ${k}` } });
+            const ac1 = new AbortController();
+            const timeout1 = setTimeout(() => ac1.abort(), 8000); // 🔒 Timeout 8s
+            
+            const response = await fetch(`https://api.groq.com/openai/v1/models`, { 
+                method: 'GET', 
+                headers: { 'Authorization': `Bearer ${k}` },
+                signal: ac1.signal
+            });
+            clearTimeout(timeout1);
+            
             if (!response.ok) throw new Error("Key inválida o sin acceso");
             
             const data = await response.json();
@@ -6281,7 +6342,8 @@ if (!hasElevenLabs && !hasVoiceRSS) {
                 throw new Error("Fallo en prueba de chat");
             }
         } catch(e) {
-            status.innerText = `❌ GROQ: ${e.message}`;
+            const isTimeout = e.name === 'AbortError';
+            status.innerText = isTimeout ? `⚠️ GROQ: TIMEOUT` : `❌ GROQ: ${e.message}`;
             status.style.color = 'red';
             input.disabled = false;
             btn.disabled = false;
@@ -6297,11 +6359,17 @@ if (!hasElevenLabs && !hasVoiceRSS) {
         for (const model of modelsToTry) { 
             try { 
                 const start = performance.now();
+                const ac = new AbortController();
+                const timeout = setTimeout(() => ac.abort(), 6000); // 🔒 Timeout 6s por modelo
+                
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, { 
                     method: 'POST', 
                     headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "hola" }] }] }) 
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "hola" }] }] }),
+                    signal: ac.signal
                 }); 
+                clearTimeout(timeout);
+                
                 const timeTaken = performance.now() - start;
                 if(response.ok) { 
                     if (timeTaken < fastestTime) {
@@ -6309,7 +6377,10 @@ if (!hasElevenLabs && !hasVoiceRSS) {
                         bestModel = model;
                     }
                 } 
-            } catch(e) {} 
+            } catch(e) {
+                // 🔒 Silencioso: continuar con el siguiente modelo
+                console.warn(`[API] Modelo ${model} falló:`, e.message);
+            } 
         }
 
         if (bestModel) {
@@ -7478,6 +7549,15 @@ function initGLEngine() {
         const master = document.getElementById('master-canvas');
         master.parentNode.insertBefore(canvas, master);
         const gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+        if (!gl) {
+console.warn('[GL] WebGL2 no disponible, usando WebGL1');
+gl = canvas.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: true });
+}
+if (!gl) {
+console.error('[GL] WebGL no disponible');
+showToast('⚠️ WebGL NO DISPONIBLE — MODO 2D', true);
+return;
+}
         if (!gl) return false;
         const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); return sh; };
         const prog = gl.createProgram();
