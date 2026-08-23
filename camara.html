@@ -14,6 +14,17 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="OBR CAM">
 <!-- El manifest se genera dinámicamente con JS (ver abajo) -->    
+<!-- Preconnect a CDNs críticas -->
+<link rel="preconnect" href="https://a.tile.openstreetmap.org" crossorigin>
+<link rel="preconnect" href="https://b.tile.openstreetmap.org" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://cdn.agora.io" crossorigin>
+
+<!-- Preload del logo y assets clave -->
+<link rel="preload" href="obr-logo.png" as="image">
+<link rel="preload" href="obr-banner.png" as="image">
+<!-- Preload de fuentes (si las tienes locales, sino quita) -->
     <script src="https://cdn.tailwindcss.com"></script>
        <!-- Librerías de IA desde CDN (sin fallbacks problemáticos) -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
@@ -722,11 +733,6 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 
     #menu-right .menu-label { display: none !important; }
 
-    <div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">   
-    <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
-</div>
-    
-    
     /* Engranaje: arriba derecha */
     #top-right-group {
         position: absolute !important;
@@ -920,7 +926,6 @@ body.gl-active #shared-video-element { opacity: 0 !important; }
 
 /* 🔒 El motor GL va entre el video (oculto detrás) y los overlays */
 #obr-gl-video { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; object-fit: cover; }
-body:not(.gl-active) #obr-gl-video { opacity: 0; pointer-events: none; visibility: hidden; } /* 🔒 sin filtro: video NATIVO visible, GL preservado (cero recreación = cero tirón) */
 
 
 /* === LIDAR ESPECTRAL: UI propia → se oculta el UI principal === */
@@ -936,7 +941,7 @@ body.lidar-fx-active #top-right-group { display: none !important; }
 body.audio-scan-active #map-container-slot { display: none !important; }
 }
 
-/* === 📴 SWITCH OFFLINE (pantalla de inicio, arriba‑derecha) === */
+
 #offline-container{ position:absolute; top:14px; right:14px; display:flex; align-items:center; gap:7px; cursor:pointer; z-index:30; -webkit-tap-highlight-color:transparent; }
 #offline-container input{ display:none; }
 #offline-container .off-track{ position:relative; width:42px; height:22px; border-radius:999px; background:rgba(0,255,136,.10); border:1px solid rgba(0,255,136,.45); transition:all .3s ease; flex:0 0 auto; }
@@ -946,21 +951,10 @@ body.audio-scan-active #map-container-slot { display: none !important; }
 #offline-container .off-txt{ font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:2px; color:#4b5563; transition:color .3s; }
 #offline-container input:checked ~ .off-txt{ color:#ff4444; text-shadow:0 0 6px rgba(255,51,51,.6); }
 #offline-container.hidden{ display:none !important; }
-/* 🔒 En OFFLINE se OCULTAN las funciones que requieren red */
 body.obr-offline #btn-ia, body.obr-offline #wrapper-audio-scan{ display:none !important; }
+body.gl-active #shared-video-element{ filter:none !important; opacity:0 !important; }
+body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; visibility:hidden; }
 
-
-/* 🔒 OCULTAR LABELS DE BOTONES EN HORIZONTAL (solo iconos) */
-@media (orientation: landscape), .landscape-mode {
-.menu-label,
-#menu-right .menu-label,
-#menu-left .menu-label,
-#local-media-controls .menu-label,
-.crystal-btn + .menu-label,
-.menu-btn + .menu-label {
-display: none !important;
-}
-}
     </style>
 </head>
 <body>
@@ -1053,9 +1047,8 @@ display: none !important;
 </div>
     
     <div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
-
-<i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
-</div>
+        <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
+    </div>
     
     <div id="map-container-slot" class="map-visible">
         <div style="position: relative; width: 100%; height: 100%;">
@@ -1107,11 +1100,6 @@ display: none !important;
 
     <div id="loading">
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
-    <label id="offline-container" title="Modo OFFLINE">
-  <input type="checkbox" id="offline-switch-input" onchange="toggleOfflineMode(this.checked)">
-  <span class="off-track"><span class="off-knob"></span></span>
-  <span class="off-txt">ONLINE</span>
-</label>
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
     <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal</p>
@@ -1123,12 +1111,10 @@ display: none !important;
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="openChatView()">💬 CHAT DEL DIRECTO</button>
     <label id="offline-container" title="Modo OFFLINE (oculta IA y ahorra batería)">
-  <input type="checkbox" id="offline-switch-input" onchange="toggleOfflineMode(this.checked)">
-  <span class="off-track"><span class="off-knob"></span></span>
-  <span class="off-txt">ONLINE</span>
+<input type="checkbox" id="offline-switch-input" onchange="toggleOfflineMode(this.checked)">
+<span class="off-track"><span class="off-knob"></span></span>
+<span class="off-txt">ONLINE</span>
 </label>
-    <div id="offline-container" class="flex items-center justify-center gap-3 mt-8 mb-4 transition-opacity duration-500">
-    </div>
 
     <!-- BOTÓN FLOTANTE DE CONFIGURACIÓN (Abajo a la derecha) -->
     <button onclick="document.getElementById('api-config-modal').classList.add('active')" class="absolute bottom-6 right-6 w-14 h-14 bg-black/60 border border-cyan-600 text-cyan-400 rounded-full flex items-center justify-center text-2xl hover:bg-cyan-900/40 hover:scale-110 transition-all shadow-[0_0_15px_rgba(0,255,255,0.2)] load-btn" title="Configurar APIs y Chat">
@@ -1298,10 +1284,8 @@ display: none !important;
                 <button onclick="setTTSMode('elevenlabs')" id="tts-btn-el" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-gray-700 text-gray-400">ELEVENLABS</button>
                 <button onclick="setTTSMode('voicerss')" id="tts-btn-vrss" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-gray-700 text-gray-400">VOICERSS</button>
                     </div>
-<div class="flex justify-center mt-2">
-<button onclick="refreshTTSCredits()" class="px-3 py-1.5 bg-blue-900/30 border border-blue-600 text-blue-400 hover:bg-blue-700 hover:text-white text-[9px] font-bold rounded transition-all font-orbitron">
-    🔄 REFRESCAR CRÉDITOS</button>
-</div>
+<button onclick="refreshTTSCredits()" class="mt-2 px-3 py-1.5 bg-blue-900/30 border border-blue-600 text-blue-400 hover:bg-blue-700 hover:text-white text-[9px] font-bold rounded transition-all font-orbitron">
+    🔄 🔄 REFRESCAR CRÉDITOS</button>
     </div>
         <!-- BLOQUE 3: NITIDEZ DE CÁMARA -->
 <div class="bg-black/50 p-5 rounded border border-yellow-500 shadow-[0_0_15px_rgba(255,255,0,0.1)] flex flex-col">
@@ -1370,7 +1354,7 @@ display: none !important;
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '23'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 (function generateDynamicManifest() {
     const manifest = {
@@ -1414,7 +1398,7 @@ const AGORA_CHANNEL = 'obr-estudio';
 let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 const RTM_TOKEN = undefined;
 const MIC_CHANNEL = 'obr-mic';
-const AI_SENSITIVITY = 0.25; // Equilibrio perfecto para detectar torsos y personas alejadas
+const AI_SENSITIVITY = 0.35; // Aumentado para reducir falsos positivos
 const VOLUMEN_BARRIDO = 0.40;
 const VOLUMEN_RESPUESTA = 0.35;
 const VOLUMEN_EVP = 1.5;
@@ -1423,9 +1407,6 @@ const VOLUMEN_IA_VISION = 1.5;
 // === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
 const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
 const DEFAULT_VOICERSS_KEY = '776fa230d3574c4097aa44e4e3c3949c';
-
-
-let _lastGLW = 0, _lastGLH = 0, _lastGLCores = 0; // 🔒 cache de tamaño GL
 
 // ============ ESTADO GLOBAL ============
 const state = {
@@ -1582,6 +1563,15 @@ document.getElementById('connect-modal').addEventListener('show', preventAutoRel
     let streamVideoTrack = null;
     let currentSharpness = parseInt(localStorage.getItem('obr_sharpness') || '0');
 
+
+   //variables globales para renderloop
+
+let _overlayDirty = true;
+let _lastMotionLevel = 0;
+let _lastAudioEnergy = 0;
+let _lastPoseCount = 0;
+
+
     function updateTTSStatusUI() {
     const engineEl = document.getElementById('tts-engine-status');
     const creditsEl = document.getElementById('tts-credits-status');
@@ -1670,16 +1660,11 @@ console.log('[SW] Versión:', VERSION);
 
 // INSTALACIÓN: Precachear todos los recursos
 self.addEventListener('install', e => {
-  console.log('[SW] Instalando...', VERSION);
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      console.log('[SW] Precacheando recursos...');
-      return Promise.allSettled(URLS.map(u => cache.add(u).catch(err => console.warn('[SW] No cacheable:', u))));
-    }).then(() => {
-      console.log('[SW] Saltando a waiting...');
-      self.skipWaiting();
-    })
-  );
+e.waitUntil(
+caches.open(CACHE_NAME).then(cache =>
+Promise.allSettled(URLS.map(u => cache.add(u).catch(err => console.warn('[SW] No cacheable:', u)))
+).then(() => self.skipWaiting())
+);
 });
 
 // ACTIVACIÓN: Limpiar cachés viejas
@@ -1724,8 +1709,7 @@ self.addEventListener('fetch', e => {
     'cdn.jsdelivr.net',
     'unpkg.com',
     'cdn.agora.io',
-'tfhub.dev',
-'storage.googleapis.com'
+    'tfhub.dev'
   ];
   
   const isLocal = url.startsWith(self.location.origin);
@@ -1813,10 +1797,14 @@ self.addEventListener('fetch', e => {
         
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-console.log('[APP] Nueva versión detectada al entrar → auto‑actualización');
-newWorker.postMessage({type: 'SKIP_WAITING'});
-setTimeout(() => window.location.reload(), 400);
-}
+            console.log('[APP] Nueva versión lista. Recargando...');
+            if (confirm('Nueva versión disponible. ¿Recargar?')) {
+              if (newWorker.waiting) {
+                newWorker.waiting.postMessage({type: 'SKIP_WAITING'});
+              }
+              window.location.reload();
+            }
+          }
         });
       });
       
@@ -1948,68 +1936,84 @@ setTimeout(() => window.location.reload(), 400);
         }
     }
 
-    // --- NUEVA LÓGICA DE ESCANEO DE CONTEXTO POR IA (SEGUNDO PLANO) ---
-    async function fetchBackgroundAIContext() {
-if (!state.isAudioScan || isAIProcessing) return;
-if (Date.now() < (window._aiContextCooldown || 0)) return; // 🔒 cooldown tras fallo
-const cfg = getActiveAIConfig();
-if (!cfg) return;
+async function fetchBackgroundAIContext() {
+    if (!state.isAudioScan || isAIProcessing) return;
+    if (Date.now() < (window._aiContextCooldown || 0)) return; // cooldown tras fallo
+    const cfg = getActiveAIConfig();
+    if (!cfg) return;
     const video = el.video;
     if (!video || video.videoWidth === 0) return;
-    
+
     const snapC = document.createElement('canvas');
-    snapC.width = 320; snapC.height = 240;
+    snapC.width = 320;
+    snapC.height = 240;
     const ctxC = snapC.getContext('2d');
-    if (!fillAiSnapshot(ctxC, 320, 240)) return; // 🔒 mismo frame procesado, aspect correcto
+    if (!fillAiSnapshot(ctxC, 320, 240)) return;
     const base64 = snapC.toDataURL('image/jpeg', 0.6).split(',')[1];
-    
-    // Prompt más estricto contra el "thinking"
-    const prompt = `Analiza esta imagen de una investigación paranormal. Extrae: nombre, fecha de fallecimiento, entorno físico y objetos peculiares.
-IMPORTANTE: NO escribas etiquetas <think> ni razonamiento interno. Responde SOLO con el objeto JSON, sin markdown.
-Formato: {"nombre": "...", "fecha_muerte": "...", "entorno": "...", "objetos": "..."}`;
-try {
-const resultText = await callAIWithFallback(base64, prompt, 300, 0.1); // 🔒 300 tokens: margen para modelos "think"
-if (resultText) {
-// 1. Eliminar <think> (cerrados o TRUNCADOS) y todo su contenido
-let cleanText = resultText.replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').trim();
-            
-            // 2. Eliminar bloques de código markdown (```json ... ```)
-            cleanText = cleanText.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
-            
-            // 3. Extraer SOLO el objeto JSON si hay texto basura alrededor
-            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                cleanText = jsonMatch[0];
-            }
-            
-            try {
-                const parsed = JSON.parse(cleanText);
-                let hasData = false;
-                if (parsed.nombre && String(parsed.nombre).toLowerCase() !== "null") { window._aiContext.nombre = parsed.nombre; hasData = true; }
-                if (parsed.fecha_muerte && String(parsed.fecha_muerte).toLowerCase() !== "null") { window._aiContext.fecha_muerte = parsed.fecha_muerte; hasData = true; }
-                if (parsed.entorno && String(parsed.entorno).toLowerCase() !== "null") { window._aiContext.entorno = parsed.entorno; hasData = true; }
-                if (parsed.objetos && String(parsed.objetos).toLowerCase() !== "null") { window._aiContext.objetos = parsed.objetos; hasData = true; }
-                
-                if (hasData && DOM_CACHE?.ctxInd) {
-                    DOM_CACHE.ctxInd.style.display = 'flex'; 
-                    void DOM_CACHE.ctxInd.offsetWidth; 
-                    DOM_CACHE.ctxInd.style.opacity = '1';
-                    setTimeout(() => { 
-                        DOM_CACHE.ctxInd.style.opacity = '0'; 
-                        setTimeout(() => { if (DOM_CACHE.ctxInd.style.opacity === '0') DOM_CACHE.ctxInd.style.display = 'none'; }, 500); 
-                    }, 3500);
-                }
-            } catch (parseError) {
-// 🔒 El modelo se gastó todo en pensar: no saturar, reintento silencioso en 60s
-window._aiContextCooldown = Date.now() + 60000;
-console.warn("[AI Context] JSON incompleto (exceso de razonamiento). Reintento en 60s.");
-}
+
+    const prompt = `Analiza esta imagen de una investigación paranormal. Extrae: nombre, fecha de fallecimiento, entorno físico y objetos peculiares. Devuelve ÚNICAMENTE un objeto JSON válido sin markdown, sin etiquetas <think>, sin texto adicional. Formato: {"nombre": "...", "fecha_muerte": "...", "entorno": "...", "objetos": "..."}`;
+
+    try {
+        const resultText = await callAIWithFallback(base64, prompt, 150, 0.1);
+        if (!resultText) return;
+
+        // === LIMPIEZA AGRESIVA ===
+        let cleanText = resultText;
+
+        // 1. Eliminar etiquetas <think> y todo su contenido (anidado o no)
+        cleanText = cleanText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+        // 2. Eliminar bloques de código markdown (```json ... ```)
+        cleanText = cleanText.replace(/```(?:json)?\s*([\s\S]*?)```/gi, '$1').trim();
+
+        // 3. Extraer SOLO el objeto JSON si hay texto basura alrededor
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            cleanText = jsonMatch[0];
+        } else {
+            // Si no hay objeto, intentar parsear directamente (por si la IA ya devuelve JSON puro)
+            try { JSON.parse(cleanText); } catch(e) { return; }
         }
-    } catch(e) {
-// 🔒 Fallo silencioso: avisa una vez y aplica cooldown de 2 min (no satura la API ni la consola)
-window._aiContextCooldown = Date.now() + 120000;
-console.warn('[AI Context] IA sin respuesta (cooldown 2 min):', (e && e.message) || e);
-}
+
+        // 4. Parsear y asignar al contexto
+        const parsed = JSON.parse(cleanText);
+        let hasData = false;
+        if (parsed.nombre && String(parsed.nombre).toLowerCase() !== "null") {
+            window._aiContext.nombre = parsed.nombre;
+            hasData = true;
+        }
+        if (parsed.fecha_muerte && String(parsed.fecha_muerte).toLowerCase() !== "null") {
+            window._aiContext.fecha_muerte = parsed.fecha_muerte;
+            hasData = true;
+        }
+        if (parsed.entorno && String(parsed.entorno).toLowerCase() !== "null") {
+            window._aiContext.entorno = parsed.entorno;
+            hasData = true;
+        }
+        if (parsed.objetos && String(parsed.objetos).toLowerCase() !== "null") {
+            window._aiContext.objetos = parsed.objetos;
+            hasData = true;
+        }
+
+        // Mostrar indicador visual si hay datos
+        if (hasData && DOM_CACHE?.ctxInd) {
+            DOM_CACHE.ctxInd.style.display = 'flex';
+            void DOM_CACHE.ctxInd.offsetWidth;
+            DOM_CACHE.ctxInd.style.opacity = '1';
+            setTimeout(() => {
+                DOM_CACHE.ctxInd.style.opacity = '0';
+                setTimeout(() => {
+                    if (DOM_CACHE.ctxInd.style.opacity === '0')
+                        DOM_CACHE.ctxInd.style.display = 'none';
+                }, 500);
+            }, 3500);
+        }
+    } catch (e) {
+        // 🔒 Fallo silencioso: cooldown de 2 minutos para no saturar
+        window._aiContextCooldown = Date.now() + 120000;
+        // No mostrar warning en consola para evitar ruido
+        // console.warn('[AI Context] IA sin respuesta (cooldown 2 min):', e && e.message);
+    }
 }
     
     function scheduleBackgroundAIContext(isImmediate = false) {
@@ -2858,9 +2862,10 @@ async function getElevenLabsAudio(text, voiceId) {
     const targetRenderFPS = 30; const fpsInterval = 1000 / targetRenderFPS; 
     let performanceLagging = false;
     
-    const analysisCanvas = document.createElement('canvas'); const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-    analysisCanvas.width = 96;  // 🔒 Más pequeño = más rápido
-analysisCanvas.height = 72; // 🔒 Más pequeño = más rápido
+const analysisCanvas = document.createElement('canvas');
+const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+analysisCanvas.width = 64;   // 🔒 reducido de 96 a 64
+analysisCanvas.height = 48;  // 🔒 reducido de 72 a 48
     const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240; const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
 
     const scanBoxPool = [];
@@ -2917,39 +2922,21 @@ const lidarCtx = el.lidarCanvas.getContext('2d', {
     let logoImg = new Image(); logoImg.src = 'obr-logo.png';
 
     function filterOverlapping(items) {
-    const result = [];
-    // Ordenamos por puntuación general para priorizar las detecciones más claras
-    items.sort((a, b) => {
-        const scoreA = a.keypoints.reduce((sum, kp) => sum + (kp.score || 0), 0);
-        const scoreB = b.keypoints.reduce((sum, kp) => sum + (kp.score || 0), 0);
-        return scoreB - scoreA;
-    });
-
-    for (const item of items) {
-        let overlap = false;
-        // Usamos el promedio de los puntos del torso (hombros y caderas) como centro de masa
-        const torsoPoints = [5, 6, 11, 12].map(i => item.keypoints[i]).filter(kp => kp && kp.score > 0.2);
-        if (torsoPoints.length === 0) continue; // Si no hay torso, lo ignoramos
-        
-        const cx = torsoPoints.reduce((sum, kp) => sum + kp.x, 0) / torsoPoints.length;
-        const cy = torsoPoints.reduce((sum, kp) => sum + kp.y, 0) / torsoPoints.length;
-
-        for (const existing of result) {
-            const exTorsoPoints = [5, 6, 11, 12].map(i => existing.keypoints[i]).filter(kp => kp && kp.score > 0.2);
-            if (exTorsoPoints.length === 0) continue;
-            
-            const exCx = exTorsoPoints.reduce((sum, kp) => sum + kp.x, 0) / exTorsoPoints.length;
-            const exCy = exTorsoPoints.reduce((sum, kp) => sum + kp.y, 0) / exTorsoPoints.length;
-            
-            // 🔒 REDUCIDO: 0.06 (6% de la pantalla). Permite 2 personas lado a lado.
-            const dist = Math.hypot(cx - exCx, cy - exCy);
-            if (dist < 0.06) { overlap = true; break; }
+        const result = [];
+        for (const item of items) {
+            let overlap = false;
+            const center = {x: item.keypoints[0]?.x || 0, y: item.keypoints[0]?.y || 0};
+            if (!center.x && !center.y) continue;
+            for (const existing of result) {
+                const exCenter = {x: existing.keypoints[0]?.x || 0, y: existing.keypoints[0]?.y || 0};
+                const dist = Math.hypot(center.x - exCenter.x, center.y - exCenter.y);
+                if (dist < 0.15) { overlap = true; break; } 
+            }
+            if (!overlap) result.push(item);
+            if (result.length >= 3) break; 
         }
-        if (!overlap) result.push(item);
-        if (result.length >= 4) break; // Limitamos a 4 personas para no saturar la CPU
+        return result;
     }
-    return result;
-}
 
     setInterval(systemGC, 15000);
     function systemGC() {
@@ -3177,44 +3164,14 @@ function handleOrientationChange() {
                 }
             }
             if (typeof rebuildMapSprite === 'function') {
-rebuildMapSprite();
-}
-}, 100); // 100ms adicionales para que el mapa termine de renderizar
-// 🔒 RE-ENCUADRE: renegocia la cámara para la nueva orientación (evita el "zoom" a la cabeza)
-restartCameraForOrientation();
-}, 300);
-}
-// 🔒 Renegocia el stream según orientación (vertical pide 1080×1920, horizontal 1920×1080)
-let orientationRestartPending = false;
-async function restartCameraForOrientation() {
-if (!videoStream || isRestartingCamera || orientationRestartPending) return;
-orientationRestartPending = true;
-try {
-const portrait = window.innerHeight > window.innerWidth;
-const cfg = portrait
-? { facingMode: 'environment', width: { ideal: 1080 }, height: { ideal: 1920 }, frameRate: { ideal: 30, max: 30 } }
-: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } };
-const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: cfg });
-if (videoStream) videoStream.getTracks().forEach(t => t.stop());
-videoStream = new MediaStream(stream.getVideoTracks());
-el.video.srcObject = videoStream;
-await el.video.play().catch(() => {});
-if (agoraClient && agoraClient.joined) {
-try {
-const newTrack = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: stream.getVideoTracks()[0] });
-await agoraClient.unpublish();
-await agoraClient.publish([newTrack]);
-} catch (e) { console.warn('[CAM] re-publish tras rotación:', e); }
-}
-} catch (e) {
-console.warn('[CAM] Re-encuadre por rotación falló:', e);
-} finally {
-setTimeout(() => { orientationRestartPending = false; }, 2000);
-}
+                rebuildMapSprite();
+            }
+        }, 100); // 100ms adicionales para que el mapa termine de renderizar
+        
+    }, 300);
 }
 
 window.addEventListener('resize', handleOrientationChange);
-window.addEventListener('resize', () => { _lastGLW = 0; _lastGLH = 0; }); // 🔒 fuerza recálculo en resize
 window.addEventListener('orientationchange', handleOrientationChange);
 
     window.addEventListener('beforeunload', () => { 
@@ -3613,62 +3570,81 @@ function initMapMirror() {
 }
 
 async function captureMapToMirror() {
-const now = Date.now();
-if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return;
-if (!miniMapInstance || !mapMirrorCtx) return;
-const mapSlot = document.getElementById('map-container-slot');
-if (!mapSlot || mapSlot.classList.contains('map-hidden') || document.body.classList.contains('hide-map')) return;
-const rect = mapSlot.getBoundingClientRect();
-if (rect.width < 2 || rect.height < 2) return;
-const w = Math.round(rect.width), h = Math.round(rect.height);
-// 🔒 ANTES de tocar el espejo: reunir teselas REALMENTE visibles en el slot
-const tiles = mapSlot.querySelectorAll('img.leaflet-tile');
-const readyTiles = [];
-for (const img of tiles) {
-if (img.complete && img.naturalWidth > 0) {
-const r = img.getBoundingClientRect();
-if (r.width > 1 && r.height > 1 && r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom) readyTiles.push({ img, r });
-}
-}
-// 🔒 Menos de 4 teselas visibles → CONSERVA el último espejo bueno (nunca negro)
-if (readyTiles.length < 4) return;
-lastMapCapture = now;
-if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) { mapMirrorCanvas.width = w; mapMirrorCanvas.height = h; }
-const c = mapMirrorCtx;
-c.clearRect(0, 0, w, h);
-c.fillStyle = '#050505';
-c.fillRect(0, 0, w, h);
-let drawn = 0;
-for (const t of readyTiles) {
-try { c.drawImage(t.img, t.r.left - rect.left, t.r.top - rect.top, t.r.width, t.r.height); drawn++; } catch(e) {}
-}
-if (drawn < 4) return; // 🔒 espejo incompleto: no se publica
-// Recorrido cian
-if (mapPath.length > 1) {
-const sx = rect.width / (mapSlot.offsetWidth || 1), sy = rect.height / (mapSlot.offsetHeight || 1);
-c.strokeStyle = '#00ffff';
-c.lineWidth = 3 * sx;
-c.setLineDash([6 * sx, 6 * sx]);
-c.beginPath();
-for (let i = 0; i < mapPath.length; i++) {
-const p = miniMapInstance.latLngToContainerPoint(mapPath[i]);
-i === 0 ? c.moveTo(p.x * sx, p.y * sy) : c.lineTo(p.x * sx, p.y * sy);
-}
-c.stroke();
-c.setLineDash([]);
-}
-// Emoji del marker
-const markerEl = document.querySelector('.ghost-marker');
-if (markerEl && window._currentGPS) {
-const sx2 = rect.width / (mapSlot.offsetWidth || 1), sy2 = rect.height / (mapSlot.offsetHeight || 1);
-const p = miniMapInstance.latLngToContainerPoint([window._currentGPS.lat, window._currentGPS.lon]);
-c.font = `${Math.round(22 * sx2)}px serif`;
-c.textAlign = 'center';
-c.textBaseline = 'middle';
-c.fillText(markerEl.textContent.trim() || '👻', p.x * sx2, (p.y * sy2) - 4 * sy2);
-}
-mapMirrorGood = true;
-if (typeof rebuildMapSprite === 'function') rebuildMapSprite();
+    const now = Date.now();
+    if (now - lastMapCapture < MAP_CAPTURE_INTERVAL) return;
+    if (!miniMapInstance || !mapMirrorCtx) return;
+    const mapSlot = document.getElementById('map-container-slot');
+    if (!mapSlot || mapSlot.classList.contains('map-hidden') || document.body.classList.contains('hide-map')) return;
+    const rect = mapSlot.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const w = Math.round(rect.width), h = Math.round(rect.height);
+    
+    // Reunir teselas visibles
+    const tiles = mapSlot.querySelectorAll('img.leaflet-tile');
+    const readyTiles = [];
+    for (const img of tiles) {
+        if (img.complete && img.naturalWidth > 0) {
+            const r = img.getBoundingClientRect();
+            if (r.width > 1 && r.height > 1 && r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom) {
+                readyTiles.push({ img, r });
+            }
+        }
+    }
+    
+    lastMapCapture = now;
+    if (mapMirrorCanvas.width !== w || mapMirrorCanvas.height !== h) {
+        mapMirrorCanvas.width = w;
+        mapMirrorCanvas.height = h;
+    }
+    const c = mapMirrorCtx;
+    c.clearRect(0, 0, w, h);
+    
+    if (readyTiles.length > 0) {
+        for (const t of readyTiles) {
+            try {
+                c.drawImage(t.img, t.r.left - rect.left, t.r.top - rect.top, t.r.width, t.r.height);
+            } catch(e) {}
+        }
+        // Dibujar recorrido
+        if (mapPath.length > 1) {
+            const sx = rect.width / (mapSlot.offsetWidth || 1);
+            const sy = rect.height / (mapSlot.offsetHeight || 1);
+            c.strokeStyle = '#00ffff';
+            c.lineWidth = 3 * sx;
+            c.setLineDash([6 * sx, 6 * sx]);
+            c.beginPath();
+            for (let i = 0; i < mapPath.length; i++) {
+                const p = miniMapInstance.latLngToContainerPoint(mapPath[i]);
+                if (i === 0) c.moveTo(p.x * sx, p.y * sy);
+                else c.lineTo(p.x * sx, p.y * sy);
+            }
+            c.stroke();
+            c.setLineDash([]);
+        }
+        // Marcador
+        const markerEl = document.querySelector('.ghost-marker');
+        if (markerEl && window._currentGPS) {
+            const sx2 = rect.width / (mapSlot.offsetWidth || 1);
+            const sy2 = rect.height / (mapSlot.offsetHeight || 1);
+            const p = miniMapInstance.latLngToContainerPoint([window._currentGPS.lat, window._currentGPS.lon]);
+            c.font = `${Math.round(22 * sx2)}px serif`;
+            c.textAlign = 'center';
+            c.textBaseline = 'middle';
+            c.fillText(markerEl.textContent.trim() || '👻', p.x * sx2, (p.y * sy2) - 4 * sy2);
+        }
+    } else {
+        // Sin teselas: mensaje (fondo transparente para que no opaque el video)
+        c.fillStyle = 'rgba(0,0,0,0.5)';
+        c.fillRect(0, 0, w, h);
+        c.fillStyle = '#fff';
+        c.font = '12px sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText('MAPA NO DISPONIBLE', w/2, h/2);
+    }
+    
+    mapMirrorGood = true;
+    if (typeof rebuildMapSprite === 'function') rebuildMapSprite();
 }
 
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
@@ -3830,12 +3806,12 @@ setInterval(() => {
     clearTimeout(loadingTimer);
     
     // 4K a 30 FPS para mejor fluidez y menor consumo
-    const want60 = (navigator.hardwareConcurrency || 4) >= 8; // 🔒 60fps solo con músculo
-const constraintSets = [
-{ audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: want60 ? 60 : 30, max: want60 ? 60 : 30 }, advanced: [{ focusMode: "continuous" }] } },
-{ audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } } },
-{ audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 30 } } }
-];
+    const constraintSets = [
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] } },
+        { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } } },
+        { audio: false, video: { facingMode: { ideal: 'environment' }, frameRate: { ideal: 30 } } }
+    ];
     
     let stream = null; let lastError = null;
     for (let i = 0; i < constraintSets.length; i++) {
@@ -3863,23 +3839,16 @@ const constraintSets = [
     el.video.srcObject = videoStream;
     refreshLiveFilterCache();
     el.video.play().then(() => {}).catch(()=>{});
-    // 🔒 GL solo se inicia cuando el video tiene dimensiones reales (cero redimensionamiento = cero tirón inicial)
-const _waitVideoDims = () => {
-  if (el.video.videoWidth > 0 && el.video.videoHeight > 0) {
-    initGLEngine();
-  } else {
-    requestAnimationFrame(_waitVideoDims);
-  }
-};
-requestAnimationFrame(_waitVideoDims);
+    initGLEngine(); // 🔒 si falla, la app sigue con el fallback 2D anterior
 }    
-updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
-// 🔒 Preload en background: no bloquea el primer render
-if ('requestIdleCallback' in window) {
-  await new Promise(r => requestIdleCallback(() => preloadLocalAssets().then(r), { timeout: 2000 }));
-} else {
-  await new Promise(r => setTimeout(() => preloadLocalAssets().then(r), 100));
-}
+    updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
+// 🔒 Timeout 5s: si falla (offline sin caché), continúa sin bloquear
+await Promise.race([
+preloadLocalAssets(),
+new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+]).catch(e => {
+console.warn('[ASSETS] Preload omitido (timeout o error):', e.message);
+});
 updateProgress(72, "CALIBRANDO MOTOR SLS...");
 updateProgress(80, "CALIBRANDO LIDAR...");
 updateProgress(88, "CALIBRANDO PAREIDOLIA...");
@@ -3916,79 +3885,76 @@ updateProgress(94, "SINCRONIZANDO INTERFAZ...");
             setInterval(telemetryLoop, 2000);
 setInterval(updateClock, 1000); // 🔒 reloj fluido, independiente de la telemetría
             requestAnimationFrame(detectionLoop);
-if (!OBR_NET.offline) { initRTM(); initRemoteMicReceiverAgora(); }
-probeConnectivity().then(ok => { OBR_NET.online = ok; applyOfflineMode(true); }); // auto‑detección silenciosa al entrar
+            initRTM();
+            initRemoteMicReceiverAgora();
         }, 400); // Pequeña pausa dramática al 100%
     }, 500);
 }
     
-    async function detectionLoop() {
-  // === MODO DORMIDO: Si nada está activo, dormimos 1 segundo y limpiamos memoria ===
-  if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
-    if (targetPoses.length) { targetPoses = []; smoothedPoses = []; }
-    if (lidarMask) { lidarMask = null; lastLidarMask = null; }
-    currentPose = null; prevPose = null;
     
-    // Dormimos 1000ms en lugar de 200ms para liberar CPU/GPU completamente
-    setTimeout(detectionLoop, 1000); 
-    return;
-  }
-
-  const now = performance.now();
-  try {
-    let imageDrawnThisFrame = false;
-    const ensureImageDrawn = () => { 
-      if (!imageDrawnThisFrame) { 
-        const vRatio = el.video.videoHeight / el.video.videoWidth; 
-        analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75); 
-        analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height); 
-        imageDrawnThisFrame = true; 
-      } 
-    };
-    
-    if (state.isLidar && segmenter) {
-      if (!lidarBusy) { 
-        lidarBusy = true; 
-        ensureImageDrawn(); 
-        try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; } 
-      }
-    } else if (aiDetector && state.isSLS && now - lastPoseTime > ((navigator.hardwareConcurrency || 4) <= 4 ? 90 : 33)) {
-lastPoseTime = now;
-ensureImageDrawn();
-try {
-let newPoses = await aiDetector.estimatePoses(analysisCanvas, {
-maxPoses: (navigator.hardwareConcurrency || 4) <= 4 ? 3 : 5, // 🔒 gama baja: menos poses = más fluido
-  flipHorizontal: false, 
-  scoreThreshold: AI_SENSITIVITY // 🔒 CRÍTICO: Subido de 0.04 a 0.30. Filtra sombras y ruido.
-});
-        if (newPoses && newPoses.length > 0) {
-          let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
-          targetPoses = filterOverlapping(mappedPoses);
-          if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
-        } else { 
-          targetPoses = []; currentPose = null; smoothedPoses = []; 
-        }
-      } catch(e){}
+async function detectionLoop() {
+    if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
+        if (targetPoses.length) { targetPoses = []; smoothedPoses = []; }
+        if (lidarMask) { lidarMask = null; lastLidarMask = null; }
+        currentPose = null; prevPose = null;
+        setTimeout(detectionLoop, 2000); // 2 segundos en reposo total
+        return;
     }
-  } catch(e) {}
-  
-    // 🔒 THROTTLE ADAPTATIVO: más rápido cuando detecta, más lento en reposo
+
+    const now = performance.now();
+    try {
+        let imageDrawnThisFrame = false;
+        const ensureImageDrawn = () => {
+            if (!imageDrawnThisFrame) {
+                const vRatio = el.video.videoHeight / el.video.videoWidth;
+                analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+                analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+                imageDrawnThisFrame = true;
+            }
+        };
+
+        if (state.isLidar && segmenter) {
+            if (!lidarBusy) {
+                lidarBusy = true;
+                ensureImageDrawn();
+                try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; }
+            }
+        } else if (aiDetector && state.isSLS && now - lastPoseTime > 33) {
+            lastPoseTime = now;
+            ensureImageDrawn();
+            try {
+                let newPoses = await aiDetector.estimatePoses(analysisCanvas, {
+                    maxPoses: 5,
+                    flipHorizontal: false,
+                    scoreThreshold: AI_SENSITIVITY
+                });
+                if (newPoses && newPoses.length > 0) {
+                    let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
+                    targetPoses = filterOverlapping(mappedPoses);
+                    if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
+                } else {
+                    targetPoses = []; currentPose = null; smoothedPoses = [];
+                }
+            } catch(e){}
+        }
+    } catch(e) {}
+
     const aiActive = state.isSLS || state.isLidar || state.isPareidolia;
     const hasDetections = (smoothedPoses && smoothedPoses.length > 0) || (state.isLidar && lidarMask);
-    
     let delay;
     if (!aiActive) {
-        delay = 1000; // 🔒 1s en reposo total (sin IA activa)
+        delay = 2000;
     } else if (hasDetections) {
-        delay = state.isSLS ? 50 : 150; // 🔒 Rápido cuando detecta (SLS: 50ms, LiDAR: 150ms)
+        delay = state.isSLS ? 80 : 200; // un poco más lento que antes
     } else {
-        delay = state.isSLS ? 200 : 400; // 🔒 Lento cuando no detecta nada
+        delay = state.isSLS ? 400 : 800;
     }
-    
+    // En gama baja, aumentar aún más
+    if ((navigator.hardwareConcurrency || 4) <= 4) {
+        delay = Math.min(delay * 1.5, 1500);
+    }
     setTimeout(detectionLoop, delay);
-// 🔒 NO debe haber una } extra aquí
-
-}
+}    
 
     function _ensureAudioContext() {
         if (audioCtx) { evpAudioCtx = audioCtx; return audioCtx; }
@@ -4213,7 +4179,8 @@ maxPoses: (navigator.hardwareConcurrency || 4) <= 4 ? 3 : 5, // 🔒 gama baja: 
         }
     }
 
-    async function toggleAudioScanner() {if (OBR_NET.offline) { showToast('📴 AUDIO SCAN no disponible en OFFLINE', true); return; }
+    async function toggleAudioScanner() {
+      if (OBR_NET.offline) { showToast('📴 AUDIO SCAN no disponible en OFFLINE', true); return; }  // ← PRIMERA línea
     const btnMenu = document.getElementById('btn-audio-menu');
     
     if (state.isAudioScan) {
@@ -4326,9 +4293,15 @@ function executeAudioScanDeactivation(btnMenu) {
     });
 }
     
+// ==========================================================
+// 🎵 AUDIO VISUALIZER OPTIMIZADO (cacheo de texto, menos bins)
+// ==========================================================
+let _userTextCanvas = null, _userTextCtx = null, _lastUserText = '';
+let _evpTextCanvas = null, _evpTextCtx = null, _lastEvpText = '';
+
 
 function drawAudioVisualizer(c, w, h) {
-    if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
+   if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
     audioAnalyser.getByteTimeDomainData(audioDataArray);
     const bufferLength = audioAnalyser.frequencyBinCount;
     let minVal = 255, maxVal = 0, rmsSum = 0, currentMaxVolume = 0;
@@ -4360,33 +4333,33 @@ function drawAudioVisualizer(c, w, h) {
     cumulativeEVPEnergy *= 0.93;
     cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
 
-    // 🔒 LAYOUT ADAPTATIVO REAL (usa el tamaño REAL del canvas, no 1920 fijo)
+    // LAYOUT ADAPTATIVO
     const isPortrait = h > w;
     let screenScale, waveHeight, bottomY, displayWidth, startX, textFS, evpFS;
     if (isPortrait) {
-// 🔒 Con EVP activo el mapa se oculta por CSS → la gráfica ocupa ese hueco
-const leftSpace = 20, rightSpace = 20;
-displayWidth = Math.max(110, w - leftSpace - rightSpace);
-startX = leftSpace + ((w - leftSpace - rightSpace) - displayWidth) / 2;
-bottomY = h - 34;
-waveHeight = 28;                  // 🔒 +8%
-textFS = 10.8;                    // 🔒 +8%
-evpFS = 11.9;                     // 🔒 +8%
-screenScale = 1;
-} else {
+        const leftSpace = 20, rightSpace = 20;
+        displayWidth = Math.max(110, w - leftSpace - rightSpace);
+        startX = leftSpace + ((w - leftSpace - rightSpace) - displayWidth) / 2;
+        bottomY = h - 34;
+        waveHeight = 28;
+        textFS = 10.8;
+        evpFS = 11.9;
+        screenScale = 1;
+    } else {
         screenScale = Math.max(1.2, Math.min(4, 1920 / (w || 1920)));
         displayWidth = w * 0.465;
         startX = (w - displayWidth) / 2;
         bottomY = h * 0.88;
         waveHeight = 55 * screenScale;
-        textFS = Math.round(13 * screenScale * 1.08); // 🔒 +8%
-evpFS = Math.round(14 * screenScale * 1.08);  // 🔒 +8%
+        textFS = Math.round(13 * screenScale * 1.08);
+        evpFS = Math.round(14 * screenScale * 1.08);
     }
-    const visualBins = isPortrait ? 48 : (w < 600 ? 64 : 128);
+    const visualBins = isPortrait ? 32 : (w < 600 ? 48 : 80); // reducido
     const step = Math.max(1, Math.floor(bufferLength / visualBins));
     const sliceW = displayWidth / visualBins;
     const nowAnim = performance.now();
 
+    // Generar picos simulados (solo si hablando)
     if (isSpookySpeaking || isTtsPlaying) {
         const env = (Math.sin(nowAnim * 0.005) + 1) * 0.5;
         const env2 = (Math.sin(nowAnim * 0.0031) + 1) * 0.5;
@@ -4419,12 +4392,12 @@ evpFS = Math.round(14 * screenScale * 1.08);  // 🔒 +8%
     const rawYValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         let v = (audioDataArray[i * step] / 128.0) - 1;
-if (isSpookySpeaking || isTtsPlaying) {
-v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
-}
-if (isHardwareDead) v += Math.sin(nowAnim * 0.002 + i * 0.35) * 0.03; // 🔒 respiración de reposo: la gráfica nunca parece muerta
-rawYValues[i] = v;
-}
+        if (isSpookySpeaking || isTtsPlaying) {
+            v = v * 0.7 + (Math.random() > 0.5 ? simulatedPikes[i] : -simulatedPikes[i]) * 0.5;
+        }
+        if (isHardwareDead) v += Math.sin(nowAnim * 0.002 + i * 0.35) * 0.03;
+        rawYValues[i] = v;
+    }
     const yValues = new Float32Array(visualBins);
     for (let i = 0; i < visualBins; i++) {
         const prev = i > 0 ? rawYValues[i-1] : 0;
@@ -4464,7 +4437,7 @@ rawYValues[i] = v;
     }
     c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = Math.max(1, screenScale * 1.5); c.stroke();
 
-    // ===== TEXTO DEL USUARIO (centrado, tamaño pequeño) =====
+    // ===== TEXTO DEL USUARIO (cacheado) =====
     if (window._liveUserText && window._liveUserLastUpdate) {
         const timeSinceUpdate = Date.now() - window._liveUserLastUpdate;
         if (timeSinceUpdate < 3000) {
@@ -4475,17 +4448,17 @@ rawYValues[i] = v;
             const maxWords = isPortrait ? 4 : 8;
             if (userWords.length > maxWords) displayUserText = userWords.slice(-maxWords).join(' ');
             const userLabel = displayUserText.toUpperCase();
-            if (!window._userTextCanvas) {
-                window._userTextCanvas = document.createElement('canvas');
-                window._userTextCtx = window._userTextCanvas.getContext('2d', { willReadFrequently: true });
-                window._lastRenderedUserText = "";
+
+            if (!_userTextCanvas) {
+                _userTextCanvas = document.createElement('canvas');
+                _userTextCtx = _userTextCanvas.getContext('2d', { willReadFrequently: true });
             }
-            const uCanv = window._userTextCanvas, uCtx = window._userTextCtx;
+            const uCanv = _userTextCanvas, uCtx = _userTextCtx;
             c.font = `bold ${textFS}px 'Share Tech Mono'`;
             const txtW = c.measureText(userLabel).width;
             if (txtW > 0) {
                 const reqW = Math.ceil(txtW + textFS * 4), reqH = Math.ceil(textFS * 4);
-                if (userLabel !== window._lastRenderedUserText || uCanv.width !== reqW || uCanv.height !== reqH) {
+                if (userLabel !== _lastUserText || uCanv.width !== reqW || uCanv.height !== reqH) {
                     uCanv.width = reqW; uCanv.height = reqH;
                     uCtx.clearRect(0, 0, reqW, reqH);
                     uCtx.font = `bold ${textFS}px 'Share Tech Mono'`;
@@ -4496,7 +4469,7 @@ rawYValues[i] = v;
                     uCtx.fillText(userLabel, reqW/2, reqH/2);
                     uCtx.shadowBlur = (isPortrait ? 4 : 10 * screenScale);
                     uCtx.fillText(userLabel, reqW/2, reqH/2);
-                    window._lastRenderedUserText = userLabel;
+                    _lastUserText = userLabel;
                 }
                 const uY = bottomY - waveHeight - (isPortrait ? 24 : 80 * screenScale);
                 c.drawImage(uCanv, (w / 2) - (reqW / 2), uY - (reqH / 2));
@@ -4505,22 +4478,21 @@ rawYValues[i] = v;
         }
     }
 
-    // ===== TEXTO EVP (centrado, tamaño pequeño) =====
+    // ===== TEXTO EVP (cacheado) =====
     if (lastSpokenText) {
         const label = lastSpokenText.toUpperCase();
         c.save();
         c.globalAlpha = 0.85;
-        if (!window._evpTextCanvas) {
-            window._evpTextCanvas = document.createElement('canvas');
-            window._evpTextCtx = window._evpTextCanvas.getContext('2d', { willReadFrequently: true });
-            window._lastRenderedEvpText = "";
+        if (!_evpTextCanvas) {
+            _evpTextCanvas = document.createElement('canvas');
+            _evpTextCtx = _evpTextCanvas.getContext('2d', { willReadFrequently: true });
         }
-        const tCanv = window._evpTextCanvas, tCtx = window._evpTextCtx;
+        const tCanv = _evpTextCanvas, tCtx = _evpTextCtx;
         c.font = `bold ${evpFS}px 'Share Tech Mono'`;
         const txtW = c.measureText(label).width;
         if (txtW > 0) {
             const reqW = Math.ceil(txtW + evpFS * 4), reqH = Math.ceil(evpFS * 3);
-            if (label !== window._lastRenderedEvpText || tCanv.width !== reqW || tCanv.height !== reqH) {
+            if (label !== _lastEvpText || tCanv.width !== reqW || tCanv.height !== reqH) {
                 tCanv.width = reqW; tCanv.height = reqH;
                 tCtx.clearRect(0, 0, reqW, reqH);
                 tCtx.font = `bold ${evpFS}px 'Share Tech Mono'`;
@@ -4541,7 +4513,7 @@ rawYValues[i] = v;
                 }
                 tCtx.restore();
                 tCtx.globalCompositeOperation = "source-over";
-                window._lastRenderedEvpText = label;
+                _lastEvpText = label;
             }
             const evpY = bottomY - waveHeight - (isPortrait ? 8 : 30 * screenScale);
             c.drawImage(tCanv, (w / 2) - (reqW / 2), evpY - (reqH / 2));
@@ -4606,6 +4578,7 @@ rawYValues[i] = v;
     }
 }
 
+
  function getAudioBins() {
         if (!audioAnalyser || !audioDataArray) return [];
         audioAnalyser.getByteTimeDomainData(audioDataArray);
@@ -4622,7 +4595,7 @@ rawYValues[i] = v;
     
 
 // ==========================================================
-// 👻 LIDAR ESPECTRAL v4 — buffers con aspect de pantalla (sin aplastado)
+// 👻 LIDAR ESPECTRAL v5 — OPTIMIZADO (64x64, 2 frames en gama baja)
 // ==========================================================
 const lfxMaskC = document.createElement('canvas');
 const lfxMaskX = lfxMaskC.getContext('2d', { willReadFrequently: true });
@@ -4633,237 +4606,263 @@ const lfxTintX = lfxTintC.getContext('2d');
 const lfxRimC = document.createElement('canvas');
 const lfxRimX = lfxRimC.getContext('2d');
 let lfxLum = null, lfxLumPrev = null, lfxLumN = 0;
-let lfxAlpha = null, lfxLabels = null;
 const lfxSpark = new Float32Array(96); let lfxSparkI = 0;
-const LFX = { coverage:0, perturb:0, cx:.5, cy:.4, topY:.12, personH:.7, footX:.5, footY:.85, hasPerson:false, hasFeet:false, vortex:0, vx:.5, vy:.5, rot:0, motion:0, comps:[] };
+const LFX = { coverage:0, perturb:0, cx:.5, cy:.4, topY:.12, personH:.7, footX:.5, footY:.85, hasPerson:false, hasFeet:false, vortex:0, vx:.5, vy:.5, rot:0, motion:0 };
+let _lidarFrameSkip = 0; // para alternar frames
 
 function drawLidarEffect(c, width, height, currentFrame) {
-const isHighEnd = (navigator.hardwareConcurrency || 4) >= 6;
-const u = Math.max(1, Math.min(width, height) / 420);
-const maskToUse = lidarMask || lastLidarMask;
-const src = (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
-const hasSrc = !!src && (src.videoWidth || src.width) > 2;
-// 0) Fondo atenuado
-c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.filter = 'none';
-c.fillStyle = '#04060a'; c.fillRect(0, 0, width, height);
-if (hasSrc) {
-const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
-const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
-c.save(); c.globalAlpha = 0.5;
-c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)';
-c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
-c.restore(); c.filter = 'none'; c.globalAlpha = 1;
+    const isHighEnd = (navigator.hardwareConcurrency || 4) >= 6;
+    // En gama baja/media, procesamos solo cada 2 frames
+    if (!isHighEnd) {
+        _lidarFrameSkip = (_lidarFrameSkip + 1) % 2;
+        if (_lidarFrameSkip !== 0 && !isRecordingActive) return;
+    }
+
+    const maskToUse = lidarMask || lastLidarMask;
+    const src = (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
+    const hasSrc = !!src && (src.videoWidth || src.width) > 2;
+
+    // ── 0) Fondo: video atenuado (la escena se ve, no negro total) ──
+    c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.filter = 'none';
+    c.fillStyle = '#04060a'; c.fillRect(0, 0, width, height);
+    if (hasSrc) {
+        const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
+        const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
+        c.save(); c.globalAlpha = 0.5;
+        c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)';
+        c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
+        c.restore(); c.filter = 'none'; c.globalAlpha = 1;
+    }
+
+    // ── 1) Buffers con aspect EXACTO de pantalla → NUNCA se aplasta al rotar ──
+    const BH = 64;  // 🔒 reducido de 128 a 64
+    const BW = Math.max(32, Math.min(112, Math.round(BH * width / height)));
+    if (lfxMaskC.width !== BW || lfxMaskC.height !== BH) {
+        [lfxMaskC, lfxReliefC, lfxTintC, lfxRimC].forEach(cv => { cv.width = BW; cv.height = BH; });
+        lfxLum = null; lfxLumPrev = null;
+    }
+
+    // ── 2) Máscara en COVER al buffer ──
+    if (maskToUse) {
+        const mw = maskToUse.width || 96, mh = maskToUse.height || 72;
+        const sc2 = Math.max(BW/mw, BH/mh), dW2 = mw*sc2, dH2 = mh*sc2;
+        lfxMaskX.clearRect(0, 0, BW, BH);
+        lfxMaskX.drawImage(maskToUse, (BW-dW2)/2, (BH-dH2)/2, dW2, dH2);
+    }
+
+    // ── 3) RELIEVE CIAN (solo si hay video) ──
+    if (hasSrc) {
+        const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
+        const sc3 = Math.max(BW/sw, BH/sh), dW3 = sw*sc3, dH3 = sh*sc3;
+        lfxReliefX.clearRect(0, 0, BW, BH);
+        lfxReliefX.drawImage(src, (BW-dW3)/2, (BH-dH3)/2, dW3, dH3);
+        const img = lfxReliefX.getImageData(0, 0, BW, BH);
+        const d = img.data; const n = BW*BH;
+        if (!lfxLum || lfxLumN !== n) { lfxLum = new Float32Array(n); lfxLumPrev = new Float32Array(n); lfxLumN = n; }
+        // Calcular luminancia y movimiento en un solo paso
+        let mSum = 0, mX = 0, mY = 0;
+        for (let i = 0; i < n; i++) {
+            const idx = i*4;
+            const lum = (d[idx]*0.299 + d[idx+1]*0.587 + d[idx+2]*0.114) / 255;
+            lfxLum[i] = lum;
+            const df = Math.abs(lum - lfxLumPrev[i]);
+            if (df > 0.06) { mSum += df; mX += (i % BW)*df; mY += ((i / BW)|0)*df; }
+        }
+        LFX.motion += (Math.min(1, mSum*10) - LFX.motion)*0.3;
+        if (mSum > 0.02) { LFX.vx = mX/mSum/BW; LFX.vy = mY/mSum/BH; }
+        // Generar relieve en el mismo buffer
+        for (let y = 1; y < BH-1; y++) for (let x = 1; x < BW-1; x++) {
+            const i = y*BW + x;
+            const l = lfxLum[i];
+            const gx = lfxLum[i+1] - lfxLum[i-1];
+            const gy = lfxLum[i+BW] - lfxLum[i-BW];
+            const shade = Math.max(0, Math.min(1, 0.25 + l*0.45 + gx*1.8 + gy*1.2));
+            const idx = i*4;
+            d[idx]   = 10 + 40*l;
+            d[idx+1] = 60 + 195*shade;
+            d[idx+2] = 90 + 165*shade;
+            d[idx+3] = 255;
+        }
+        lfxReliefX.putImageData(img, 0, 0);
+        const tmp = lfxLumPrev; lfxLumPrev = lfxLum; lfxLum = tmp;
+    }
+
+    // ── 4) Análisis de la máscara (cobertura, pies, centro) ──
+    if (maskToUse) {
+        const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
+        let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
+        for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) {
+            const a = md[(y*BW+x)*4+3];
+            if (a > 110) { acc++; if (topY < 0) topY = y; botY = y; sx += x; }
+        }
+        const coverage = acc / (BW*BH);
+        const hasPerson = coverage > 0.02 && (botY - topY) > BH*0.2;
+        if (hasPerson) {
+            for (let y = Math.max(topY, botY-6); y <= botY; y++) for (let x = 0; x < BW; x++) {
+                if (md[(y*BW+x)*4+3] > 110) { footN++; footSX += x; }
+            }
+            LFX.coverage += (coverage - LFX.coverage)*0.3;
+            LFX.cx += (sx/acc/BW - LFX.cx)*0.3;
+            LFX.topY += (topY/BH - LFX.topY)*0.3;
+            LFX.personH += ((botY-topY)/BH - LFX.personH)*0.3;
+            LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX)*0.3;
+            LFX.footY += (botY/BH - LFX.footY)*0.3;
+            LFX.hasFeet = footN >= 8 && botY < BH - 3;
+        } else { LFX.coverage += (coverage - LFX.coverage)*0.3; LFX.hasFeet = false; }
+        LFX.hasPerson = hasPerson;
+    }
+    LFX.perturb += ((LFX.hasPerson ? 1 : 0) - LFX.perturb)*0.08;
+    LFX.vortex  += (((LFX.motion > 0.22 && !LFX.hasPerson) ? 1 : 0) - LFX.vortex)*0.15;
+
+    // ── 5) Silueta: relieve cian recortado por máscara + rim naranja ──
+    if (maskToUse && LFX.hasPerson) {
+        lfxTintX.clearRect(0, 0, BW, BH);
+        lfxTintX.drawImage(lfxMaskC, 0, 0);
+        lfxTintX.globalCompositeOperation = 'source-in';
+        lfxTintX.drawImage(lfxReliefC, 0, 0);
+        lfxTintX.globalCompositeOperation = 'source-over';
+
+        lfxRimX.clearRect(0, 0, BW, BH);
+        for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+            if (ox || oy) lfxRimX.drawImage(lfxMaskC, ox, oy, BW, BH);
+        }
+        lfxRimX.globalCompositeOperation = 'source-in';
+        lfxRimX.fillStyle = 'rgba(255,170,50,1)'; lfxRimX.fillRect(0, 0, BW, BH);
+        lfxRimX.globalCompositeOperation = 'destination-out';
+        lfxRimX.drawImage(lfxMaskC, 0, 0, BW, BH);
+        lfxRimX.globalCompositeOperation = 'source-over';
+
+        c.save();
+        c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+        c.globalCompositeOperation = 'screen';
+        c.globalAlpha = 0.92; c.drawImage(lfxTintC, 0, 0, width, height);
+        c.globalCompositeOperation = 'lighter';
+        if (isHighEnd) { c.shadowColor = 'rgba(255,140,20,0.8)'; c.shadowBlur = 10; }
+        c.globalAlpha = 0.8; c.drawImage(lfxRimC, 0, 0, width, height);
+        c.shadowBlur = 0;
+        c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height);
+        c.restore(); c.globalAlpha = 1;
+
+        // Anillos (cian)
+        const rx = LFX.cx*width, ry = (LFX.topY + LFX.personH*0.18)*height;
+        const R = Math.max(30, LFX.personH*height*0.30);
+        LFX.rot += 0.03;
+        c.save();
+        c.strokeStyle = 'rgba(0,240,255,0.5)'; c.lineWidth = Math.max(1.2, width*0.0016);
+        c.beginPath(); c.arc(rx, ry, R, 0, Math.PI*2); c.stroke();
+        c.strokeStyle = 'rgba(0,240,255,0.25)';
+        c.beginPath(); c.arc(rx, ry, R*1.12, 0, Math.PI*2); c.stroke();
+        c.strokeStyle = 'rgba(0,255,255,0.9)'; c.lineWidth = Math.max(2, width*0.0026);
+        c.beginPath(); c.arc(rx, ry, R, LFX.rot, LFX.rot+1.1); c.stroke();
+        c.beginPath(); c.arc(rx, ry, R, LFX.rot+Math.PI, LFX.rot+Math.PI+1.1); c.stroke();
+        c.restore();
+
+        if (LFX.hasFeet) {
+            const fx = LFX.footX*width, fy = LFX.footY*height, rw = Math.max(26, width*0.10);
+            c.save();
+            c.strokeStyle = 'rgba(0,255,255,0.6)'; c.lineWidth = Math.max(1.2, width*0.0016);
+            c.beginPath(); c.ellipse(fx, fy, rw, rw*0.22, 0, 0, Math.PI*2); c.stroke();
+            c.strokeStyle = 'rgba(0,255,255,0.35)';
+            c.beginPath(); c.ellipse(fx, fy, rw*1.5, rw*0.33, 0, 0, Math.PI*2); c.stroke();
+            c.strokeStyle = 'rgba(0,255,255,0.18)';
+            c.beginPath(); c.ellipse(fx, fy, rw*2.1, rw*0.46, 0, 0, Math.PI*2); c.stroke();
+            c.restore();
+        }
+    }
+
+    // Vórtice (sin cambios)
+    if (LFX.vortex > 0.35) {
+        const vx = LFX.vx*width, vy = LFX.vy*height;
+        const VR = Math.min(width, height)*0.12*(1 + 0.08*Math.sin(currentFrame*0.3));
+        const blink = 0.4 + 0.5*Math.abs(Math.sin(currentFrame*0.25));
+        c.save();
+        c.strokeStyle = `rgba(255,80,80,${blink})`; c.setLineDash([8,6]); c.lineWidth = 2;
+        c.beginPath(); c.arc(vx, vy, VR, 0, Math.PI*2); c.stroke(); c.setLineDash([]);
+        c.restore();
+    }
+
+    // ── 6) HUD — paleta ÚNICA rojo/ámbar (idéntica en vertical y horizontal) ──
+    const u = Math.max(1, Math.min(width, height) / 420);
+    const fs = Math.round(11*u), fsB = Math.round(13*u), fsT = Math.round(14*u);
+    const LT = 'rgba(255,86,86,';   // etiquetas
+    const VL = 'rgba(255,196,96,';  // valores
+    const dens = Math.min(99, Math.round(LFX.coverage*220));
+    const clase = Math.max(1, Math.min(5, 1 + Math.floor(dens/20)));
+    const senal = Math.min(100, Math.round(60 + LFX.coverage*300 + LFX.motion*20));
+    c.save(); c.textBaseline = 'top';
+    const banner = LFX.perturb > 0.5 ? 'PERTURBACIÓN VISUAL DETECTADA' : 'ANALIZANDO ENTORNO';
+    const bCol = LFX.perturb > 0.5 ? '255,60,60' : '255,170,60';
+    c.font = `bold ${fsT}px 'Share Tech Mono', monospace`;
+    const bw = c.measureText(banner).width + 28*u, bx = (width-bw)/2, by = 8*u;
+    c.strokeStyle = `rgba(${bCol},0.9)`; c.lineWidth = Math.max(1, u);
+    c.strokeRect(bx, by, bw, fsT + 10*u);
+    c.fillStyle = `rgba(${bCol},1)`; c.textAlign = 'center';
+    c.fillText(banner, width/2, by + 5*u); c.textAlign = 'left';
+
+    const line2 = (lab, val, x, y, vCol) => {
+        c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
+        c.fillStyle = LT + '0.95)'; c.fillText(lab, x, y);
+        const wl = c.measureText(lab).width;
+        c.fillStyle = vCol; c.fillText(val, x + wl + 5*u, y);
+    };
+    const ly = by + fsT + 20*u, lx = 10*u, rx2 = width - 10*u;
+    line2('FLASH: ', 'ON', lx, ly, VL + '1)');
+    line2('RANGO: ', (8 - LFX.coverage*6).toFixed(1) + 'm', lx, ly + fs*1.6, VL + '1)');
+    line2('DENSIDAD: ', dens + '%' + (dens > 60 ? ' (CRÍTICO)' : ''), lx, ly + fs*3.2, dens > 60 ? 'rgba(255,60,60,1)' : VL + '1)');
+
+    const lineR = (lab, val, y, vCol, big) => {
+        c.font = `bold ${big ? fsB : fs}px 'Share Tech Mono', monospace`;
+        const wv = c.measureText(val).width;
+        c.fillStyle = vCol; c.fillText(val, rx2 - wv, y);
+        c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
+        const wl = c.measureText(lab).width;
+        c.fillStyle = LT + '0.95)'; c.fillText(lab, rx2 - wv - 5*u - wl, y);
+    };
+    lineR('TIPO DE ANOMALÍA: ', 'CLASE ' + clase, ly, VL + '1)', true);
+    lineR('FUERZA DE SEÑAL: ', senal + '%', ly + fs*1.9, VL + '1)', false);
+    c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
+    c.fillStyle = LT + '0.95)';
+    const lm = 'RASTREO DE MOVIMIENTO'; c.fillText(lm, rx2 - c.measureText(lm).width, ly + fs*3.5);
+
+    const by2 = height - fs*5.2;
+    line2('VECTOR PATH_01: ', 'MEJORADO', lx, by2, VL + '1)');
+    line2('VARIANZA TEMP: ', (-2 - LFX.coverage*8).toFixed(1) + '°C', lx, by2 + fs*1.6, VL + '1)');
+    line2('VOLUMEN MAPEADO: ', (5 + LFX.coverage*60).toFixed(1) + ' m³', lx, by2 + fs*3.2, VL + '1)');
+
+    // ── 7) FRECUENCIA EN VIVO (con audio real) ──
+    let lvl = LFX.motion;
+    if (typeof audioAnalyser !== 'undefined' && audioAnalyser && audioDataArray) {
+        audioAnalyser.getByteTimeDomainData(audioDataArray);
+        let s = 0, cnt = 0;
+        for (let i = 0; i < audioDataArray.length; i += 8) { s += Math.abs(audioDataArray[i]-128); cnt++; }
+        lvl = Math.max(lvl, Math.min(1, (s/cnt)/45));
+    }
+    lfxSpark[lfxSparkI++ % 96] = lvl;
+    const gw = Math.min(width*0.42, 240*u), gh = Math.round(fs*3.2);
+    const gx0 = width - 10*u - gw, gy0 = height - 10*u - gh;
+    lineR('FRECUENCIA EN VIVO: ', (lvl*8).toFixed(1) + ' m²', gy0 - fs*1.5, VL + '1)', false);
+    c.fillStyle = 'rgba(30,0,0,0.55)'; c.fillRect(gx0, gy0, gw, gh);
+    c.strokeStyle = LT + '0.8)'; c.lineWidth = 1; c.strokeRect(gx0, gy0, gw, gh);
+    c.strokeStyle = 'rgba(255,86,86,0.15)';
+    for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(gx0, gy0 + (gh/4)*i); c.lineTo(gx0+gw, gy0 + (gh/4)*i); c.stroke(); }
+    c.beginPath();
+    for (let i = 0; i < 96; i++) {
+        const v = lfxSpark[(lfxSparkI + i) % 96];
+        const jit = Math.sin(currentFrame*0.35 + i*0.7) * 0.035;
+        const yy = gy0 + gh - 2 - Math.max(0, Math.min(1, v + jit)) * (gh - 4);
+        const xx = gx0 + (i/95)*gw;
+        i ? c.lineTo(xx, yy) : c.moveTo(xx, yy);
+    }
+    c.strokeStyle = VL + '1)'; c.lineWidth = Math.max(1.2, u);
+    if (isHighEnd) { c.shadowColor = 'rgba(255,150,50,0.7)'; c.shadowBlur = 6; }
+    c.stroke(); c.shadowBlur = 0;
+    c.lineTo(gx0+gw, gy0+gh); c.lineTo(gx0, gy0+gh); c.closePath();
+    c.fillStyle = 'rgba(255,120,50,0.12)'; c.fill();
+    const curX = gx0 + ((currentFrame % 96)/95)*gw;
+    c.strokeStyle = 'rgba(255,220,150,0.5)'; c.beginPath(); c.moveTo(curX, gy0); c.lineTo(curX, gy0+gh); c.stroke();
+    c.restore();
 }
-// 1) Buffers con aspect de pantalla
-const BH = 128;
-const BW = Math.max(64, Math.min(224, Math.round(BH * width / height)));
-if (lfxMaskC.width !== BW || lfxMaskC.height !== BH) {
-[lfxMaskC, lfxReliefC, lfxTintC, lfxRimC].forEach(cv => { cv.width = BW; cv.height = BH; });
-lfxLum = null; lfxLumPrev = null;
-}
-const doProc = isHighEnd || (currentFrame % 2 === 0);
-// 2) Máscara COVER
-if (maskToUse) {
-const mw = maskToUse.width || 96, mh = maskToUse.height || 72;
-const sc2 = Math.max(BW/mw, BH/mh), dW2 = mw*sc2, dH2 = mh*sc2;
-lfxMaskX.clearRect(0, 0, BW, BH);
-lfxMaskX.drawImage(maskToUse, (BW-dW2)/2, (BH-dH2)/2, dW2, dH2);
-}
-// 3) RELIEVE CIAN + motion
-if (hasSrc && doProc) {
-const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
-const sc3 = Math.max(BW/sw, BH/sh), dW3 = sw*sc3, dH3 = sh*sc3;
-lfxReliefX.drawImage(src, (BW-dW3)/2, (BH-dH3)/2, dW3, dH3);
-const img = lfxReliefX.getImageData(0, 0, BW, BH);
-const d = img.data; const n = BW*BH;
-if (!lfxLum || lfxLumN !== n) { lfxLum = new Float32Array(n); lfxLumPrev = new Float32Array(n); lfxLumN = n; }
-for (let i = 0; i < n; i++) lfxLum[i] = (d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114) / 255;
-let mSum = 0, mX = 0, mY = 0;
-for (let i = 0; i < n; i++) {
-const df = Math.abs(lfxLum[i] - lfxLumPrev[i]);
-if (df > 0.06) { mSum += df; mX += (i % BW)*df; mY += ((i / BW)|0)*df; }
-}
-LFX.motion += (Math.min(1, mSum*10) - LFX.motion)*0.3;
-if (mSum > 0.02) { LFX.vx = mX/mSum/BW; LFX.vy = mY/mSum/BH; }
-for (let y = 1; y < BH-1; y++) for (let x = 1; x < BW-1; x++) {
-const i = y*BW + x;
-const l = lfxLum[i];
-const gx = lfxLum[i+1] - lfxLum[i-1];
-const gy = lfxLum[i+BW] - lfxLum[i-BW];
-const shade = Math.max(0, Math.min(1, 0.25 + l*0.45 + gx*1.8 + gy*1.2));
-d[i*4] = 10 + 40*l; d[i*4+1] = 60 + 195*shade; d[i*4+2] = 90 + 165*shade; d[i*4+3] = 255;
-}
-lfxReliefX.putImageData(img, 0, 0);
-const tmp = lfxLumPrev; lfxLumPrev = lfxLum; lfxLum = tmp;
-}
-// 4) Análisis multi-entidad
-if (maskToUse && doProc) {
-const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
-let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
-for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) {
-const a = md[(y*BW+x)*4+3];
-if (a > 110) { acc++; if (topY < 0) topY = y; botY = y; sx += x; }
-}
-const coverage = acc / (BW*BH);
-const hasPerson = coverage > 0.02 && (botY - topY) > BH*0.2;
-if (hasPerson) {
-for (let y = Math.max(topY, botY-6); y <= botY; y++) for (let x = 0; x < BW; x++) {
-if (md[(y*BW+x)*4+3] > 110) { footN++; footSX += x; }
-}
-LFX.coverage += (coverage - LFX.coverage)*0.3;
-LFX.cx += (sx/acc/BW - LFX.cx)*0.3;
-LFX.topY += (topY/BH - LFX.topY)*0.3;
-LFX.personH += ((botY-topY)/BH - LFX.personH)*0.3;
-LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX)*0.3;
-LFX.footY += (botY/BH - LFX.footY)*0.3;
-LFX.hasFeet = footN >= 8 && botY < BH - 3;
-} else { LFX.coverage += (coverage - LFX.coverage)*0.3; LFX.hasFeet = false; }
-LFX.hasPerson = hasPerson;
-}
-LFX.perturb += ((LFX.hasPerson ? 1 : 0) - LFX.perturb)*0.08;
-LFX.vortex  += (((LFX.motion > 0.22 && !LFX.hasPerson) ? 1 : 0) - LFX.vortex)*0.15;
-// 5) Silueta cian + rim (UNA sola pasada = menos recursos)
-if (maskToUse && LFX.hasPerson) {
-lfxTintX.clearRect(0, 0, BW, BH);
-lfxTintX.drawImage(lfxMaskC, 0, 0);
-lfxTintX.globalCompositeOperation = 'source-in';
-lfxTintX.drawImage(lfxReliefC, 0, 0);
-lfxTintX.globalCompositeOperation = 'source-over';
-lfxRimX.clearRect(0, 0, BW, BH);
-for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-if (ox || oy) lfxRimX.drawImage(lfxMaskC, ox, oy, BW, BH);
-}
-lfxRimX.globalCompositeOperation = 'source-in';
-lfxRimX.fillStyle = 'rgba(255,170,50,1)'; lfxRimX.fillRect(0, 0, BW, BH);
-lfxRimX.globalCompositeOperation = 'destination-out';
-lfxRimX.drawImage(lfxMaskC, 0, 0, BW, BH); // hueca el interior → solo queda el anillo
-lfxRimX.globalCompositeOperation = 'source-over';
-c.save();
-c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-c.globalCompositeOperation = 'screen';
-c.globalAlpha = 0.92; c.drawImage(lfxTintC, 0, 0, width, height);
-c.globalCompositeOperation = 'lighter';
-if (isHighEnd) { c.shadowColor = 'rgba(255,140,20,0.85)'; c.shadowBlur = 12; }
-c.globalAlpha = 0.9; c.drawImage(lfxRimC, 0, 0, width, height);
-c.restore(); c.globalAlpha = 1;
-// 🔒 CÍRCULO DE ANÁLISIS SOBRE LA CABEZA + etiqueta ENTIDAD n (SIN recuadro de cuerpo)
-LFX.rot += 0.03;
-for (let i = 0; i < LFX.comps.length; i++) {
-const cp = LFX.comps[i];
-const hx = cp.cx * width;
-const hy = (cp.y + cp.h * 0.14) * height;
-const R = Math.max(22, cp.h * height * 0.16);
-c.save();
-if (i === 0) {
-c.strokeStyle = 'rgba(0,240,255,0.5)'; c.lineWidth = Math.max(1.2, width*0.0016);
-c.beginPath(); c.arc(hx, hy, R, 0, Math.PI*2); c.stroke();
-c.strokeStyle = 'rgba(0,255,255,0.9)'; c.lineWidth = Math.max(2, width*0.0026);
-c.beginPath(); c.arc(hx, hy, R, LFX.rot, LFX.rot+1.1); c.stroke();
-c.beginPath(); c.arc(hx, hy, R, LFX.rot+Math.PI, LFX.rot+Math.PI+1.1); c.stroke();
-} else {
-c.strokeStyle = 'rgba(0,220,255,0.55)'; c.lineWidth = Math.max(1.2, width*0.0016);
-c.beginPath(); c.arc(hx, hy, R, 0, Math.PI*2); c.stroke();
-}
-c.font = `bold ${Math.round(10*u)}px 'Share Tech Mono', monospace`;
-c.fillStyle = 'rgba(0,255,255,0.9)';
-c.textAlign = 'center';
-c.fillText('ENTIDAD ' + (i+1), hx, hy - R - 6*u);
-c.textAlign = 'left';
-c.restore();
-}
-// Ondas de pies SOLO con pies detectados
-if (LFX.hasFeet) {
-const fx = LFX.footX*width, fy = LFX.footY*height, rw = Math.max(26, width*0.10);
-c.save();
-c.strokeStyle = 'rgba(0,255,255,0.6)'; c.lineWidth = Math.max(1.2, width*0.0016);
-c.beginPath(); c.ellipse(fx, fy, rw, rw*0.22, 0, 0, Math.PI*2); c.stroke();
-c.strokeStyle = 'rgba(0,255,255,0.35)';
-c.beginPath(); c.ellipse(fx, fy, rw*1.5, rw*0.33, 0, 0, Math.PI*2); c.stroke();
-c.restore();
-}
-}
-// Vórtice
-if (LFX.vortex > 0.35) {
-const vx = LFX.vx*width, vy = LFX.vy*height;
-const VR = Math.min(width, height)*0.12*(1 + 0.08*Math.sin(currentFrame*0.3));
-const blink = 0.4 + 0.5*Math.abs(Math.sin(currentFrame*0.25));
-c.save();
-c.strokeStyle = `rgba(255,80,80,${blink})`; c.setLineDash([8,6]); c.lineWidth = 2;
-c.beginPath(); c.arc(vx, vy, VR, 0, Math.PI*2); c.stroke(); c.setLineDash([]);
-c.restore();
-}
-// HUD (paleta única rojo/ámbar)
-const fs = Math.round(11*u), fsB = Math.round(13*u), fsT = Math.round(14*u);
-const LT = 'rgba(255,86,86,'; const VL = 'rgba(255,196,96,';
-const dens = Math.min(99, Math.round(LFX.coverage*220));
-const clase = Math.max(1, Math.min(5, 1 + Math.floor(dens/20)));
-const senal = Math.min(100, Math.round(60 + LFX.coverage*300 + LFX.motion*20));
-c.save(); c.textBaseline = 'top';
-const banner = LFX.perturb > 0.5 ? 'PERTURBACIÓN VISUAL DETECTADA' : 'ANALIZANDO ENTORNO';
-const bCol = LFX.perturb > 0.5 ? '255,60,60' : '255,170,60';
-c.font = `bold ${fsT}px 'Share Tech Mono', monospace`;
-const bw = c.measureText(banner).width + 28*u, bx = (width-bw)/2, by = 8*u;
-c.strokeStyle = `rgba(${bCol},0.9)`; c.lineWidth = Math.max(1, u);
-c.strokeRect(bx, by, bw, fsT + 10*u);
-c.fillStyle = `rgba(${bCol},1)`; c.textAlign = 'center';
-c.fillText(banner, width/2, by + 5*u); c.textAlign = 'left';
-const line2 = (lab, val, x, y, vCol) => {
-c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
-c.fillStyle = LT + '0.95)'; c.fillText(lab, x, y);
-const wl = c.measureText(lab).width;
-c.fillStyle = vCol; c.fillText(val, x + wl + 5*u, y);
-};
-const ly = by + fsT + 20*u, lx = 10*u, rx2 = width - 10*u;
-line2('FLASH: ', 'ON', lx, ly, VL + '1)');
-line2('RANGO: ', (8 - LFX.coverage*6).toFixed(1) + 'm', lx, ly + fs*1.6, VL + '1)');
-line2('DENSIDAD: ', dens + '%' + (dens > 60 ? ' (CRÍTICO)' : ''), lx, ly + fs*3.2, dens > 60 ? 'rgba(255,60,60,1)' : VL + '1)');
-const lineR = (lab, val, y, vCol, big) => {
-c.font = `bold ${big ? fsB : fs}px 'Share Tech Mono', monospace`;
-const wv = c.measureText(val).width;
-c.fillStyle = vCol; c.fillText(val, rx2 - wv, y);
-c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
-const wl = c.measureText(lab).width;
-c.fillStyle = LT + '0.95)'; c.fillText(lab, rx2 - wv - 5*u - wl, y);
-};
-lineR('TIPO DE ANOMALÍA: ', 'CLASE ' + clase, ly, VL + '1)', true);
-lineR('FUERZA DE SEÑAL: ', senal + '%', ly + fs*1.9, VL + '1)', false);
-c.font = `bold ${fs}px 'Share Tech Mono', monospace`;
-c.fillStyle = LT + '0.95)';
-const lm = 'RASTREO DE MOVIMIENTO'; c.fillText(lm, rx2 - c.measureText(lm).width, ly + fs*3.5);
-const by2 = height - fs*5.2;
-line2('VECTOR PATH_01: ', 'MEJORADO', lx, by2, VL + '1)');
-line2('VARIANZA TEMP: ', (-2 - LFX.coverage*8).toFixed(1) + '°C', lx, by2 + fs*1.6, VL + '1)');
-line2('VOLUMEN MAPEADO: ', (5 + LFX.coverage*60).toFixed(1) + ' m³', lx, by2 + fs*3.2, VL + '1)');
-let lvl = LFX.motion;
-if (typeof audioAnalyser !== 'undefined' && audioAnalyser && audioDataArray) {
-audioAnalyser.getByteTimeDomainData(audioDataArray);
-let s = 0, cnt = 0;
-for (let i = 0; i < audioDataArray.length; i += 8) { s += Math.abs(audioDataArray[i]-128); cnt++; }
-lvl = Math.max(lvl, Math.min(1, (s/cnt)/45));
-}
-lfxSpark[lfxSparkI++ % 96] = lvl;
-const gw = Math.min(width*0.42, 240*u), gh = Math.round(fs*3.2);
-const gx0 = width - 10*u - gw, gy0 = height - 10*u - gh;
-lineR('FRECUENCIA EN VIVO: ', (lvl*8).toFixed(1) + ' m²', gy0 - fs*1.5, VL + '1)', false);
-c.fillStyle = 'rgba(30,0,0,0.55)'; c.fillRect(gx0, gy0, gw, gh);
-c.strokeStyle = LT + '0.8)'; c.lineWidth = 1; c.strokeRect(gx0, gy0, gw, gh);
-c.beginPath();
-for (let i = 0; i < 96; i++) {
-const v = lfxSpark[(lfxSparkI + i) % 96];
-const jit = Math.sin(currentFrame*0.35 + i*0.7) * 0.035;
-const yy = gy0 + gh - 2 - Math.max(0, Math.min(1, v + jit)) * (gh - 4);
-const xx = gx0 + (i/95)*gw;
-i ? c.lineTo(xx, yy) : c.moveTo(xx, yy);
-}
-c.strokeStyle = VL + '1)'; c.lineWidth = Math.max(1.2, u);
-if (isHighEnd) { c.shadowColor = 'rgba(255,150,50,0.7)'; c.shadowBlur = 6; }
-c.stroke(); c.shadowBlur = 0;
-c.lineTo(gx0+gw, gy0+gh); c.lineTo(gx0, gy0+gh); c.closePath();
-c.fillStyle = 'rgba(255,120,50,0.12)'; c.fill();
-const curX = gx0 + ((currentFrame % 96)/95)*gw;
-c.strokeStyle = 'rgba(255,220,150,0.5)'; c.beginPath(); c.moveTo(curX, gy0); c.lineTo(curX, gy0+gh); c.stroke();
-c.restore();
-}
+
 
     function initScanlines(w, h) {
          if(scanlineCanvas && scanlineCanvas.width === w) return;
@@ -4902,18 +4901,21 @@ function updateProgress(p, t) {
     bar.classList.add('step-flash');
 }
 
+// Cache para el HUD
+let _hudTextCanvas = null;
+let _hudTextCtx = null;
+let _lastHudDate = '';
+
 function drawBurnInHUD(ctx2, width, height, scale) {
     if (scale <= 0.01) return;
     const hideText = document.body.classList.contains('hide-hud-text');
     const isPortrait = height > width;
-
-    // 🔒 En vivo = 1; en captura escala proporcional a la ventana → HUD idéntico al vivo
     const uiS = Math.max(1, width / window.innerWidth, height / window.innerHeight);
 
     ctx2.save();
     ctx2.globalAlpha = Math.max(0, Math.min(1, scale));
     ctx2.imageSmoothingEnabled = true;
-    ctx2.imageSmoothingQuality = 'high'; // 🔒 logo nítido a cualquier tamaño
+    ctx2.imageSmoothingQuality = 'high';
     ctx2.shadowColor = 'black';
     ctx2.shadowBlur = isPortrait ? 6 : 4;
 
@@ -4925,28 +4927,50 @@ function drawBurnInHUD(ctx2, width, height, scale) {
         ctx2.drawImage(logoImg, pad, pad, logoSize, logoSize);
     }
 
-    // 2. TEXTO Y RELOJ (respetando la opción de ocultar)
+    // 2. TEXTO Y RELOJ (cacheado)
     if (!hideText) {
         const textX = pad + logoSize + 12 * uiS;
         const titleFS = (isPortrait ? 16 : 18) * uiS;
         const dateFS = (isPortrait ? 11 : 13) * uiS;
 
+        // Título fijo
         ctx2.fillStyle = 'white';
         ctx2.font = `bold ${titleFS}px 'Orbitron', sans-serif`;
         ctx2.textBaseline = 'top';
         ctx2.textAlign = 'left';
         ctx2.fillText('EXPLORACIONES OBR', textX, pad + 2 * uiS);
 
-        // 🔒 Fecha/hora SIEMPRE debajo del título (separación garantizada)
+        // Fecha/hora solo se actualiza cuando cambia
         const now = new Date();
         const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
         const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-        ctx2.fillStyle = '#ff3333';
-        ctx2.font = `${dateFS}px 'Share Tech Mono', monospace`;
-        ctx2.fillText(`${dateStr} - ${timeStr}`, textX, pad + 2 * uiS + titleFS + 6 * uiS);
+        const fullDate = `${dateStr} - ${timeStr}`;
+
+        if (!_hudTextCanvas) {
+            _hudTextCanvas = document.createElement('canvas');
+            _hudTextCtx = _hudTextCanvas.getContext('2d');
+        }
+        const tCanv = _hudTextCanvas, tCtx = _hudTextCtx;
+        // Solo regenerar si cambió la fecha
+        if (fullDate !== _lastHudDate || tCanv.width !== 1) {
+            ctx2.font = `${dateFS}px 'Share Tech Mono', monospace`;
+            const metrics = ctx2.measureText(fullDate);
+            const tw = metrics.width;
+            const th = dateFS * 1.5;
+            tCanv.width = Math.ceil(tw + 10);
+            tCanv.height = Math.ceil(th + 10);
+            tCtx.clearRect(0, 0, tCanv.width, tCanv.height);
+            tCtx.fillStyle = '#ff3333';
+            tCtx.font = `${dateFS}px 'Share Tech Mono', monospace`;
+            tCtx.textBaseline = 'top';
+            tCtx.textAlign = 'left';
+            tCtx.fillText(fullDate, 5, 5);
+            _lastHudDate = fullDate;
+        }
+        ctx2.drawImage(tCanv, textX, pad + 2 * uiS + titleFS + 6 * uiS);
     }
 
-    // 3. Indicador SLS (discreto, arriba al centro)
+    // 3. Indicador SLS (discreto)
     if (state.isSLS && height <= width) {
         const fs = 12 * uiS;
         ctx2.font = `bold ${fs}px 'Share Tech Mono', monospace`;
@@ -4989,6 +5013,10 @@ function drawCanvasScanBoxes(c, w, h) {
     });
 }
 
+// Cache para la imagen de IA
+let _aiCacheCanvas = null;
+let _aiCacheSrc = '';
+
 function drawAIBurnIn(c, w, h, scale) {
     if (scale <= 0.01) return;
     const isPortrait = window.innerHeight > window.innerWidth;
@@ -4996,14 +5024,12 @@ function drawAIBurnIn(c, w, h, scale) {
     const smoothScale = 1 - Math.pow(1 - scale, 3);
     c.globalAlpha = Math.max(0, Math.min(1, scale * 1.5));
 
-    // Factores de reducción
-    const verticalFactor = 0.72;   // 🔒 REDUCIDO 20%: 0.9 * 0.80 = 0.72
-const horizontalFactor = 0.63; // 0.7 (reducción previa) * 0.9 (10% adicional) = 0.63
-const margin = Math.min(w, h) * 0.025;
-// Tamaños del panel
-const panelW = isPortrait ? w * 0.45 * verticalFactor : 320 * horizontalFactor;
-const imgH = isPortrait ? h * 0.30 * verticalFactor : 240 * horizontalFactor;
-const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFactor;
+    const verticalFactor = 0.72;
+    const horizontalFactor = 0.63;
+    const margin = Math.min(w, h) * 0.025;
+    const panelW = isPortrait ? w * 0.45 * verticalFactor : 320 * horizontalFactor;
+    const imgH = isPortrait ? h * 0.30 * verticalFactor : 240 * horizontalFactor;
+    const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFactor;
     const finalImgH = Math.min(imgH, maxPanelH);
     const finalPanelW = Math.min(panelW, w * 0.60);
 
@@ -5027,13 +5053,9 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         }
     }
 
-    // --- Fondo y borde (solo cuando hay imagen) ---
     if (!isScanning) {
-        // En vertical no hay texto, por lo que el fondo solo cubre la imagen
-        // En horizontal, el fondo cubre imagen + texto
         let totalH = imgH_;
         if (!isPortrait) {
-            // En horizontal, reservamos espacio para el texto
             const txtLines = currentAiText ? Math.ceil(currentAiText.length / 25) : 0;
             const txtH = txtLines * 12 + 10;
             totalH = imgH_ + txtH;
@@ -5044,7 +5066,6 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         c.fillRect(bx, by, 4, totalH);
     }
 
-    // --- MODO ESCANEO (radar) ---
     if (isScanning) {
         const radarScale = isPortrait ? 0.8 : 1.0;
         const radarRadiusBase = Math.min(panelW_ * 0.25, 60) * radarScale;
@@ -5052,7 +5073,6 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         const radarCy = by + radarRadiusBase + 15;
         c.save();
         c.translate(radarCx, radarCy);
-        // Círculos concéntricos
         c.strokeStyle = "rgba(0, 255, 100, 0.15)";
         c.lineWidth = 1;
         for (let r = 10; r <= radarRadiusBase; r += 10) {
@@ -5068,7 +5088,6 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         c.moveTo(0, -radarRadiusBase);
         c.lineTo(0, radarRadiusBase);
         c.stroke();
-        // Barrido
         const pulse = (Math.sin(performance.now() * 0.003) + 1) / 2;
         const currentRadius = radarRadiusBase * (0.6 + pulse * 0.4);
         radarAngle += 0.04;
@@ -5096,7 +5115,6 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         drawBlade(0);
         drawBlade(Math.PI);
         c.restore();
-        // Texto de escaneo (se mantiene en ambas orientaciones)
         const txtX = radarCx + radarRadiusBase + 20;
         const txtY = radarCy;
         if (displayTxt && displayTxt.includes('\n')) {
@@ -5112,14 +5130,16 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         return;
     }
 
-    // --- MODO RESPUESTA (imagen + texto solo en horizontal) ---
+    // MODO RESPUESTA (imagen cacheada)
     if (!isScanning) {
         c.save();
         try {
             if (!currentAiImgEl || !currentAiImgEl.complete || currentAiImgEl.naturalWidth === 0) {
                 throw new Error("Imagen inválida");
             }
-            if (!window._aiImageCache || window._lastAiImageSrc !== currentAiImgEl.src) {
+            // Cachear la imagen procesada
+            const srcKey = currentAiImgEl.src;
+            if (!_aiCacheCanvas || _aiCacheSrc !== srcKey) {
                 const tmpC = document.createElement('canvas');
                 tmpC.width = panelW_;
                 tmpC.height = imgH_;
@@ -5134,10 +5154,10 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
                 tmpCtx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
                 tmpCtx.drawImage(currentAiImgEl, cx, cy, cW, cH, 0, 0, panelW_, imgH_);
                 tmpCtx.filter = 'none';
-                window._aiImageCache = tmpC;
-                window._lastAiImageSrc = currentAiImgEl.src;
+                _aiCacheCanvas = tmpC;
+                _aiCacheSrc = srcKey;
             }
-            c.drawImage(window._aiImageCache, bx, by, panelW_, imgH_);
+            c.drawImage(_aiCacheCanvas, bx, by, panelW_, imgH_);
         } catch (e) {
             if (currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0) {
                 c.drawImage(currentAiImgEl, bx, by, panelW_, imgH_);
@@ -5145,23 +5165,20 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
         }
         c.restore();
 
-        // Borde
         c.strokeStyle = borderColor;
         c.lineWidth = 1;
         c.strokeRect(bx, by, panelW_, imgH_);
 
-        // === TEXTO SOLO EN HORIZONTAL ===
+        // Texto solo en horizontal
         if (!isPortrait && currentAiText) {
             c.save();
             c.fillStyle = "rgba(0,0,0,0.85)";
             let txtH = Math.ceil(currentAiText.length / 25) * 12 + 10;
             c.fillRect(bx + 4, by + imgH_, panelW_ - 4, txtH);
-            
             c.fillStyle = "#ffffff";
             c.font = "bold 10px 'Share Tech Mono'";
             c.shadowColor = "#ff0000";
             c.shadowBlur = 6;
-            
             let line = '';
             let ly = by + imgH_ + 12;
             const resWords = currentAiText.split(' ');
@@ -5196,124 +5213,139 @@ const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFacto
     const _smoothBBox = {};
     
 function drawHybrid(targetCtx, pose, targetIdx, coords) {
-const C = coords || window.drawCoords;
-if (!C) return;
-const { dW, dH, dX, dY } = C;
-const mapX = (x) => (x * dW) + dX;
-const mapY = (y) => (y * dH) + dY;
-const now = performance.now();
-const pulse = (Math.sin(now * 0.008) + 1) / 2;
-const cores = navigator.hardwareConcurrency || 4;
-const isHighEnd = cores >= 6;
-let drewPose = false;
-let poseBBox = null;
-// 🔒 GATE + CAJA COMPACTA centrada en el rostro
-if (pose && pose.keypoints && pose.keypoints.length > 0) {
-drewPose = true;
-const k = pose.keypoints;
-const S = AI_SENSITIVITY * 0.5;
-const nose = k[0], ls = k[5], rs = k[6];
-const noseOK = !!(nose && nose.score >= S);
-const shOK = !!(ls && rs && ls.score >= S && rs.score >= S);
-if (noseOK || shOK) {
-// Ancla en la NARIZ; si falta la nariz, punto medio de hombros
-const nx = noseOK ? mapX(nose.x) : (mapX(ls.x) + mapX(rs.x)) / 2;
-const ny = noseOK ? mapY(nose.y) : (mapY(ls.y) + mapY(rs.y)) / 2;
-// 🔒 Referencia: MITAD de la unión torso→hombro (≈ ancho de cabeza)
-const isPort = dH > dW;
-let halfSpan = shOK ? Math.hypot(mapX(ls.x) - mapX(rs.x), mapY(ls.y) - mapY(rs.y)) / 2 : 0;
-if (halfSpan < dW * 0.05) halfSpan = dW * (isPort ? 0.11 : 0.08);
-// 🔒 COMPACTO: enmarca cabeza con margen justo (tope 40% del ancho)
-const bw = Math.min(halfSpan * 1.2, dW * 0.40);
-const bh = bw * 1.3;
-let bx = nx - bw / 2;
-let by = ny - bh * 0.45; // nariz al centro vertical de la caja
-bx = Math.max(-bw * 0.15, Math.min(dW - bw * 0.85, bx));
-by = Math.max(-bh * 0.10, Math.min(dH - bh * 0.90, by));
-poseBBox = { x: bx, y: by, w: bw, h: bh };
-}
-}
-const targetBBox = poseBBox;
-// 🔒 BOUNDING BOX suavizada (vivo vs REC separados)
-if (targetBBox) {
-const key = ((targetCtx.canvas && targetCtx.canvas.width) ? targetCtx.canvas.width : 0) + ':' + (targetIdx ?? 0);
-if (!_smoothBBox[key]) _smoothBBox[key] = { ...targetBBox };
-else {
-const EMA = 0.7;
-_smoothBBox[key].x = lerp(_smoothBBox[key].x, targetBBox.x, EMA);
-_smoothBBox[key].y = lerp(_smoothBBox[key].y, targetBBox.y, EMA);
-_smoothBBox[key].w = targetBBox.w;
-_smoothBBox[key].h = targetBBox.h;
-}
-const sb = _smoothBBox[key];
-targetCtx.save();
-targetCtx.strokeStyle = `rgba(255,20,20,${0.35 + pulse * 0.45})`;
-targetCtx.lineWidth = 3.5 + pulse * 2;
-if (isHighEnd) { targetCtx.shadowBlur = 12 + pulse * 18; targetCtx.shadowColor = `rgba(255,0,0,${0.6 + pulse * 0.4})`; }
-else targetCtx.shadowBlur = 0;
-targetCtx.strokeRect(sb.x, sb.y, sb.w, sb.h);
-targetCtx.strokeStyle = `rgba(255,60,60,${0.7 + pulse * 0.3})`;
-targetCtx.lineWidth = 1.5; targetCtx.shadowBlur = 0;
-targetCtx.strokeRect(sb.x + 2, sb.y + 2, sb.w - 4, sb.h - 4);
-targetCtx.restore();
-}
-// 🔒 ESQUELETO con shadowBlur condicional
-if (drewPose && pose.keypoints && pose.keypoints.length > 0) {
-const k = pose.keypoints;
-const bones = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
-targetCtx.save();
-targetCtx.strokeStyle = "#ff00ff";
-targetCtx.lineWidth = 4;
-targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
-bones.forEach(([a, b]) => {
-const p1 = k[a], p2 = k[b];
-if (!p1 || !p2 || p1.score < AI_SENSITIVITY * 0.7 || p2.score < AI_SENSITIVITY * 0.7) return;
-const alpha = Math.min(1.0, (p1.score + p2.score) / 2);
-if (isHighEnd && alpha > 0.3) { targetCtx.shadowBlur = 6; targetCtx.shadowColor = "rgba(255,0,255,0.6)"; }
-else targetCtx.shadowBlur = 0;
-targetCtx.beginPath();
-targetCtx.moveTo(mapX(p1.x), mapY(p1.y));
-targetCtx.lineTo(mapX(p2.x), mapY(p2.y));
-targetCtx.stroke();
-});
-targetCtx.shadowBlur = 0;
-const nose = k[0], ls = k[5], rs = k[6];
-if (nose && ls && rs && nose.score >= AI_SENSITIVITY * 0.6 && ls.score >= AI_SENSITIVITY * 0.6 && rs.score >= AI_SENSITIVITY * 0.6) {
-const midX = (mapX(ls.x) + mapX(rs.x)) / 2, midY = (mapY(ls.y) + mapY(rs.y)) / 2;
-targetCtx.beginPath();
-targetCtx.moveTo(mapX(nose.x), mapY(nose.y));
-targetCtx.lineTo(midX, midY);
-targetCtx.stroke();
-}
-targetCtx.restore();
-[0,5,6,7,8,9,10,11,12,13,14,15,16].forEach(i => {
-const p = k[i];
-if (!p || p.score < AI_SENSITIVITY * 0.5) return;
-const px = mapX(p.x), py = mapY(p.y);
-targetCtx.beginPath();
-targetCtx.arc(px, py, 5 + pulse * 4, 0, Math.PI * 2);
-targetCtx.fillStyle = `rgba(255,0,0,${0.12 + pulse * 0.18})`;
-targetCtx.shadowBlur = 0;
-targetCtx.fill();
-targetCtx.beginPath();
-targetCtx.arc(px, py, 3, 0, Math.PI * 2);
-targetCtx.fillStyle = "#ff3333";
-if (isHighEnd) { targetCtx.shadowBlur = 8 + pulse * 14; targetCtx.shadowColor = "#ff0000"; }
-else targetCtx.shadowBlur = 0;
-targetCtx.fill();
-targetCtx.shadowBlur = 0;
-});
-}
-// 🔒 Motion box cuando no hay pose pero hay movimiento
-if (!drewPose && window.motionLevel > 0.025) {
-targetCtx.save();
-targetCtx.strokeStyle = `rgba(255,0,0,${0.2 + pulse * 0.25})`;
-targetCtx.lineWidth = 1.5;
-if (isHighEnd) { targetCtx.shadowBlur = 8 + pulse * 8; targetCtx.shadowColor = "rgba(255,0,0,0.5)"; }
-else targetCtx.shadowBlur = 0;
-targetCtx.strokeRect(dW * 0.35 + dX, dH * 0.2 + dY, dW * 0.3, dH * 0.6);
-targetCtx.restore();
-}
+    const C = coords || window.drawCoords;
+    if (!C) return;
+    const { dW, dH, dX, dY } = C;
+    const mapX = (x) => (x * dW) + dX;
+    const mapY = (y) => (y * dH) + dY;
+    const now = performance.now();
+    const pulse = (Math.sin(now * 0.008) + 1) / 2;
+
+    const cores = navigator.hardwareConcurrency || 4;
+    const isHighEnd = cores >= 6;
+
+    let drewPose = false;
+    let poseBBox = null;
+
+    if (pose && pose.keypoints && pose.keypoints.length > 0) {
+        drewPose = true;
+        let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
+        let validHeadPoints = 0;
+        for (let i = 0; i <= 4; i++) {
+            const kp = pose.keypoints[i];
+            if (!kp || kp.score < AI_SENSITIVITY * 0.2) continue;
+            const ax = mapX(kp.x), ay = mapY(kp.y);
+            if (ax < pMinX) pMinX = ax; if (ay < pMinY) pMinY = ay;
+            if (ax > pMaxX) pMaxX = ax; if (ay > pMaxY) pMaxY = ay;
+            validHeadPoints++;
+        }
+        if (validHeadPoints >= 1) {
+            let w = pMaxX - pMinX;
+            let h = pMaxY - pMinY;
+            if (w === 0 && h === 0) { w = 20; h = 20; pMinX -= 10; pMinY -= 10; }
+            const maxSize = Math.max(w, h, 25);
+            const cx = pMinX + w / 2;
+            const cy = pMinY + h / 2;
+            if (maxSize <= dW * 0.6) {
+                poseBBox = {
+                    x: cx - (maxSize * 0.8),
+                    y: cy - (maxSize * 1.0),
+                    w: maxSize * 1.6,
+                    h: maxSize * 2.0
+                };
+            }
+        }
+    }
+
+    const targetBBox = poseBBox;
+    if (targetBBox) {
+        const key = ((targetCtx.canvas && targetCtx.canvas.width) ? targetCtx.canvas.width : 0) + ':' + (targetIdx ?? 0);
+        if (!_smoothBBox[key]) {
+            _smoothBBox[key] = { ...targetBBox };
+        } else {
+            const EMA = 0.7;
+            _smoothBBox[key].x = lerp(_smoothBBox[key].x, targetBBox.x, EMA);
+            _smoothBBox[key].y = lerp(_smoothBBox[key].y, targetBBox.y, EMA);
+            _smoothBBox[key].w = lerp(_smoothBBox[key].w, targetBBox.w, EMA);
+            _smoothBBox[key].h = lerp(_smoothBBox[key].h, targetBBox.h, EMA);
+        }
+        const sb = _smoothBBox[key];
+        targetCtx.save();
+        targetCtx.strokeStyle = `rgba(255,20,20,${0.35 + pulse * 0.45})`;
+        targetCtx.lineWidth = 3.5 + pulse * 2;
+        if (isHighEnd) {
+            targetCtx.shadowBlur = 12 + pulse * 18;
+            targetCtx.shadowColor = `rgba(255,0,0,${0.6 + pulse * 0.4})`;
+        } else {
+            targetCtx.shadowBlur = 0;
+        }
+        targetCtx.strokeRect(sb.x, sb.y, sb.w, sb.h);
+        targetCtx.strokeStyle = `rgba(255,60,60,${0.7 + pulse * 0.3})`;
+        targetCtx.lineWidth = 1.5;
+        targetCtx.shadowBlur = 0;
+        targetCtx.strokeRect(sb.x + 2, sb.y + 2, sb.w - 4, sb.h - 4);
+        targetCtx.restore();
+    }
+
+    // Esqueleto (sin shadowBlur en líneas)
+    if (drewPose && pose.keypoints && pose.keypoints.length > 0) {
+        const k = pose.keypoints;
+        const bones = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+        targetCtx.save();
+        targetCtx.strokeStyle = "#ff00ff";
+        targetCtx.lineWidth = 4;
+        targetCtx.lineCap = 'round';
+        targetCtx.lineJoin = 'round';
+        targetCtx.shadowBlur = 0; // sin sombra en líneas
+
+        bones.forEach(([a, b]) => {
+            const p1 = k[a], p2 = k[b];
+            if (!p1 || !p2 || p1.score < AI_SENSITIVITY * 0.7 || p2.score < AI_SENSITIVITY * 0.7) return;
+            targetCtx.beginPath();
+            targetCtx.moveTo(mapX(p1.x), mapY(p1.y));
+            targetCtx.lineTo(mapX(p2.x), mapY(p2.y));
+            targetCtx.stroke();
+        });
+
+        const nose = k[0], ls = k[5], rs = k[6];
+        if (nose && ls && rs && nose.score >= AI_SENSITIVITY * 0.6 && ls.score >= AI_SENSITIVITY * 0.6 && rs.score >= AI_SENSITIVITY * 0.6) {
+            const midX = (mapX(ls.x) + mapX(rs.x)) / 2;
+            const midY = (mapY(ls.y) + mapY(rs.y)) / 2;
+            targetCtx.beginPath();
+            targetCtx.moveTo(mapX(nose.x), mapY(nose.y));
+            targetCtx.lineTo(midX, midY);
+            targetCtx.stroke();
+        }
+        targetCtx.restore();
+
+        // Puntos clave (solo los más relevantes, con shadowBlur solo en cabeza)
+        const keypointsToDraw = [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        keypointsToDraw.forEach(i => {
+            const p = k[i];
+            if (!p || p.score < AI_SENSITIVITY * 0.5) return;
+            const px = mapX(p.x), py = mapY(p.y);
+            targetCtx.beginPath();
+            targetCtx.arc(px, py, 3, 0, Math.PI * 2);
+            targetCtx.fillStyle = "#ff3333";
+            if (isHighEnd && (i === 0 || i === 5 || i === 6)) { // solo cabeza y hombros con glow
+                targetCtx.shadowBlur = 8 + pulse * 14;
+                targetCtx.shadowColor = "#ff0000";
+            } else {
+                targetCtx.shadowBlur = 0;
+            }
+            targetCtx.fill();
+            targetCtx.shadowBlur = 0;
+        });
+    }
+
+    if (!drewPose && window.motionLevel > 0.025) {
+        targetCtx.save();
+        targetCtx.strokeStyle = `rgba(255,0,0,${0.2 + pulse * 0.25})`;
+        targetCtx.lineWidth = 1.5;
+        targetCtx.shadowBlur = 0;
+        targetCtx.strokeRect(dW * 0.35 + dX, dH * 0.2 + dY, dW * 0.3, dH * 0.6);
+        targetCtx.restore();
+    }
 }
 
 
@@ -5371,15 +5403,19 @@ function takeScreenshot() {
         const hasMap = mapSlot && !mapSlot.classList.contains('map-hidden');
         if (hasMap && typeof captureMapToMirror === 'function') {
             lastMapCapture = 0;
-            const p = captureMapToMirror();
-            if (p && typeof p.then === 'function') {
-                p.then(() => requestAnimationFrame(() => requestAnimationFrame(() => performScreenshot())))
-                 .catch(() => performScreenshot());
-            } else performScreenshot();
-        } else performScreenshot();
-    } catch (err) { console.error('Error captura:', err); showToast('❌ ERROR CAPTURA', true); }
+            captureMapToMirror();
+            // Esperar dos frames para que el espejo se actualice
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => performScreenshot());
+            });
+        } else {
+            performScreenshot();
+        }
+    } catch (err) {
+        console.error('Error captura:', err);
+        showToast('❌ ERROR CAPTURA', true);
+    }
 }
-
 
 function performScreenshot() {
     const dims = (typeof chooseRecResolution === 'function') ? chooseRecResolution()
@@ -5387,22 +5423,7 @@ function performScreenshot() {
     const W = dims.W, H = dims.H;
     const tmp = document.createElement('canvas');
     tmp.width = W; tmp.height = H;
-    if (typeof OBRL !== 'undefined' && OBRL.ready) {
-        try {
-            // 🔒 FOTO a resolución de captura: shader renderizado a W×H exactos → misma nitidez/color del vivo
-            const lw = OBRL.canvas.width, lh = OBRL.canvas.height;
-            if (lw !== W || lh !== H) { OBRL.canvas.width = W; OBRL.canvas.height = H; }
-renderGLVideo(); renderGLVideo();                 // 🔒 Doble render: asienta el buffer WebGL tras el resize
-composeFullFrame(tmp.getContext('2d'), W, H);     // incluye HUD/tally/mapa/SLS
-            OBRL.canvas.width = lw; OBRL.canvas.height = lh;  // restaura vista viva
-            renderGLVideo();
-        } catch (e) {
-            console.warn('[FOTO] GL falló, uso fallback:', e);
-            composeFullFrame(tmp.getContext('2d'), W, H);
-        }
-    } else {
-        composeFullFrame(tmp.getContext('2d'), W, H);
-    }
+    composeFullFrame(tmp.getContext('2d'), W, H);
     tmp.toBlob((blob) => {
         if (!blob) { showToast('❌ ERROR CAPTURA', true); return; }
         const a = document.createElement('a');
@@ -5416,9 +5437,6 @@ composeFullFrame(tmp.getContext('2d'), W, H);     // incluye HUD/tally/mapa/SLS
 }
 window.takeScreenshot = takeScreenshot;
 
-
-
-
 // 🔒 Cadena de overlays: se dibuja UNA sola vez, calibrada a la ventana
 function drawOverlayChain(tctx, W, H) {
 if (state.isLidar) { drawLidarEffect(tctx, W, H, frameCount); drawTallyBorder(tctx, W, H); return; }
@@ -5429,7 +5447,6 @@ if (state.isLidar) { drawLidarEffect(tctx, W, H, frameCount); drawTallyBorder(tc
     if (state.isPareidolia) drawCanvasScanBoxes(tctx, W, H);
     drawBurnInHUD(tctx, W, H, animState.hudScale);
     if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) drawAIBurnIn(tctx, W, H, animState.aiScale);
-    if (state.isAudioScan) drawAudioVisualizer(tctx, W, H);
     drawTallyBorder(tctx, W, H);
     drawMapToMaster(tctx, W, H);
 }
@@ -5444,33 +5461,32 @@ function renderLoop(now, metadata) {
     }
     if (document.hidden) return;
     lastFrameUpdateTime = now; lastFrameTime = now; frameCount++;
-// 🔒 EL GPU SOLO TRABAJA SI APORTA ALGO: REC, filtro activo o nitidez>0.
-// En modo NORMAL la cámara nativa queda visible = fluidez idéntica a la app de cámara.
-const needGL = OBRL.ready && (isRecordingActive || state.filter !== 'normal' || currentSharpness > 0);
-if (needGL) {
-  // 🔒 Solo recalcular tamaño GL si cambió la ventana o el DPR (evita lag por frame)
-  const cores = navigator.hardwareConcurrency || 4;
-  const curW = window.innerWidth, curH = window.innerHeight;
-  if (curW !== _lastGLW || curH !== _lastGLH || cores !== _lastGLCores) {
-    sizeGLCanvas();
-    _lastGLW = curW; _lastGLH = curH; _lastGLCores = cores;
-  }
-  renderGLVideo();
-  document.body.classList.add('gl-active');
-} else {
-  document.body.classList.remove('gl-active');
-}
+
+    if (OBRL.ready) { sizeGLCanvas(); renderGLVideo(); }
+
+    // 🔒 Detectar si los overlays han cambiado para evitar redibujado innecesario
+    const motionChanged = Math.abs(window.motionLevel - _lastMotionLevel) > 0.01;
+    const audioChanged = Math.abs(cumulativeEVPEnergy - _lastAudioEnergy) > 2;
+    const poseChanged = (smoothedPoses && smoothedPoses.length) !== _lastPoseCount;
+    if (motionChanged || audioChanged || poseChanged || state.isSLS || state.isLidar || state.isPareidolia) {
+        _overlayDirty = true;
+        _lastMotionLevel = window.motionLevel;
+        _lastAudioEnergy = cumulativeEVPEnergy;
+        _lastPoseCount = smoothedPoses ? smoothedPoses.length : 0;
+    } else {
+        // Si no hay cambios, reducimos la frecuencia de redibujado de overlays
+        _overlayDirty = false;
+    }
 
     const cW = el.masterCanvas.width, cH = el.masterCanvas.height;
     const W = window.innerWidth, H = window.innerHeight;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, cW, cH); // 🔒 TRANSPARENTE: el video lo muestra el <video> nítido
+    ctx.clearRect(0, 0, cW, cH);
     ctx.setTransform(cW / W, 0, 0, cH / H, 0, 0);
 
     updateSmoothing();
 
-    // 🔒 Solo coordenadas COVER para alinear overlays (SLS, scan boxes, LiDAR)
     const vW = el.video.videoWidth, vH = el.video.videoHeight;
     if (vW && vH) {
         const sc = Math.max(W / vW, H / vH);
@@ -5482,10 +5498,22 @@ if (needGL) {
     animState.hudScale += (animState.hudTarget - animState.hudScale) * speed;
     animState.aiScale += (animState.aiTarget - animState.aiScale) * speed;
 
-try { drawOverlayChain(ctx, W, H); } catch (e) { console.warn('[OVR] overlay:', (e && e.message) || e); }
-ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Solo redibujar overlays si están sucios
+    // Solo redibujar overlays si están sucios
+    if (_overlayDirty || isRecordingActive) {
+        drawOverlayChain(ctx, W, H);
+    } else {
+        drawBurnInHUD(ctx, W, H, animState.hudScale);
+        drawMapToMaster(ctx, W, H);
+        drawTallyBorder(ctx, W, H);
+        // ❌ eliminamos la llamada a drawAudioVisualizer de aquí
+    }
 
-    // 🎬 Grabación 4K: compone en el canvas dedicado
+    // 🔒 NUEVA LÍNEA: SIEMPRE dibujar el visualizador de audio si está activo
+    if (state.isAudioScan) drawAudioVisualizer(ctx, W, H);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
     if (isRecordingActive && recCtx4K && recCanvas4K) {
         composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
     }
@@ -6109,8 +6137,8 @@ stopScanningEffect();
     function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
 
     function togglePareidolia(btnElement) {
-if (OBR_NET.offline) { showToast('📴 IA VISION no disponible en OFFLINE', true); return; }
-if(!getActiveAIConfig()) { showToast("SIN APIs — CONFIGURA EN 🔐", true); return; }
+      if (OBR_NET.offline) { showToast('📴 IA VISION no disponible en OFFLINE', true); return; }  // ← PRIMERA línea
+        if(!getActiveAIConfig()) { showToast("SIN APIs — CONFIGURA EN 🔐", true); return; }
         const btn = btnElement || document.getElementById('btn-ia');
         
         if (isPareidoliaActive) {
@@ -6274,20 +6302,16 @@ if (!hasElevenLabs && !hasVoiceRSS) {
 
     if (provider === 'groq') {
         try {
-            status.innerText = "⏳ OBTENIENDO MODELOS DE VISIÓN...";
-            const ac1 = new AbortController();
-            const timeout1 = setTimeout(() => ac1.abort(), 8000); // 🔒 Timeout 8s
-            
-            const response = await fetch(`https://api.groq.com/openai/v1/models`, { 
-                method: 'GET', 
-                headers: { 'Authorization': `Bearer ${k}` },
-                signal: ac1.signal
-            });
-            clearTimeout(timeout1);
-            
-            if (!response.ok) throw new Error("Key inválida o sin acceso");
-            
-            const data = await response.json();
+const ac = new AbortController();
+const t = setTimeout(() => ac.abort(), 3000); // 🔒 Timeout 3s para offline
+const response = await fetch(`https://api.groq.com/openai/v1/models`, { 
+    method: 'GET', 
+    headers: { 'Authorization': `Bearer ${k}` },
+    signal: ac.signal 
+});
+clearTimeout(t);
+if (!response.ok) throw new Error("Key inválida");
+const data = await response.json();
             
             // 🔒 CRÍTICO: Filtrar STRICTAMENTE solo modelos que tengan 'vision' en el nombre
             let visionModels = data.data.filter(m => m.id.includes('vision'));
@@ -6748,58 +6772,42 @@ throw new Error("Todas las APIs fallaron");
 }
 
 async function callSingleAI(cfg, promptBase64, promptText, maxTokens, temperature) {
-    // 1. Definimos noThink al principio de la función para usarlo solo si es Groq
-    const noThink = (cfg.provider === 'groq' && /qwen/i.test(cfg.model)) ? '\n/no_think' : '';
-    
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 12000);
-    
-    try {
-        let resp, data;
-        
-        if (cfg.provider === 'groq') {
-            resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: cfg.model,
-                    messages: [{ 
-                        role: "user", 
-                        content: promptBase64 ?
-                            [{ type: "text", text: promptText + noThink }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${promptBase64}` } }] :
-                            (promptText + noThink)
-                    }],
-                    max_tokens: maxTokens, 
-                    temperature: temperature
-                }), 
-                signal: ac.signal
-            });
-            clearTimeout(t);
-            if (!resp.ok) return null;
-            data = await resp.json();
-            return data.choices?.[0]?.message?.content || null;
-            
-        } else {
-            // Gemini (no lleva noThink)
-            const body = promptBase64 ?
-                { contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: "image/jpeg", data: promptBase64 } }] }] } :
-                { contents: [{ parts: [{ text: promptText }] }] };
-                
-            resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body), // <-- Aquí estaba el error, ahora el objeto está limpio
-                signal: ac.signal
-            });
-            clearTimeout(t);
-            if (!resp.ok) return null;
-            data = await resp.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
-        }
-    } catch(e) { 
-        clearTimeout(t); 
-        throw e; 
-    }
+const ac = new AbortController();
+const t = setTimeout(() => ac.abort(), 12000);
+try {
+let resp, data;
+if (cfg.provider === 'groq') {
+resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+method: 'POST',
+headers: { 'Authorization': `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
+body: JSON.stringify({
+model: cfg.model,
+messages: [{ role: "user", content: promptBase64 ?
+[{ type: "text", text: promptText }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${promptBase64}` } }] :
+promptText
+}],
+max_tokens: maxTokens, temperature: temperature
+}), signal: ac.signal
+});
+clearTimeout(t);
+if (!resp.ok) return null;
+data = await resp.json();
+return data.choices?.[0]?.message?.content || null;
+} else {
+// Gemini
+const body = promptBase64 ?
+{ contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: "image/jpeg", data: promptBase64 } }] }] } :
+{ contents: [{ parts: [{ text: promptText }] }] };
+resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
+method: 'POST', headers: {'Content-Type': 'application/json'},
+body: JSON.stringify(body), signal: ac.signal
+});
+clearTimeout(t);
+if (!resp.ok) return null;
+data = await resp.json();
+return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+}
+} catch(e) { clearTimeout(t); throw e; }
 }
 
     function saveSettings() { 
@@ -7209,24 +7217,24 @@ let isRecording = false;
 // ==========================================================
 let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCount = 0;
 let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
-let recAttempt = 0, recRetrying = false;
-// 🔒 ESCALERA 1080p: SIEMPRE 1920, solo cambia códec/bitrate si el encoder rechaza
-const REC_PRESETS = [
-{ target: 1920, bits: 8000000, mimes: ['video/mp4;codecs=avc1,mp4a.40.2','video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4'] },
-{ target: 1920, bits: 6000000, mimes: ['video/mp4;codecs=avc1,mp4a.40.2','video/mp4'] },
-{ target: 1920, bits: 4000000, mimes: ['video/mp4'] },
-{ target: 1920, bits: 6000000, mimes: ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'] }];
 
-function chooseRecResolution(target) {
-// 🔒 MISMA referencia que los overlays (innerWidth/innerHeight) → encuadre idéntico vivo/REC
-const aspect = window.innerWidth / window.innerHeight;
-target = target || 1920;
-let W, H;
-if (aspect >= 1) { W = target; H = Math.round(W / aspect); }
-else             { H = target; W = Math.round(H * aspect); }
-W -= W % 16; H -= H % 16; // 🔒 alineado a 16px (macrobloques): los encoders HW rechazan 1308/886
-if (W < 256) W = 256; if (H < 256) H = 256;
-return { W, H };
+function chooseRecResolution() {
+    const aspect = window.innerWidth / window.innerHeight;
+    const target = 1080; // Altura fija 1080p (Full HD)
+    let W, H;
+    if (aspect >= 1) {
+        H = target;
+        W = Math.round(H * aspect);
+    } else {
+        W = target;
+        H = Math.round(W / aspect);
+    }
+    // Asegurar que sean pares (requerido por el codificador H.264/MediaRecorder)
+    W -= W % 2;
+    H -= H % 2;
+    // 🔒 FPS fijo a 60
+    const fps = 60;
+    return { W, H, fps };
 }
 
 function cleanupRecording() {
@@ -7264,19 +7272,15 @@ function buildRecAudioTrack() {
       (audioStream && audioStream.getAudioTracks().length) ? audioStream : null;
 
     if (micStream) {
-try {
-const src = ctxA.createMediaStreamSource(micStream);
-const gMic = ctxA.createGain();
-gMic.gain.value = 2.5; // 🔒 boost ×2.5: la voz y el ambiente ya no quedan enterrados
-const comp = ctxA.createDynamicsCompressor();
-comp.threshold.value = -30; comp.knee.value = 20; comp.ratio.value = 4;
-comp.attack.value = 0.01; comp.release.value = 0.25;
-const make = ctxA.createGain(); make.gain.value = 1.6; // makeup: sube lo suave sin clipar lo fuerte
-src.connect(gMic); gMic.connect(comp); comp.connect(make); make.connect(dest);
-_recAudioNodes.push(src, gMic, comp, make);
-hasAny = true;
-} catch (e) { console.warn('[REC] micro:', e); }
-}
+      try {
+        const src  = ctxA.createMediaStreamSource(micStream);
+        const gMic = ctxA.createGain();
+        gMic.gain.value = 1.0;           // 🔒 micro al 100%
+        src.connect(gMic); gMic.connect(dest);
+        _recAudioNodes.push(src, gMic);
+        hasAny = true;
+      } catch (e) { console.warn('[REC] micro:', e); }
+    }
 
     // ── Último recurso: la mezcla general ya existente ──
     if (!hasAny && mixDestination && mixDestination.stream.getAudioTracks().length) {
@@ -7290,104 +7294,115 @@ hasAny = true;
 }
 
 async function startScreenRecording() {
-if (isRecording) return;
+    if (isRecording) return;
 try {
-await initAudioEngine();
-const preset = REC_PRESETS[Math.min(recAttempt, REC_PRESETS.length - 1)];
-const { W, H } = chooseRecResolution(); // 🔒 SIEMPRE 1080p (target 1920)
-recCanvas4K = document.createElement('canvas');
-recCanvas4K.width = W; recCanvas4K.height = H;
-recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
+  await initAudioEngine(); 
+        const { W, H, fps } = chooseRecResolution();
+        recCanvas4K = document.createElement('canvas');
+        recCanvas4K.width = W; recCanvas4K.height = H;
+        recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
 isRecordingActive = true;
-sizeGLCanvas();
-renderGLVideo(); renderGLVideo(); // 🔒 Doble render: asienta el buffer WebGL y el color space
-const canvasStream = recCanvas4K.captureStream(30);
-const videoTrack = canvasStream.getVideoTracks()[0];
-let audioTrack = buildRecAudioTrack();
-const tracks = [videoTrack];
-if (audioTrack) tracks.push(audioTrack);
-const combinedStream = new MediaStream(tracks);
-let selectedMime = null;
-for (const mt of preset.mimes) { if (MediaRecorder.isTypeSupported(mt)) { selectedMime = mt; break; } }
-recordedChunks = [];
-mediaRecorder = new MediaRecorder(combinedStream, {
-mimeType: selectedMime || undefined,
-videoBitsPerSecond: preset.bits,
-audioBitsPerSecond: 192_000
-});
-mediaRecorder._ext = (mediaRecorder.mimeType || selectedMime || '').includes('mp4') ? 'mp4' : 'webm';
-mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
-mediaRecorder.onerror = (e) => {
-const enc = !!(e && e.error && e.error.name === 'EncodingError');
-// 🔒 AUTO-REINTENTO 1080p: cambia códec/bitrate, NUNCA baja resolución
-if (enc && recAttempt < REC_PRESETS.length - 1 && (Date.now() - recordingStartTime) < 3000) {
-console.warn('[REC] EncodingError → reintentando preset', recAttempt + 1, '(1080p)');
-recAttempt++;
-recRetrying = true;
-try { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (e2) {}
-return;
-}
+
+        const canvasStream = recCanvas4K.captureStream(fps);
+        const videoTrack = canvasStream.getVideoTracks()[0];
+
+        // 🔒 Audio mezclado: interno(50%) + micro(100%) para mezcla perfecta
+        let audioTrack = buildRecAudioTrack();
+
+        const tracks = [videoTrack];
+        if (audioTrack) tracks.push(audioTrack);
+        const combinedStream = new MediaStream(tracks);
+
+        const mimeTypes = [
+            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+            'video/mp4;codecs=avc1',
+            'video/mp4',
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm'
+        ];
+        let selectedMime = '';
+        for (const m of mimeTypes) {
+            try { if (MediaRecorder.isTypeSupported(m)) { selectedMime = m; break; } } catch (e) {}
+        }
+
+        const bits = Math.max(8_000_000, Math.round(20_000_000 * (W * H) / (3840 * 2160) * (fps / 30)));
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, {
+            mimeType: selectedMime || undefined,
+            videoBitsPerSecond: bits,
+            audioBitsPerSecond: 192_000
+        });
+        mediaRecorder._ext = (mediaRecorder.mimeType || selectedMime || '').includes('mp4') ? 'mp4' : 'webm';
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onerror = (e) => {
 console.error('[REC] Error del codificador:', e);
 showToast('❌ ERROR DE CODIFICADOR — REC DETENIDA', true);
 isRecording = false;
 clearInterval(recordingTimer);
 const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
 const br = document.getElementById('btn-record'); if (br) br.classList.remove('active-state');
-try { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (e2) {}
+try { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(e2) {}
 cleanupRecording();
 };
-mediaRecorder.onstop = () => {
-if (recRetrying) {
-recRetrying = false;
-recordedChunks = [];
-clearInterval(recordingTimer);
-if (mediaRecorder._canvasStream) mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
-cleanupRecording();
-isRecording = false;
-setTimeout(() => startScreenRecording(), 150);
-return;
-}
-const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
-if (totalSize > 8000) {
-const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
-const a = document.createElement('a');
-a.href = URL.createObjectURL(blob);
-a.download = `OBR_REC_${new Date().toISOString().replace(/[:.]/g, '-')}.${mediaRecorder._ext}`;
-a.click();
-setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-showToast(`✅ VIDEO ${W}×${H} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
-recAttempt = 0; // 🔒 grabación exitosa: resetea la escalera
-} else {
-showToast('⚠️ GRABACIÓN VACÍA', true);
-}
-recordedChunks = [];
-};
-lastMapCapture = 0; captureMapToMirror(); // 🔒 espejo del mapa fresco antes del 1er frame
+
+        mediaRecorder.onstop = () => {
+            const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
+            if (totalSize > 8000) {
+                const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `OBR_REC_${new Date().toISOString().replace(/[:.]/g, '-')}.${mediaRecorder._ext}`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                showToast(`✅ VIDEO ${W}×${H} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
+            } else {
+                showToast('⚠️ GRABACIÓN VACÍA', true);
+            }
+            recordedChunks = [];
+        };
+
+        lastMapCapture = 0; captureMapToMirror(); // 🔒 espejo del mapa fresco antes del 1er frame
 composeFullFrame(recCtx4K, W, H); // primer frame inmediato
-mediaRecorder.start(1000);
+        mediaRecorder.start(1000);
 isRecording = true;
-recordingStartTime = Date.now();
-console.log('[REC] preset', recAttempt, 'iniciado:', selectedMime, W + 'x' + H);
-// 🔒 recAttempt NO se resetea aquí: solo tras una grabación exitosa
-const recInd = document.getElementById('recording-indicator');
-if (recInd) recInd.classList.add('active');
-const btn = document.getElementById('btn-record');
-if (btn) btn.classList.add('active-state');
-recordingTimer = setInterval(() => {
-const s = Math.floor((Date.now() - recordingStartTime) / 1000);
-const rt = document.getElementById('rec-time');
-if (rt) rt.innerText = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-const recElapsed = Date.now() - recordingStartTime;
-if (recElapsed > 5000 && typeof currentFps !== 'undefined' && currentFps < 15) { lowRecFpsCount++; } else { lowRecFpsCount = 0; }
-if (lowRecFpsCount >= 8) { lowRecFpsCount = 0; showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 1080p fluido', true); }
-}, 1000);
-showToast(`🔴 REC ${W}×${H}·30FPS + AUDIO`, false);
-mediaRecorder._canvasStream = canvasStream;
-} catch (err) {
-console.error('Error grabando:', err);
-showToast('❌ ERROR AL GRABAR: ' + err.message, true);
-cleanupRecording();
-}
+        recordingStartTime = Date.now();
+
+        const recInd = document.getElementById('recording-indicator');
+        if (recInd) recInd.classList.add('active');
+        const btn = document.getElementById('btn-record');
+        if (btn) btn.classList.add('active-state');
+
+        // 🔒 RELOJ DE GRABACIÓN + WATCHDOG (setInterval correctamente cerrado)
+        recordingTimer = setInterval(() => {
+            const s = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const rt = document.getElementById('rec-time');
+            if (rt) rt.innerText = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+            // 🌡️ Perro guardián: avisa si el equipo sufre con 4K
+            // Ignora los primeros 5s (warm-up) y exige 8s seguidos bajo 15 FPS
+            const recElapsed = Date.now() - recordingStartTime;
+            if (recElapsed > 5000 && typeof currentFps !== 'undefined' && currentFps < 15) {
+                lowRecFpsCount++;
+            } else {
+                lowRecFpsCount = 0;
+            }
+            if (lowRecFpsCount >= 8) {
+                lowRecFpsCount = 0;
+                showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 4K fluido', true);
+            }
+        }, 1000); // 🔒 AQUÍ estaba faltando el cierre de setInterval
+
+        showToast(`🔴 REC ${W}×${H}·${fps}FPS + AUDIO`, false);
+        mediaRecorder._canvasStream = canvasStream;
+    } catch (err) {
+        console.error('Error grabando:', err);
+        showToast('❌ ERROR AL GRABAR: ' + err.message, true);
+        cleanupRecording();
+    }
 }
 
 function stopScreenRecording() {
@@ -7454,12 +7469,15 @@ function rebuildMapSprite() {
     mapSpriteX = rect.left; mapSpriteY = rect.top;
 }
 
-// Por frame: UN drawImage (baratísimo)
 function drawMapToMaster(tctx, W, H) {
-if (document.body.classList.contains('hide-map')) return; // 🔒 respeta OCULTAR ELEMENTOS
-if (!mapMirrorGood || !mapSpriteCanvas || !mapSpriteCanvas.width) return; // 🔒 nunca negro
-const s = W / window.innerWidth;
-tctx.drawImage(mapSpriteCanvas, mapSpriteX * s, mapSpriteY * s, mapSpriteCanvas.width * s, mapSpriteCanvas.height * s);
+    if (document.body.classList.contains('hide-map')) return;
+    if (!mapMirrorGood || !mapSpriteCanvas || !mapSpriteCanvas.width) return;
+    const s = W / window.innerWidth;
+    const mapSlot = document.getElementById('map-container-slot');
+    if (!mapSlot) return;
+    const rect = mapSlot.getBoundingClientRect();
+    if (rect.width < 2) return;
+    tctx.drawImage(mapSpriteCanvas, rect.left * s, rect.top * s, rect.width * s, rect.height * s);
 }
 
 // ==========================================================
@@ -7501,45 +7519,44 @@ return clamp((ux - 0.5) * 1.15 + 0.5, 0.0, 1.0);
 void main(){
 vec2 uv = u_uvOff + v_uv*u_uvScale;
 vec3 base = texture2D(u_tex, uv).rgb;
-// 1) NITIDEZ ISÓTROPICA (Unsharp Mask limpio y profesional)
 if (u_sharp > 0.001) {
-    vec2 t = u_texel;
-    vec3 n4 = texture2D(u_tex, uv+vec2(0.0,t.y)).rgb
-            + texture2D(u_tex, uv-vec2(0.0,t.y)).rgb
-            + texture2D(u_tex, uv+vec2(t.x,0.0)).rgb
-            + texture2D(u_tex, uv-vec2(t.x,0.0)).rgb;
-    vec3 d4 = texture2D(u_tex, uv+t).rgb
-            + texture2D(u_tex, uv-t).rgb
-            + texture2D(u_tex, uv+vec2(t.x,-t.y)).rgb
-            + texture2D(u_tex, uv+vec2(-t.x,t.y)).rgb;
-    vec3 blur8 = (n4 + d4) * 0.125;
-    // Eliminamos el *1.7 y los cálculos extra de luma para evitar artefactos
-    vec3 fine = base + (base - blur8) * u_sharp; 
-    base = clamp(fine, 0.0, 1.0);
+// 1) NITIDEZ ISÓTROPICA (8 vecinos): trata igual diagonales y rectas → ADIÓS diente de sierra
+vec2 t = u_texel;
+vec3 n4 = texture2D(u_tex, uv+vec2(0.0,t.y)).rgb
+        + texture2D(u_tex, uv-vec2(0.0,t.y)).rgb
+        + texture2D(u_tex, uv+vec2(t.x,0.0)).rgb
+        + texture2D(u_tex, uv-vec2(t.x,0.0)).rgb;
+vec3 d4 = texture2D(u_tex, uv+t).rgb
+        + texture2D(u_tex, uv-t).rgb
+        + texture2D(u_tex, uv+vec2(t.x,-t.y)).rgb
+        + texture2D(u_tex, uv+vec2(-t.x,t.y)).rgb;
+vec3 blur8 = (n4 + d4) * 0.125;
+vec3 fine = base + (base - blur8) * (u_sharp * 1.7);
+// 2) CLARIDAD SUAVE (micro-contraste solo en luma, sin bordes duros)
+vec2 t2 = t * 2.0;
+float lC = luma(base);
+float lN = (luma(texture2D(u_tex, uv+vec2(0.0,t2.y)).rgb)
+          + luma(texture2D(u_tex, uv-vec2(0.0,t2.y)).rgb)
+          + luma(texture2D(u_tex, uv+vec2(t2.x,0.0)).rgb)
+          + luma(texture2D(u_tex, uv-vec2(t2.x,0.0)).rgb)) * 0.25;
+base = clamp(fine, 0.0, 1.0) + (lC - lN) * (u_sharp * 0.5);
 }
 vec3 col = applyFilter(clamp(base,0.0,1.0), u_filter);
 float L = luma(col);
 col = mix(vec3(L), col, u_saturate);
 col = (col-0.5)*u_contrast + 0.5 + (u_brightness-1.0);
-// 🔒 CURVA S SOLO EN LUCES: las zonas medio-oscuras NO se aplastan a negro
-float sAmt = clamp(u_sharp, 0.0, 1.0) * 0.22 * smoothstep(0.18, 0.75, luma(col));
+float sAmt = clamp(u_sharp, 0.0, 1.0) * 0.25; // 🔒 curva S suave: piel natural, no amarilla
 col = mix(col, col*col*(3.0-2.0*col), sAmt);
-// 🔒 lift suave de sombras al subir nitidez: recupera detalle en sombras
-col += (1.0 - luma(col)) * u_sharp * 0.05;
 if (u_grain > 0.001) {
-// 🔒 GRANO DE PELÍCULA: celda 1×1 (pixel perfect), parpadeo a 24fps (cine)
-if (u_grain > 0.001) {
-    float ft = floor(u_time * 24.0);
-    // CAMBIADO: quitamos el *0.5 para que no haga bloques de 2x2
-    vec2 cell = floor(gl_FragCoord.xy); 
-    float gA = hash(cell + vec2(ft * 17.0, ft * 29.0)) - 0.5;   
-    float gB = hash(gl_FragCoord.xy + vec2(ft * 61.7, ft * 83.3)) - 0.5; 
-        float g = gA * 0.65 + gB * 0.35;
-    col += g * u_grain * (0.45 + 0.55 * (1.0 - L));
+// 🔒 GRANO DE PELÍCULA: celda 2×2 "gruesa" + detalle fino, parpadeo a 24fps (cine)
+float ft = floor(u_time * 24.0);
+vec2 cell = floor(gl_FragCoord.xy * 0.5);
+float gA = hash(cell + vec2(ft * 17.0, ft * 29.0)) - 0.5;   // grano grueso
+float gB = hash(gl_FragCoord.xy + vec2(ft * 61.7, ft * 83.3)) - 0.5; // fino
+float g = gA * 0.65 + gB * 0.35;
+col += g * u_grain * (0.45 + 0.55 * (1.0 - L)); // más grano en sombras, como film real
 }
-// 🔒 CORRECCIÓN GAMMA: compensa el aplastamiento de negros al exportar a canvas 2D / MediaRecorder
-col = pow(clamp(col, 0.0, 1.0), vec3(0.92)); 
-gl_FragColor = vec4(col, 1.0);
+gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
 }`;
 
 function initGLEngine() {
@@ -7588,15 +7605,15 @@ return true;
 
 function sizeGLCanvas() {
 if (!OBRL.ready) return;
+const cores = navigator.hardwareConcurrency || 4;
 let w, h;
 if (isRecordingActive && recCanvas4K) {
+// 🔒 Durante REC: el shader se renderiza a resolución de grabación → video NÍTIDO.
+// El aspect de REC es idéntico al de pantalla (innerWidth/innerHeight),
+// así que la vista viva NO se deforma ni se re-encuadra.
 w = recCanvas4K.width; h = recCanvas4K.height;
-} else if (_captureMode && _captureW > 0 && _captureH > 0) {
-// 🔒 FOTO: shader a resolución de captura (1:1, sin escalado blando)
-w = _captureW; h = _captureH;
 } else {
-const cores = navigator.hardwareConcurrency || 4;
-const dpr = cores >= 6 ? Math.min(window.devicePixelRatio || 1, 2.0) : 1;
+const dpr = Math.min(window.devicePixelRatio || 1, cores >= 6 ? 2.0 : 1.5); // 🔒 píxel 1:1 con la pantalla = sin dentado por estiramiento
 w = Math.round(window.innerWidth * dpr); h = Math.round(window.innerHeight * dpr);
 }
 if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w; OBRL.canvas.height = h; }
@@ -7605,7 +7622,7 @@ if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w
 function renderGLVideo() {
     if (!OBRL.ready) return;
     const v = el.video, gl = OBRL.gl;
-    if (!v.videoWidth || v.videoHeight < 10 || v.readyState < 3) return; // 🔒 readyState 3 = HAVE_FUTURE_DATA (video realmente fluyendo)
+    if (!v.videoWidth || v.readyState < 2) return;
     const cw = OBRL.canvas.width, ch = OBRL.canvas.height;
     gl.viewport(0, 0, cw, ch);
     gl.activeTexture(gl.TEXTURE0);
@@ -7617,9 +7634,8 @@ function renderGLVideo() {
     gl.uniform2f(OBRL.uni.u_texel, 1 / vW, 1 / vH);
     gl.uniform2f(OBRL.uni.u_uvScale, sX, sY);
     gl.uniform2f(OBRL.uni.u_uvOff, oX, oY);
-    gl.uniform1f(OBRL.uni.u_sharp, [0, 0.40, 0.70, 1.0][currentSharpness] || 0);
-// 🔒 Desacoplamos el grano. Solo aplicamos un 2% sutil en el nivel 3 (máximo) para parecer cine.
-const grainAmt = [0, 0.00, 0.00, 0.02][currentSharpness] || 0; 
+    gl.uniform1f(OBRL.uni.u_sharp, [0, 0.35, 0.55, 0.75][currentSharpness] || 0);
+    const grainAmt = [0, 0.05, 0.065, 0.08][currentSharpness] || 0; // 🔒 grano escalonado por nivel
 gl.uniform1f(OBRL.uni.u_grain, disableGrainOnIOS ? 0.0 : grainAmt);
     gl.uniform1f(OBRL.uni.u_time, (performance.now() / 1000) % 10);
     gl.uniform1f(OBRL.uni.u_filter, { normal: 0, night: 1, thermal: 2, urbex: 3 }[state.filter] || 0);
@@ -7635,53 +7651,70 @@ gl.uniform1f(OBRL.uni.u_grain, disableGrainOnIOS ? 0.0 : grainAmt);
 // 📴 MODO OFFLINE 100% — switch en inicio + auto‑detección de red
 // ==========================================================
 const OBR_NET = {
-  forced: false, // solo esta sesión: al recargar vuelve a ONLINE y reaparece el switch
-  online: navigator.onLine !== false,
-  get offline() { return this.forced || !this.online; }
+forced: false, // solo esta sesión: al recargar vuelve a ONLINE y reaparece el switch
+online: navigator.onLine !== false,
+get offline() { return this.forced || !this.online; }
 };
 window.OBR_NET = OBR_NET;
 let _hideOfflineSwitchTimer = null;
 async function probeConnectivity(timeoutMs = 4000) {
-  if (navigator.onLine === false) return false;
-  try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), timeoutMs);
-    await fetch('https://www.google.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: ac.signal });
-    clearTimeout(t);
-    return true;
-  } catch (e) { return false; }
+if (navigator.onLine === false) return false;
+try {
+const ac = new AbortController();
+const t = setTimeout(() => ac.abort(), timeoutMs);
+await fetch('https://www.google.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: ac.signal });
+clearTimeout(t);
+return true;
+} catch (e) { return false; }
 }
 function applyOfflineMode(silent = false) {
-  const off = OBR_NET.offline;
-  document.body.classList.toggle('obr-offline', off);
-  const inp = document.getElementById('offline-switch-input');
-  const txt = document.querySelector('#offline-container .off-txt');
-  if (inp) inp.checked = off;
-  if (txt) txt.textContent = off ? 'OFFLINE' : 'ONLINE';
-  const cont = document.getElementById('offline-container');
-  if (off) {
-    if (isPareidoliaActive) executePareidoliaDeactivation(document.getElementById('btn-ia'));
-    if (state.isAudioScan) executeAudioScanDeactivation(document.getElementById('btn-audio-menu'));
-    try { if (agoraClient) { agoraClient.leave(); agoraClient = null; } } catch (e) {}
-    try { if (rtmClient) { rtmClient.logout(); rtmClient = null; } } catch (e) {}
-    if (!silent) showToast('📴 MODO OFFLINE — IA VISION y AUDIO SCAN desactivados', true);
-    // 🔒 el switch se oculta hasta recargar la página
-    clearTimeout(_hideOfflineSwitchTimer);
-    _hideOfflineSwitchTimer = setTimeout(() => { if (cont) cont.classList.add('hidden'); }, 600);
-  } else {
-    clearTimeout(_hideOfflineSwitchTimer);
-    if (cont) cont.classList.remove('hidden');
-    if (!silent) showToast('🌐 CONEXIÓN RESTABLECIDA', false);
-  }
+const off = OBR_NET.offline;
+document.body.classList.toggle('obr-offline', off);
+const inp = document.getElementById('offline-switch-input');
+const txt = document.querySelector('#offline-container .off-txt');
+if (inp) inp.checked = off;
+if (txt) txt.textContent = off ? 'OFFLINE' : 'ONLINE';
+const cont = document.getElementById('offline-container');
+if (off) {
+if (isPareidoliaActive) executePareidoliaDeactivation(document.getElementById('btn-ia'));
+if (state.isAudioScan) executeAudioScanDeactivation(document.getElementById('btn-audio-menu'));
+try { if (agoraClient) { agoraClient.leave(); agoraClient = null; } } catch (e) {}
+try { if (rtmClient) { rtmClient.logout(); rtmClient = null; } } catch (e) {}
+if (!silent) showToast('📴 MODO OFFLINE — IA VISION y AUDIO SCAN desactivados', true);
+clearTimeout(_hideOfflineSwitchTimer);
+_hideOfflineSwitchTimer = setTimeout(() => { if (cont) cont.classList.add('hidden'); }, 600);
+} else {
+clearTimeout(_hideOfflineSwitchTimer);
+if (cont) cont.classList.remove('hidden');
+if (!silent) showToast('🌐 CONEXIÓN RESTABLECIDA', false);
+}
+if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
 }
 function toggleOfflineMode(checked) {
-  OBR_NET.forced = !!checked;
-  applyOfflineMode(false);
+OBR_NET.forced = !!checked;
+applyOfflineMode(false);
 }
 window.toggleOfflineMode = toggleOfflineMode;
 window.addEventListener('offline', () => { OBR_NET.online = false; applyOfflineMode(true); });
 window.addEventListener('online', () => { probeConnectivity().then(ok => { OBR_NET.online = ok; applyOfflineMode(true); }); });
 setInterval(() => { if (!OBR_NET.forced) probeConnectivity().then(ok => { if (ok !== OBR_NET.online) { OBR_NET.online = ok; applyOfflineMode(true); } }); }, 60000);
+// 🔒 AUTO-UPDATE: detecta versión nueva del servidor y purga caché/SW viejos
+(function checkAppVersion() {
+if (!navigator.onLine) return;
+fetch('./index.html?nc=' + Date.now(), { cache: 'no-store' })
+.then(r => r.ok ? r.text() : '')
+.then(html => {
+const m = html.match(/ASSET_VERSION\s*=\s*['"](\d+)['"]/);
+if (m && String(ASSET_VERSION) !== m[1]) {
+caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => {
+if ('serviceWorker' in navigator) {
+navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))).then(() => location.reload());
+} else location.reload();
+});
+}
+})
+.catch(() => {});
+})();
 applyOfflineMode(true); // auto‑detección silenciosa al entrar
 
 </script>
