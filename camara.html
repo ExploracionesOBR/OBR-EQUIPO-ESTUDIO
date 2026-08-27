@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.4 (AGORA UNIFICADO)</title>
+    <title>CAMARA OBR PRO v7.7</title>
     
 <!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
 <link rel="icon" type="image/png" href="obr-logo.png?v=1">
@@ -1354,7 +1354,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '48'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '54'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -4326,7 +4326,11 @@ function executeAudioScanDeactivation(btnMenu) {
         window._isAnnouncement = false;
     });
 }
-    
+
+// 🔒 CACHE DE TEXTO PARA AUDIO VISUALIZER (Evita recrear canvas de texto 60 veces/seg)
+let _userTextCanvas = null, _userTextCtx = null, _lastUserText = '';
+let _evpTextCanvas = null, _evpTextCtx = null, _lastEvpText = '';
+
 function drawAudioVisualizer(c, w, h) {
     if (!state.isAudioScan || !audioAnalyser || !audioDataArray) return;
     
@@ -4765,7 +4769,7 @@ if (!_isHighEndDevice) {
     // ── 4) Análisis de la máscara (cobertura, pies, centro) ──
     if (maskToUse) {
     const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
-    let acc = 0, topY = -1, botY = -1, sx = 0;
+    let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
     const totalPixels = BW * BH;
     
     // 🔒 BUCLE 1D: ~25% más rápido en móviles que el bucle anidado x/y
@@ -5476,13 +5480,16 @@ function computeLetterbox(vw, vh, W, H) {
 }
 
 function composeFullFrame(g, W, H) {
+    // 🔒 DEFINIR isPortrait basado en las dimensiones de composición
+    const isPortrait = H > W;
+    
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1;
     g.filter = 'none';
     g.fillStyle = '#000';
     g.fillRect(0, 0, W, H);
-    
+        
     // 🔒 OPCIÓN A: Si tenemos WebGL, usarlo
     if (typeof OBRL !== 'undefined' && OBRL.ready) {
         g.drawImage(OBRL.canvas, 0, 0, W, H);
@@ -5583,11 +5590,14 @@ if (window._lastScreenshot && (now - window._lastScreenshot) < 1000) {
     return;
 }
 window._lastScreenshot = now;
-    const dims = (typeof chooseRecResolution === 'function') ? chooseRecResolution()
-        : { W: el.video.videoWidth|| 1920, H: el.video.videoHeight|| 1080 };
-        // 🔒 DEFINIR isPortrait basado en dimensiones del canvas (no ventana)
-const isPortrait = H > W;
+        const dims = (typeof chooseRecResolution === 'function') ? chooseRecResolution()
+        : { W: el.video.videoWidth || 1920, H: el.video.videoHeight || 1080 };
+    
+    // 🔒 1. DECLARAR PRIMERO las variables
     let W = dims.W, H = dims.H;
+    
+    // 🔒 2. AHORA SÍ calcular isPortrait (usa las variables ya declaradas)
+    const isPortrait = H > W;
     
     // 🔒 CORRECCIÓN CALIDAD: Usar devicePixelRatio para pantallas retina/móvil
     // 🔒 DPR DINÁMICO: 1.5x en 4GB RAM, 2x solo en gama alta
