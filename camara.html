@@ -1354,7 +1354,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '54'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '59'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -7470,28 +7470,59 @@ let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCou
 let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
 
 function chooseRecResolution() {
-    // 🔒 DETECTAR ORIENTACIÓN REAL DEL VIDEO (no de la ventana)
+    // 🔒 DETECTAR ORIENTACIÓN REAL DEL DISPOSITIVO
+    const isPortrait = window.innerHeight > window.innerWidth;
+    
+    // Obtener dimensiones reales del video de la cámara
     const vW = el.video?.videoWidth || 1920;
     const vH = el.video?.videoHeight || 1080;
-    const isPortrait = vH > vW;
     
-    // 🔒 SIEMPRE 1080p en el lado largo, 60fps
+    //  Si el video ya está en la orientación correcta, usar sus dimensiones
+    const videoIsPortrait = vH > vW;
+    
     let W, H;
+    
     if (isPortrait) {
-        W = 1080;  // Ancho fijo en vertical
-        H = Math.round(vH * (1080 / vW));  // Alto proporcional
+        // 📱 MODO VERTICAL: 1080px de ancho, alto proporcional
+        if (videoIsPortrait) {
+            // El video ya está en vertical, mantener proporción
+            W = 1080;
+            H = Math.round(vH * (1080 / vW));
+        } else {
+            // El video está en horizontal pero el dispositivo en vertical
+            // Rotar dimensiones: alto del video = ancho, ancho del video = alto
+            W = 1080;
+            H = Math.round(vW * (1080 / vH));
+        }
     } else {
-        H = 1080;  // Alto fijo en horizontal
-        W = Math.round(vW * (1080 / vH));  // Ancho proporcional
+        // 🖥️ MODO HORIZONTAL: 1080px de alto, ancho proporcional
+        if (!videoIsPortrait) {
+            // El video ya está en horizontal, mantener proporción
+            H = 1080;
+            W = Math.round(vW * (1080 / vH));
+        } else {
+            // El video está en vertical pero el dispositivo en horizontal
+            // Rotar dimensiones
+            H = 1080;
+            W = Math.round(vH * (1080 / vW));
+        }
     }
     
-    // Asegurar pares (H.264)
+    // Asegurar que sean pares (requerido por H.264)
     W -= W % 2;
     H -= H % 2;
     
-    // 🔒 Cap máximo 1920x1080
-    if (W > 1920) { W = 1920; H = Math.round(vH * (1920 / vW)); H -= H % 2; }
-    if (H > 1080) { H = 1080; W = Math.round(vW * (1080 / vH)); W -= W % 2; }
+    // 🔒 Cap máximo: nunca superar 1920x1080
+    if (W > 1920) {
+        W = 1920;
+        H = Math.round(W / (vW / vH));
+        H -= H % 2;
+    }
+    if (H > 1080) {
+        H = 1080;
+        W = Math.round(H * (vW / vH));
+        W -= W % 2;
+    }
     
     return { W, H, fps: 60 };
 }
