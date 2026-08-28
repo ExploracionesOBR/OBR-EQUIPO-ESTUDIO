@@ -1354,7 +1354,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '59'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '43'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1378,8 +1378,8 @@ const MIC_CHANNEL = 'obr-mic';
 const AI_SENSITIVITY = 0.35;
 const VOLUMEN_BARRIDO = 0.40;
 const VOLUMEN_RESPUESTA = 0.35;
-const VOLUMEN_EVP = 1.5;
-const VOLUMEN_IA_VISION = 1.5;
+const VOLUMEN_EVP = 2.2;
+const VOLUMEN_IA_VISION = 2.0;
 
 // === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
 const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
@@ -1627,9 +1627,12 @@ const URLS = [
 './index.html',
 './obr-logo.png',
 './obr-banner.png',
-'./INTRO_1.mp4',
-'./FIN_DIRECTO.mp4',
-'./BANNER_1.mp4',
+'./Horizontal_intro.mp4',
+'./Horizontal_outro.mp4',
+'./Horizontal_banner.mp4',
+'./Vertical_intro.mp4',
+'./Vertical_outro.mp4',
+'./Vertical_banner.mp4',
 './barrido.mp3',
 './respuesta.mp3',
 // 🔒 MISMAS URLs y versiones que pide el <head> (tal cual)
@@ -2355,8 +2358,8 @@ async function fetchBackgroundAIContext() {
             if (!ttsSource) {
                 initTTSPipeline();
             } else {
-                if (mixDestination) {
-                    try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
+               if (mixDestination) {
+try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else if (ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
                     try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
                     try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
                 }
@@ -2694,11 +2697,12 @@ const paranormalQuestions = [
     cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION);
     if (typeof cloudTTSPlayer.setSinkId === 'function') cloudTTSPlayer.setSinkId("default").catch(() => {});
 
-    let ttsSource      = null; 
-    let ttsMainGain    = null; 
-    let bassBoost      = null; 
-    let darkFilter     = null; 
-    let ttsGainNode    = null; 
+    let ttsSource      = null;
+let ttsMainGain    = null;
+let bassBoost      = null;
+let darkFilter     = null;
+let ttsGainNode    = null;
+let ttsLimiter     = null; 
 
     function getTTSFilters() {
         const ls  = (k, def) => { const v = parseFloat(localStorage.getItem(k)); return isNaN(v) ? def : v; };
@@ -2907,7 +2911,7 @@ const lidarCtx = el.lidarCanvas.getContext('2d', {
 // 🎯 FRAME SKIPPER INTELIGENTE PARA IA (Evita lag en móvil)
 // ==========================================================
 const AI_FRAME_SKIP = {
-  counter: 0, targetSkip: 2, minSkip: 1, maxSkip: 5, lastProcessTime: 0, minIntervalMs: 66,
+  counter: 0, targetSkip: 2, minSkip: 1, maxSkip: 5, lastProcessTime: 0, minIntervalMs: (_deviceCores <= 4 ? 120 : 66),
   shouldProcess() {
     this.counter++;
     const now = performance.now();
@@ -2920,6 +2924,9 @@ const AI_FRAME_SKIP = {
     else if (fps > 50) this.targetSkip = Math.max(this.minSkip, this.targetSkip - 1);
   }
 };
+
+// 🔒 Cede 1 frame pintado al UI antes de cada inferencia pesada (mata el micro-freeze percibido)
+const _yieldUI = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     let lidarBusy = false; let lastLidarMask = null; let scanlineCanvas = null; let lidarGeneratedFrame = -1;
     let lidarActivityGrid = new Float32Array(24 * 18);
     let videoStream; // No se usa conn de PeerJS
@@ -2971,32 +2978,38 @@ setInterval(systemGC, 60000);
         }
     }
 
-    const LOCAL_ASSETS = { intro: './INTRO_1.mp4', outro: './FIN_DIRECTO.mp4', banner: './BANNER_1.mp4' };
+    
     const loadedBlobs = {};
 
-    async function preloadLocalAssets() {
-const assets = [
-'./obr-logo.png',
-'./obr-banner.png',
-'./obr-intro.mp4',
-'./obr-outro.mp4'
-];
-
-await Promise.all(assets.map(async (url) => {
+ async function preloadLocalAssets() {
+const orient = (window.innerHeight > window.innerWidth) ? 'Vertical' : 'Horizontal';
+const types = ['intro', 'outro', 'banner'];
+await Promise.all(types.map(async (t) => {
+const key = `${orient}_${t}`;
+if (loadedBlobs[key]) return;
 try {
-const resp = await fetch(url, { 
-    cache: 'force-cache', // 🔒 Fuerza usar caché del Service Worker
-    mode: 'no-cors'
-});
-// Procesar el asset...
+const resp = await fetch(`./${key}.mp4`, { cache: 'force-cache' });
+if (resp.ok) loadedBlobs[key] = URL.createObjectURL(await resp.blob());
 } catch (e) {
-_warn('[ASSETS] No se pudo cargar:', url, e.message);
+_warn('[ASSETS] No se pudo cargar:', key);
 }
 }));
 }
 
-    function playLocalMedia(type) {
-        const src = loadedBlobs[type]; if (!src) { showToast("MEDIO NO DISPONIBLE", true); return; }
+    async function playLocalMedia(type) {
+const orient = (window.innerHeight > window.innerWidth) ? 'Vertical' : 'Horizontal';
+const key = `${orient}_${type}`;
+if (!loadedBlobs[key]) {
+try {
+const resp = await fetch(`./${key}.mp4`);
+if (!resp.ok) throw new Error('HTTP ' + resp.status);
+loadedBlobs[key] = URL.createObjectURL(await resp.blob());
+} catch (e) {
+showToast("MEDIO NO DISPONIBLE", true);
+return;
+}
+}
+const src = loadedBlobs[key];
         const overlay = document.getElementById('local-media-overlay'), video = document.getElementById('local-video-player');
         const mapSlot = document.getElementById('map-container-slot');
         const telemetry = document.getElementById('telemetry-container');
@@ -3274,19 +3287,6 @@ window.addEventListener('orientationchange', handleOrientationChange);
     isRestartingCamera = false;
   }
 }
-
-// "Cosquillas" a la cámara cada 2 minutos para evitar que el OS la suspenda por inactividad
-setInterval(() => {
-  if (!videoStream) return; // 🔒 sin cámara no hay nada que estimular
-  if (document.visibilityState === 'visible' && videoStream && !isRestartingCamera) {
-    const track = videoStream.getVideoTracks()[0];
-    if (track && track.readyState === 'live') {
-      // Pausar y reanudar forzadamente reinicia el timer de inactividad del OS
-      el.video.pause();
-      setTimeout(() => { el.video.play().catch(()=>{}); }, 50);
-    }
-  }
-}, 120000); // Cada 2 minutos
 
 function applySharpness(level) {
     const video = el.video;
@@ -3856,13 +3856,11 @@ const constraintSets = [
     initGLEngine(); // 🔒 si falla, la app sigue con el fallback 2D anterior
 }    
     updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
-// 🔒 Timeout 5s: si falla (offline sin caché), continúa sin bloquear
-await Promise.race([
-preloadLocalAssets(),
-new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-]).catch(e => {
-_warn('[ASSETS] Preload omitido (timeout o error):', e.message);
-});
+// 🔒 NO bloqueante: precarga en segundo plano cuando el hilo está libre (arranque más fluido)
+setTimeout(() => {
+if ('requestIdleCallback' in window) requestIdleCallback(() => preloadLocalAssets().catch(() => {}), { timeout: 8000 });
+else preloadLocalAssets().catch(() => {});
+}, 2500);
 updateProgress(72, "CALIBRANDO MOTOR SLS...");
 updateProgress(80, "CALIBRANDO LIDAR...");
 updateProgress(88, "CALIBRANDO PAREIDOLIA...");
@@ -3873,15 +3871,14 @@ updateProgress(94, "SINCRONIZANDO INTERFAZ...");
             if(window.tf) { try { await tf.setBackend('webgl'); } catch(e) { await tf.setBackend('cpu'); } }
             // 🔒 MULTIPOSE optimizado: máximo 3 poses, umbral más estricto para no procesar basura
 if(window.poseDetection) {
-  aiDetector = await poseDetection.createDetector(
-    poseDetection.SupportedModels.MoveNet, 
-    {
-      modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
-      enableSmoothing: true,
-      maxPoses: 3,          // 🔒 Reducido de 5 a 3 (suficiente para explorador + entorno)
-      scoreThreshold: 0.4   // 🔒 Subido de 0.35 a 0.4 (descarta falsos positivos)
-    }
-  );
+// 🔒 MULTIPOSE SIEMPRE (requisito): en gama baja se desactiva el suavizado
+// interno del detector (redundante) y se ajustan poses/umbral para no congelar
+aiDetector = await poseDetection.createDetector(
+poseDetection.SupportedModels.MoveNet,
+_isHighEndDevice
+? { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true, maxPoses: 3, scoreThreshold: 0.4 }
+: { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: false, maxPoses: 2, scoreThreshold: 0.45 }
+);
 }
             if(window.SelfieSegmentation) { 
                 segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); 
@@ -3949,19 +3946,21 @@ const now = performance.now();
 
         if (state.isLidar && segmenter) {
             if (!lidarBusy) {
-                lidarBusy = true;
-                ensureImageDrawn();
-                try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; }
-            }
+lidarBusy = true;
+ensureImageDrawn();
+if (!_isHighEndDevice) await _yieldUI(); // 🔒 pinta antes de bloquear
+try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; }
+}
         } else if (aiDetector && state.isSLS && now - lastPoseTime > 33) {
             lastPoseTime = now;
-            ensureImageDrawn();
-            try {
-                let newPoses = await aiDetector.estimatePoses(analysisCanvas, {
-                    maxPoses: 3,
-                    flipHorizontal: false,
-                    scoreThreshold: AI_SENSITIVITY
-                });
+ensureImageDrawn();
+if (!_isHighEndDevice) await _yieldUI(); // 🔒 pinta antes de bloquear
+try {
+let newPoses = await aiDetector.estimatePoses(analysisCanvas, {
+maxPoses: _isHighEndDevice ? 3 : 2,
+flipHorizontal: false,
+scoreThreshold: AI_SENSITIVITY
+});
                 if (newPoses && newPoses.length > 0) {
                     let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
                     targetPoses = filterOverlapping(mappedPoses);
@@ -4064,8 +4063,8 @@ const now = performance.now();
             const convolver = audioCtx.createConvolver();
             convolver.buffer = window._teatroImpulse;
             
-            const wetGain = audioCtx.createGain(); wetGain.gain.value = 0.8;
-            const dryGain = audioCtx.createGain(); dryGain.gain.value = 0.5;
+            const wetGain = audioCtx.createGain(); wetGain.gain.value = 0.45;
+const dryGain = audioCtx.createGain(); dryGain.gain.value = 1.0;
             
             lastNode.connect(dryGain);
             lastNode.connect(convolver);
@@ -4113,9 +4112,17 @@ const now = performance.now();
         _ttsHighFilter = ctx1.createBiquadFilter(); _ttsHighFilter.type = 'highshelf';
         
         ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
-        ttsSource.connect(_ttsBassFilter); _ttsBassFilter.connect(_ttsHighFilter); _ttsHighFilter.connect(ttsMainGain); 
-        
-        ttsMainGain.connect(ctx1.destination);
+// 🔒 LIMITADOR ANTI-SATURACIÓN (IA VISION / AUDIO SCAN): mantiene el volumen fuerte
+// pero recorta picos antes del clipping digital → potente y limpio
+ttsLimiter = ctx1.createDynamicsCompressor();
+ttsLimiter.threshold.value = -6;   // dB: limita justo antes del tope
+ttsLimiter.knee.value = 3;         // transición suave
+ttsLimiter.ratio.value = 12;       // casi brickwall
+ttsLimiter.attack.value = 0.002;   // inmediato
+ttsLimiter.release.value = 0.18;
+ttsSource.connect(_ttsBassFilter); _ttsBassFilter.connect(_ttsHighFilter); _ttsHighFilter.connect(ttsMainGain);
+ttsMainGain.connect(ttsLimiter);
+ttsLimiter.connect(ctx1.destination);
         
         try { 
             if (!window._sweepSource) window._sweepSource = ctx1.createMediaElementSource(sweepAudio); 
@@ -4127,11 +4134,11 @@ const now = performance.now();
         } catch(e){}
 
         if (mixDestination) {
-            try { ttsMainGain.connect(mixDestination); } catch(e){}
-            try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
-            try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
-        }
-        applyGoogleTTSFilters(false);
+try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else ttsMainGain.connect(mixDestination); } catch(e){}
+try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
+try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
+}
+applyGoogleTTSFilters(false);
     }
 
     function readFiltersFromDOM() {
@@ -4628,7 +4635,7 @@ function drawAudioVisualizer(c, w, h) {
             else window._evpNextGap = 20000 + Math.random() * 15000;
         }
         if (ttsMainGain) {
-            const volVar = 0.75 + Math.random() * 0.5;
+            const volVar = 1.1 + Math.random() * 0.4;
             ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
         }
         let evpText;
@@ -4694,7 +4701,7 @@ function drawLidarEffect(c, width, height, currentFrame) {
     // 🔒 LiDAR a 20fps en gama baja (no 30fps) - imperceptible visualmente
 if (!_isHighEndDevice) {
   _lidarFrameSkip = (_lidarFrameSkip + 1) % 3; //  Cada 3 frames = ~20fps
-  if (_lidarFrameSkip !== 0 && !isRecordingActive) return;
+  if (_lidarFrameSkip !== 0) return;
 }
 
     const maskToUse = lidarMask || lastLidarMask;
@@ -4707,10 +4714,11 @@ if (!_isHighEndDevice) {
     if (hasSrc) {
         const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
         const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
-        c.save(); c.globalAlpha = 0.5;
-        c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)';
-        c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
-        c.restore(); c.filter = 'none'; c.globalAlpha = 1;
+        c.save(); c.globalAlpha = 0.45;
+c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
+c.restore(); c.globalAlpha = 1;
+c.fillStyle = 'rgba(2,6,12,0.35)';
+c.fillRect(0, 0, width, height);
     }
 
     // ── 1) Buffers con aspect EXACTO de pantalla → NUNCA se aplasta al rotar ──
@@ -4960,8 +4968,16 @@ if (!_isHighEndDevice) {
     }
 
 function applyQualityScale() {
-    el.masterCanvas.width = Math.round(window.innerWidth * qualityScale);
-    el.masterCanvas.height = Math.round(window.innerHeight * qualityScale);
+// 🔒 NITIDEZ: el master se rasteriza a resolución física (dpr) para que el HUD
+// no se vea borroso ni en pantalla ni al componer fotos/video. Tope 2x.
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+let mw = Math.round(window.innerWidth * qualityScale * dpr);
+let mh = Math.round(window.innerHeight * qualityScale * dpr);
+// 🔒 Tope clase 1080p también para el master-canvas (overlays nunca en 4K)
+const capScale = Math.min(1, 1920 / Math.max(mw, 1), 1920 / Math.max(mh, 1));
+if (capScale < 1) { mw = Math.round(mw * capScale); mh = Math.round(mh * capScale); }
+el.masterCanvas.width = mw;
+el.masterCanvas.height = mh;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high'; // 🔒 siempre alto: el escalado no ablanda la imagen
     // 🔒 LiDAR del mismo tamaño que el maestro (evita recortes de la línea de escaneo)
@@ -5009,8 +5025,8 @@ function drawBurnInHUD(ctx2, width, height, scale) {
     ctx2.globalAlpha = Math.max(0, Math.min(1, scale));
     ctx2.imageSmoothingEnabled = true;
     ctx2.imageSmoothingQuality = 'high';
-    ctx2.shadowColor = 'black';
-    ctx2.shadowBlur = isPortrait ? 6 : 4;
+    ctx2.shadowColor = 'rgba(0,0,0,0.85)';
+ctx2.shadowBlur = isPortrait ? 2 : 1.5; // 🔒 solo un halo sutil de contraste, sin difuminar
     
     const pad = 20 * uiS;
     const logoSize = isPortrait ? Math.min(width * 0.10, 70) : 50 * uiS;
@@ -5045,22 +5061,24 @@ function drawBurnInHUD(ctx2, width, height, scale) {
         }
         const tCanv = _hudTextCanvas, tCtx = _hudTextCtx;
         // Solo regenerar si cambió la fecha
-        if (fullDate !== _lastHudDate || tCanv.width !== 1) {
-            ctx2.font = `${dateFS}px 'Share Tech Mono', monospace`;
-            const metrics = ctx2.measureText(fullDate);
-            const tw = metrics.width;
-            const th = dateFS * 1.5;
-            tCanv.width = Math.ceil(tw + 10);
-            tCanv.height = Math.ceil(th + 10);
-            tCtx.clearRect(0, 0, tCanv.width, tCanv.height);
-            tCtx.fillStyle = '#ff3333';
-            tCtx.font = `${dateFS}px 'Share Tech Mono', monospace`;
-            tCtx.textBaseline = 'top';
-            tCtx.textAlign = 'left';
-            tCtx.fillText(fullDate, 5, 5);
-            _lastHudDate = fullDate;
-        }
-        ctx2.drawImage(tCanv, textX, pad + 2 * uiS + titleFS + 6 * uiS);
+        const SS = 2; // 🔒 supersampling: se rasteriza 2x y se reduce → bordes nítidos
+if (fullDate !== _lastHudDate || tCanv.width !== 1) {
+ctx2.font = `${dateFS}px 'Share Tech Mono', monospace`;
+const metrics = ctx2.measureText(fullDate);
+const tw = metrics.width;
+const th = dateFS * 1.5;
+tCanv.width = Math.ceil((tw + 10) * SS);
+tCanv.height = Math.ceil((th + 10) * SS);
+tCtx.setTransform(SS, 0, 0, SS, 0, 0);
+tCtx.clearRect(0, 0, tw + 10, th + 10);
+tCtx.fillStyle = '#ff3333';
+tCtx.font = `${dateFS}px 'Share Tech Mono', monospace`;
+tCtx.textBaseline = 'top';
+tCtx.textAlign = 'left';
+tCtx.fillText(fullDate, 5, 5);
+_lastHudDate = fullDate;
+}
+ctx2.drawImage(tCanv, textX, pad + 2 * uiS + titleFS + 6 * uiS, tCanv.width / SS, tCanv.height / SS);
     }
 
     // 3. Indicador SLS (discreto)
@@ -5418,7 +5436,7 @@ function drawHybrid(targetCtx, pose, targetIdx, coords) {
     
     targetCtx.save();
     targetCtx.strokeStyle = "#ff00ff";
-targetCtx.lineWidth = 1.5; // 🔒 GROSOR ÓPTIMO: visible pero nítido (antes 0.5)
+targetCtx.lineWidth = 2.6; // 🔒 Más grueso: visible en móvil y en grabaciones 1080p
 targetCtx.lineCap = 'round';
 targetCtx.lineJoin = 'round';
 targetCtx.shadowBlur = 0;
@@ -5449,12 +5467,12 @@ targetCtx.shadowBlur = 0;
       const p = k[i];
       if (!p || p.score < AI_SENSITIVITY * 0.5) return;
       const px = mapX(p.x), py = mapY(p.y);
-      targetCtx.beginPath();
-targetCtx.arc(px, py, 2.5, 0, Math.PI * 2); // 🔒 Radio más visible (antes 1.5)
+targetCtx.beginPath();
+targetCtx.arc(px, py, 3.4, 0, Math.PI * 2); // 🔒 Radio reforzado
 if (i === 0 || i === 5 || i === 6) {
-  targetCtx.strokeStyle = `rgba(255,0,0,0.5)`;
-  targetCtx.lineWidth = 2.5; // 🔒 Halo más visible (antes 1.5)
-  targetCtx.stroke();
+targetCtx.strokeStyle = `rgba(255,0,0,0.5)`;
+targetCtx.lineWidth = 3.4; // 🔒 Halo reforzado
+targetCtx.stroke();
 }
       targetCtx.fillStyle = "#ff3333";
       targetCtx.fill();
@@ -5480,81 +5498,85 @@ function computeLetterbox(vw, vh, W, H) {
 }
 
 function composeFullFrame(g, W, H) {
-    // 🔒 DEFINIR isPortrait basado en las dimensiones de composición
-    const isPortrait = H > W;
-    
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.globalCompositeOperation = 'source-over';
-    g.globalAlpha = 1;
-    g.filter = 'none';
-    g.fillStyle = '#000';
-    g.fillRect(0, 0, W, H);
-        
-    // 🔒 OPCIÓN A: Si tenemos WebGL, usarlo
-    if (typeof OBRL !== 'undefined' && OBRL.ready) {
-        g.drawImage(OBRL.canvas, 0, 0, W, H);
-    }
-    // 🔒 OPCIÓN B: Fallback 2D con filtros
-    else {
-        const vW = el.video.videoWidth, vH = el.video.videoHeight;
-        if (vW && vH) {
-            const sc = Math.max(W / vW, H / vH);
-            const dW = vW * sc, dH = vH * sc;
-            let f = cachedLiveFilter || 'none';
-            if (currentSharpness > 0) {
-                const sharp = { 1: 'contrast(1.12) saturate(1.18)', 2: 'contrast(1.22) saturate(1.32)', 3: 'contrast(1.35) saturate(1.48)' }[currentSharpness];
-                f = (f === 'none') ? sharp : f + ' ' + sharp;
+g.setTransform(1, 0, 0, 1, 0, 0);
+g.globalCompositeOperation = 'source-over';
+g.globalAlpha = 1;
+g.filter = 'none';
+g.fillStyle = '#000';
+g.fillRect(0, 0, W, H);
+// 1) Video base (GL si está listo, si no fallback 2D)
+if (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1) {
+g.drawImage(OBRL.canvas, 0, 0, W, H);
+} else {
+const vW = el.video.videoWidth, vH = el.video.videoHeight;
+if (vW && vH) {
+const sc = Math.max(W / vW, H / vH);
+const dW = vW * sc, dH = vH * sc;
+const f = cachedLiveFilter || 'none';
+g.save();
+if (f !== 'none') g.filter = f;
+g.imageSmoothingEnabled = true;
+g.imageSmoothingQuality = 'high';
+g.drawImage(el.video, (W - dW) / 2, (H - dH) / 2, dW, dH);
+g.restore();
+g.filter = 'none';
+}
+}
+const master = el.masterCanvas;
+if (master && master.width > 1 && master.height > 1) {
+g.drawImage(master, 0, 0, W, H);
+}
+// 🔒 MAPA SIEMPRE EN CAPTURA: el master solo lo tiene en frames "dirty";
+// aquí se garantiza en su posición real (abajo-izquierda) y a escala de salida.
+if (mapSpriteCanvas && mapSpriteCanvas.width > 1 && !document.body.classList.contains('hide-map')) {
+const mapSlot = document.getElementById('map-container-slot');
+if (mapSlot && !mapSlot.classList.contains('map-hidden')) {
+const rect = mapSlot.getBoundingClientRect();
+if (rect.width > 1) {
+const s = W / window.innerWidth;
+g.save();
+g.globalAlpha = 0.95;
+g.drawImage(mapSpriteCanvas, rect.left * s, rect.top * s, rect.width * s, rect.height * s);
+g.restore();
+}
+}
+}
+g.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// ==========================================================
+// 💾 GUARDADO SIN SALIR DE LA APP
+// iOS: hoja de compartir → "Guardar video/foto" (no abandona la PWA)
+// Android/escritorio: descarga silenciosa tradicional
+// ==========================================================
+async function saveBlobToDevice(blob, filename) {
+    if (isIOS && navigator.canShare) {
+        try {
+            const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: filename });
+                return;
             }
-            g.save();
-            if (f !== 'none') g.filter = f;
-            g.imageSmoothingEnabled = true;
-            g.imageSmoothingQuality = 'high';
-            g.drawImage(el.video, (W - dW) / 2, (H - dH) / 2, dW, dH);
-            if (f !== 'none') g.filter = 'none';
-            g.restore();
+        } catch (e) {
+            if (e && e.name === 'AbortError') return; // usuario cerró la hoja: no es error
+            _warn('[SAVE] Share no disponible, usando descarga:', e && e.name);
         }
     }
-    
-    // 🔒 CRÍTICO: NO dibujar el master-canvas aquí (ya tiene TODO: HUD, SLS, etc.)
-    // Solo calculamos coordenadas para overlays adicionales si es necesario
-    const vW = el.video.videoWidth, vH = el.video.videoHeight;
-    if (vW && vH) {
-        const sc = Math.max(W / vW, H / vH);
-        const dW = vW * sc, dH = vH * sc;
-        window.drawCoords = { dW, dH, dX: (W - dW) / 2, dY: (H - dH) / 2, vW, vH };
-    }
-    
-    // 🔒 CRÍTICO: Dibujar el master-canvas (que contiene SLS, LiDAR, HUD, Mapa, Audio)
-    const master = el.masterCanvas;
-    if (master && master.width > 0) {
-        g.drawImage(master, 0, 0, W, H);
-    }
-
-        //  CRÍTICO: Dibujar el mapa mirror SI existe
-    const mapMirror = document.getElementById('map-mirror-canvas');
-    if (mapMirror && mapMirror.width > 0 && mapMirror.height > 0) {
-        // Calcular posición del mapa (esquina superior derecha)
-        const mapSize = isPortrait ? 140 : 156;
-        const mapX = W - mapSize - 10;
-        const mapY = 10;
-        
-        g.save();
-        g.globalAlpha = 0.9;
-        g.drawImage(mapMirror, mapX, mapY, mapSize, mapSize);
-        g.restore();
-    }
-    
-    g.setTransform(1, 0, 0, 1, 0, 0);
+    // Fallback para Android / Desktop o si canShare falla
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+
 function takeScreenshot() {
     try {
         const flash = document.getElementById('capture-flash');
         if (flash) { flash.classList.add('flash'); setTimeout(() => flash.classList.remove('flash'), 200); }
-        
         // 🔒 Verificar si hay mapa visible
         const mapSlot = document.getElementById('map-container-slot');
         const hasMap = mapSlot && !mapSlot.classList.contains('map-hidden');
-        
         if (hasMap && typeof captureMapToMirror === 'function') {
             lastMapCapture = 0;
             if (window.miniMapInstance) {
@@ -5599,26 +5621,14 @@ window._lastScreenshot = now;
     // 🔒 2. AHORA SÍ calcular isPortrait (usa las variables ya declaradas)
     const isPortrait = H > W;
     
-    // 🔒 CORRECCIÓN CALIDAD: Usar devicePixelRatio para pantallas retina/móvil
-    // 🔒 DPR DINÁMICO: 1.5x en 4GB RAM, 2x solo en gama alta
-const deviceMemory = navigator.deviceMemory || 4; // GB
-const dpr = deviceMemory >= 6 ? Math.min(window.devicePixelRatio || 1, 2) 
-                               : Math.min(window.devicePixelRatio || 1, 1.5);
-    // 🔒 1. Inicializar el canvas caché SOLO la primera vez
+// 🔒 SIN dpr: la foto sale exactamente a la resolución de chooseRecResolution (clase 1080p, sin bordes)
 if (!_screenshotCanvas) {
-    _screenshotCanvas = document.createElement('canvas');
-    // willReadFrequently: true optimiza la lectura de píxeles para toBlob
-    _screenshotCtx = _screenshotCanvas.getContext('2d', { willReadFrequently: true });
+_screenshotCanvas = document.createElement('canvas');
+_screenshotCtx = _screenshotCanvas.getContext('2d', { willReadFrequently: true });
 }
-
-// 🔒 2. Redimensionar el canvas existente (no crea memoria nueva, solo ajusta)
-_screenshotCanvas.width = W * dpr;
-_screenshotCanvas.height = H * dpr;
-
-// 🔒 3. Resetear y aplicar escala de forma segura (evita deformaciones acumulativas)
-_screenshotCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-// 🔒 4. Calidad dinámica: 'high' en gama alta, 'medium' en 4GB (50% más rápido)
+_screenshotCanvas.width = W;
+_screenshotCanvas.height = H;
+_screenshotCtx.setTransform(1, 0, 0, 1, 0, 0);
 _screenshotCtx.imageSmoothingEnabled = true;
 _screenshotCtx.imageSmoothingQuality = _isHighEndDevice ? 'high' : 'medium';
 
@@ -5629,27 +5639,26 @@ const mimeType = hasTransparency ? 'image/png' : 'image/jpeg';
 const quality = hasTransparency ? 0.9 : 0.85; // JPEG quality
 
 _screenshotCanvas.toBlob((blob) => {
-    if (!blob) { 
-        showToast('❌ ERROR CAPTURA', true); 
-        return; 
+    if (!blob) {
+        showToast('❌ ERROR CAPTURA', true);
+        return;
     }
-
     // 🔒 LIBERAR MEMORIA después de 5 segundos
-setTimeout(() => {
-    if (_screenshotCanvas) {
-        _screenshotCanvas.width = 0;
-        _screenshotCanvas.height = 0;
-    }
-    _log('[SCREENSHOT] Memoria liberada');
-}, 5000);
+    setTimeout(() => {
+        if (_screenshotCanvas) {
+            _screenshotCanvas.width = 0;
+            _screenshotCanvas.height = 0;
+        }
+        _log('[SCREENSHOT] Memoria liberada');
+    }, 5000);
 
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
     const ext = hasTransparency ? 'png' : 'jpg';
-    a.download = `OBR_SNAP_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    showToast(` FOTO ${W}×${H} GUARDADA`, false);
+    const filename = `OBR_SNAP_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+    
+    // 🔒 Usamos la función unificada (iOS Share Sheet / Android Download)
+    saveBlobToDevice(blob, filename);
+
+    showToast(`📸 FOTO ${W}×${H} GUARDADA`, false);
     if (navigator.vibrate) navigator.vibrate(80);
 }, mimeType, quality);
 }
@@ -5734,6 +5743,14 @@ if (_overlayDirty || isRecordingActive) {
   
   // ✅ 8. Audio visualizer: SOLO si está activo
   if (state.isAudioScan) drawAudioVisualizer(ctx, W, H);
+
+// ✅ 8.5 REC CONTINUA: alimenta el canvas de grabación (1080p 60fps)
+// 🔒 Gama baja: compone 30fps reales (captureStream duplica a 60fps) → mitad de carga 2D
+if (isRecordingActive && recCtx4K && recCanvas4K && recCanvas4K.width > 1) {
+if (_isHighEndDevice || (frameCount & 1) === 0) {
+composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
+}
+}
   
   // ✅ 9. Reset transform y continuar loop
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -6067,8 +6084,8 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
                     hudTime: DOM_CACHE?.clock?.innerText || ''
                 };
                 sendRTMCommand('estudio_principal', overlay);
-            }
-        }, 50);
+}
+}, 100); // 🔒 10 Hz: menos tráfico RTM, misma fluidez visual en el dock
     }
 
     function stopSendingOverlay() {
@@ -7470,78 +7487,30 @@ let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCou
 let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
 
 function chooseRecResolution() {
-    // 🔒 DETECTAR ORIENTACIÓN REAL DEL DISPOSITIVO
-    const isPortrait = window.innerHeight > window.innerWidth;
-    
-    // Obtener dimensiones reales del video de la cámara
-    const vW = el.video?.videoWidth || 1920;
-    const vH = el.video?.videoHeight || 1080;
-    
-    //  Si el video ya está en la orientación correcta, usar sus dimensiones
-    const videoIsPortrait = vH > vW;
-    
-    let W, H;
-    
-    if (isPortrait) {
-        // 📱 MODO VERTICAL: 1080px de ancho, alto proporcional
-        if (videoIsPortrait) {
-            // El video ya está en vertical, mantener proporción
-            W = 1080;
-            H = Math.round(vH * (1080 / vW));
-        } else {
-            // El video está en horizontal pero el dispositivo en vertical
-            // Rotar dimensiones: alto del video = ancho, ancho del video = alto
-            W = 1080;
-            H = Math.round(vW * (1080 / vH));
-        }
-    } else {
-        // 🖥️ MODO HORIZONTAL: 1080px de alto, ancho proporcional
-        if (!videoIsPortrait) {
-            // El video ya está en horizontal, mantener proporción
-            H = 1080;
-            W = Math.round(vW * (1080 / vH));
-        } else {
-            // El video está en vertical pero el dispositivo en horizontal
-            // Rotar dimensiones
-            H = 1080;
-            W = Math.round(vH * (1080 / vW));
-        }
-    }
-    
-    // Asegurar que sean pares (requerido por H.264)
-    W -= W % 2;
-    H -= H % 2;
-    
-    // 🔒 Cap máximo: nunca superar 1920x1080
-    if (W > 1920) {
-        W = 1920;
-        H = Math.round(W / (vW / vH));
-        H -= H % 2;
-    }
-    if (H > 1080) {
-        H = 1080;
-        W = Math.round(H * (vW / vH));
-        W -= W % 2;
-    }
-    
-    return { W, H, fps: 60 };
+// 🔒 Aspecto de salida == aspecto de ventana (sin bordes negros ni overlays deformados)
+// 🔒 Tope clase 1080p: lado largo 1920, NUNCA más (adiós 4K)
+const wW = window.innerWidth || 1920, wH = window.innerHeight || 1080;
+const portrait = wH > wW;
+let W, H;
+if (portrait) {
+H = 1920; W = Math.round(H * wW / wH);
+if (W > 1080) { W = 1080; H = Math.round(W * wH / wW); }
+} else {
+W = 1920; H = Math.round(W * wH / wW);
+if (H > 1080) { H = 1080; W = Math.round(H * wW / wH); }
+}
+W -= W % 2; H -= H % 2;
+return { W, H, fps: 60 }; // 🔒 60 fps siempre
 }
 
 function cleanupRecording() {
-    // 🔒 LIMPIEZA AGRESIVA DE MEMORIA
-    if (recordedChunks && recordedChunks.length > 0) {
-        recordedChunks = []; // Liberar referencia al array
-    }
-    if (recCanvas4K) {
-        recCanvas4K.width = 0; // Forzar liberación de memoria de video
-        recCanvas4K.height = 0;
-    }
-    if (mediaRecorder && mediaRecorder._canvasStream) {
-        mediaRecorder._canvasStream.getTracks().forEach(track => track.stop());
-        mediaRecorder._canvasStream = null;
-    }
-    // Forzar GC suave (el navegador lo ejecutará cuando pueda)
-    if (window.gc) window.gc(); 
+// 🔒 NO tocar recordedChunks aquí: onstop arma el archivo y los limpia.
+// 🔒 NO zerar recCanvas4K aquí: la liberación diferida vive en onstop.
+if (mediaRecorder && mediaRecorder._canvasStream) {
+mediaRecorder._canvasStream.getTracks().forEach(track => track.stop());
+mediaRecorder._canvasStream = null;
+}
+if (window.gc) window.gc();
 }
 
 // 🎙️ Mezcla dedicada para grabación: voz interna REDUCIDA + micro completo
@@ -7597,29 +7566,14 @@ async function startScreenRecording() {
     try {
         await initAudioEngine();
         
-        // 🔒 INICIALIZAR CANVAS DE GRABACIÓN CON ALTA CALIDAD (DevicePixelRatio)
         const res = chooseRecResolution();
-        const dpr = Math.min(window.devicePixelRatio || 1, 2); // Máximo 2x para no saturar
-        
-        if (!recCanvas4K) {
-            recCanvas4K = document.createElement('canvas');
-        }
-        
-        // Configurar resolución física real (considerando pantallas retina/móvil)
-        recCanvas4K.width = res.W * dpr;
-        recCanvas4K.height = res.H * dpr;
-        recCanvas4K.style.width = res.W + 'px';   // Tamaño CSS normal
-        recCanvas4K.style.height = res.H + 'px';
-        
-        recCtx4K = recCanvas4K.getContext('2d', { 
-            willReadFrequently: true,
-            alpha: false  // 🔒 Sin transparencia para mejor calidad y rendimiento
-        });
-        
-        // Escalar contexto para que las coordenadas sean normales (no físicas)
-        recCtx4K.scale(dpr, dpr);
+        if (!recCanvas4K) recCanvas4K = document.createElement('canvas');
+        // 🔒 SIN dpr: la resolución final es exactamente la de chooseRecResolution (clase 1080p)
+        recCanvas4K.width = res.W;
+        recCanvas4K.height = res.H;
+        recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
         recCtx4K.imageSmoothingEnabled = true;
-        recCtx4K.imageSmoothingQuality = 'high'; // 🔒 Máxima calidad
+        recCtx4K.imageSmoothingQuality = 'high';
         
         isRecordingActive = true;
         
@@ -7666,7 +7620,8 @@ async function startScreenRecording() {
         mediaRecorder.onerror = (e) => {
             _error('[REC] Error del codificador:', e);
             showToast('❌ ERROR DE CODIFICADOR — REC DETENIDA', true);
-            isRecording = false;
+isRecordingActive = false;
+isRecording = false;
             clearInterval(recordingTimer);
             const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
             const br = document.getElementById('btn-record'); if (br) br.classList.remove('active-state');
@@ -7675,20 +7630,20 @@ async function startScreenRecording() {
         };
         
         mediaRecorder.onstop = () => {
-            const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
-            if (totalSize > 8000) {
-                const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `OBR_REC_${new Date().toISOString().replace(/[:.]/g, '-')}.${mediaRecorder._ext}`;
-                a.click();
-                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-                showToast(`✅ VIDEO ${res.W}×${res.H} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
-            } else {
-                showToast('⚠️ GRABACIÓN VACÍA', true);
-            }
-            recordedChunks = [];
-        };
+const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
+if (totalSize > 8000) {
+const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
+saveBlobToDevice(blob, `OBR_REC_${new Date().toISOString().replace(/[:.]/g, '-')}.${mediaRecorder._ext}`);
+showToast(`✅ VIDEO ${res.W}×${res.H} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
+} else {
+showToast('⚠️ GRABACIÓN VACÍA', true);
+}
+recordedChunks = [];
+// 🔒 Liberación DIFERIDA del canvas de REC (la vista viva ya está en resolución viva)
+setTimeout(() => {
+if (!isRecordingActive && recCanvas4K) { recCanvas4K.width = 0; recCanvas4K.height = 0; recCtx4K = null; }
+}, 2000);
+};
         
         // Primer frame inmediato (con mapa actualizado)
         lastMapCapture = 0; 
@@ -7718,7 +7673,8 @@ async function startScreenRecording() {
             }
             if (lowRecFpsCount >= 8) {
                 lowRecFpsCount = 0;
-                showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 4K fluido', true);
+                // 🔒 Corregido de "4K fluido" a "1080p fluido" (Paso 2.8 de la Fase 1)
+                showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 1080p fluido', true); 
             }
         }, 1000);
         
@@ -7736,6 +7692,7 @@ function stopScreenRecording() {
 // 🔒 Responde SIEMPRE, aunque el recorder haya muerto por error de codificador
 if (!mediaRecorder || mediaRecorder.state === 'inactive') {
 if (isRecording) {
+isRecordingActive = false;
 isRecording = false;
 clearInterval(recordingTimer);
 const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
@@ -7745,10 +7702,10 @@ showToast('⏹ GRABACIÓN DETENIDA', false);
 }
 return;
 }
-mediaRecorder.stop();
+isRecordingActive = false; // 🔒 PRIMERO: el GL vuelve a resolución viva (adiós pantalla negra)
+mediaRecorder.stop();      // onstop arma el archivo con los chunks intactos
 isRecording = false;
 clearInterval(recordingTimer);
-if (mediaRecorder._canvasStream) mediaRecorder._canvasStream.getTracks().forEach(t => t.stop());
 cleanupRecording();
 const recInd = document.getElementById('recording-indicator');
 if (recInd) recInd.classList.remove('active');
@@ -7942,16 +7899,16 @@ return true;
 
 function sizeGLCanvas() {
 if (!OBRL.ready) return;
-const cores = navigator.hardwareConcurrency || 4;
 let w, h;
 if (isRecordingActive && recCanvas4K) {
-// 🔒 Durante REC: el shader se renderiza a resolución de grabación → video NÍTIDO.
-// El aspect de REC es idéntico al de pantalla (innerWidth/innerHeight),
-// así que la vista viva NO se deforma ni se re-encuadra.
+// 🔒 Durante REC: el shader renderiza a la resolución de grabación (nítido y sin deformar)
 w = recCanvas4K.width; h = recCanvas4K.height;
 } else {
-const dpr = Math.min(window.devicePixelRatio || 1, _isHighEndDevice ? 2.0 : 1.5);
-w = Math.round(window.innerWidth * dpr); h = Math.round(window.innerHeight * dpr);
+// 🔒 VISTA VIVA tope clase 1080p (antes multiplicaba por dpr 1.5–2.0 = hasta 4K oculto)
+const ww = window.innerWidth || 1920, wh = window.innerHeight || 1080;
+if (wh > ww) { h = 1920; w = Math.round(h * ww / wh); if (w > 1080) { w = 1080; h = Math.round(w * wh / ww); } }
+else { w = 1920; h = Math.round(w * wh / ww); if (h > 1080) { h = 1080; w = Math.round(h * ww / wh); } }
+w -= w % 2; h -= h % 2;
 }
 if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w; OBRL.canvas.height = h; }
 }
