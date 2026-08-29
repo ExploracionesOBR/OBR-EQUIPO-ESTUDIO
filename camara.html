@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '13'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1384,8 +1384,8 @@ const MIC_CHANNEL = 'obr-mic';
 const AI_SENSITIVITY = 0.35;
 const VOLUMEN_BARRIDO = 0.40;
 const VOLUMEN_RESPUESTA = 0.35;
-const VOLUMEN_EVP = 2.2;
-const VOLUMEN_IA_VISION = 2.0;
+const VOLUMEN_EVP = 1.5;
+const VOLUMEN_IA_VISION = 1.5;
 
 // === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
 const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
@@ -2365,7 +2365,7 @@ async function fetchBackgroundAIContext() {
                 initTTSPipeline();
             } else {
                if (mixDestination) {
-try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else if (ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
+try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
                     try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
                     try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
                 }
@@ -2703,12 +2703,11 @@ const paranormalQuestions = [
     cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION);
     if (typeof cloudTTSPlayer.setSinkId === 'function') cloudTTSPlayer.setSinkId("default").catch(() => {});
 
-    let ttsSource      = null;
+let ttsSource      = null;
 let ttsMainGain    = null;
 let bassBoost      = null;
 let darkFilter     = null;
 let ttsGainNode    = null;
-let ttsLimiter     = null; 
 
     function getTTSFilters() {
         const ls  = (k, def) => { const v = parseFloat(localStorage.getItem(k)); return isNaN(v) ? def : v; };
@@ -4136,8 +4135,8 @@ targetPoses = []; currentPose = null; smoothedPoses = [];
             const convolver = audioCtx.createConvolver();
             convolver.buffer = window._teatroImpulse;
             
-            const wetGain = audioCtx.createGain(); wetGain.gain.value = 0.45;
-const dryGain = audioCtx.createGain(); dryGain.gain.value = 1.0;
+            const wetGain = audioCtx.createGain(); wetGain.gain.value = 0.8;
+const dryGain = audioCtx.createGain(); dryGain.gain.value = 0.5;
             
             lastNode.connect(dryGain);
             lastNode.connect(convolver);
@@ -4184,18 +4183,9 @@ const dryGain = audioCtx.createGain(); dryGain.gain.value = 1.0;
         _ttsBassFilter = ctx1.createBiquadFilter(); _ttsBassFilter.type = 'lowshelf';
         _ttsHighFilter = ctx1.createBiquadFilter(); _ttsHighFilter.type = 'highshelf';
         
-        ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
-// 🔒 LIMITADOR ANTI-SATURACIÓN (IA VISION / AUDIO SCAN): mantiene el volumen fuerte
-// pero recorta picos antes del clipping digital → potente y limpio
-ttsLimiter = ctx1.createDynamicsCompressor();
-ttsLimiter.threshold.value = -6;   // dB: limita justo antes del tope
-ttsLimiter.knee.value = 3;         // transición suave
-ttsLimiter.ratio.value = 12;       // casi brickwall
-ttsLimiter.attack.value = 0.002;   // inmediato
-ttsLimiter.release.value = 0.18;
+  ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
 ttsSource.connect(_ttsBassFilter); _ttsBassFilter.connect(_ttsHighFilter); _ttsHighFilter.connect(ttsMainGain);
-ttsMainGain.connect(ttsLimiter);
-ttsLimiter.connect(ctx1.destination);
+ttsMainGain.connect(ctx1.destination);
         
         try { 
             if (!window._sweepSource) window._sweepSource = ctx1.createMediaElementSource(sweepAudio); 
@@ -4206,8 +4196,8 @@ ttsLimiter.connect(ctx1.destination);
             window._respSource.connect(ctx1.destination); 
         } catch(e){}
 
-        if (mixDestination) {
-try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else ttsMainGain.connect(mixDestination); } catch(e){}
+       if (mixDestination) {
+try { ttsMainGain.connect(mixDestination); } catch(e){}
 try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
 try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
 }
@@ -4709,7 +4699,7 @@ cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
             else window._evpNextGap = 20000 + Math.random() * 15000;
         }
         if (ttsMainGain) {
-           const volVar = 0.9 + Math.random() * 0.3;
+           const volVar = 0.75 + Math.random() * 0.5;
 ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP * volVar, evpAudioCtx?.currentTime || 0, 0.05);
         }
         let evpText;
