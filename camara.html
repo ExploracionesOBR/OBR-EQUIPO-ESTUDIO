@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '13'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -3894,6 +3894,7 @@ _isHighEndDevice
             const vRatio = el.video.videoHeight / el.video.videoWidth; 
             analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
             analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+            initSLSWorker(); // 🔒 prepara inferencia off-thread (no bloquea; fallback automático)
             if(segmenter) await segmenter.send({image: analysisCanvas}); 
             if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
         } catch(e) { _warn("Error leve en calibración IA:", e); }
@@ -3923,7 +3924,63 @@ setInterval(updateClock, 1000); // 🔒 reloj fluido, independiente de la teleme
     }, 500);
 }
     
-    
+// ==========================================================
+// 🧵 SLS EN WEB WORKER: la inferencia sale del hilo principal → adiós micro-tirones
+// ==========================================================
+let slsWorker = null; let slsWorkerReady = false; let slsBusy = false;
+const SLS_WORKER_SRC = `
+let detector=null;
+self.onmessage=async(e)=>{
+const m=e.data;
+if(m.type==='init'){
+try{
+importScripts(m.tfUrl,m.pdUrl);
+try{ await self.tf.setBackend('webgl'); }catch(_){ try{ await self.tf.setBackend('cpu'); }catch(_2){} }
+await self.tf.ready();
+detector=await self.poseDetection.createDetector(self.poseDetection.SupportedModels.MoveNet,m.cfg);
+self.postMessage({type:'ready'});
+}catch(err){ self.postMessage({type:'initError',message:String(err&&err.message||err)}); }
+return;
+}
+if(m.type==='detect'){
+if(!detector){ self.postMessage({type:'poses',poses:[]}); return; }
+try{
+const poses=await detector.estimatePoses(m.bitmap,{maxPoses:m.maxPoses,flipHorizontal:false,scoreThreshold:m.score});
+self.postMessage({type:'poses',poses:(poses||[]).map(p=>({keypoints:p.keypoints.map(k=>({x:k.x,y:k.y,score:k.score}))}))});
+}catch(err){ self.postMessage({type:'poses',poses:[]}); }
+try{ m.bitmap.close(); }catch(_){}
+}
+};
+`;
+function initSLSWorker() {
+if (slsWorker) return;
+try {
+const tfUrl = (document.querySelector('script[src*="tfjs"]') || {}).src || '';
+const pdUrl = (document.querySelector('script[src*="pose-detection"]') || {}).src || '';
+if (!tfUrl || !pdUrl) { _warn('[SLS] CDNs no detectados, sin worker'); return; }
+slsWorker = new Worker(URL.createObjectURL(new Blob([SLS_WORKER_SRC], { type: 'application/javascript' })));
+slsWorker.onmessage = (e) => {
+const d = e.data;
+if (d.type === 'ready') { slsWorkerReady = true; console.info('[SLS] Worker listo: inferencia fuera del hilo principal'); return; }
+if (d.type === 'initError') { console.warn('[SLS] Worker falló → fallback main-thread:', d.message); slsWorker = null; slsWorkerReady = false; return; }
+if (d.type === 'poses') {
+slsBusy = false;
+const AW = analysisCanvas.width, AH = analysisCanvas.height;
+const mapped = (d.poses || []).map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x / AW, y: k.y / AH, score: k.score })) }));
+targetPoses = filterOverlapping(mapped);
+if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
+else { targetPoses = []; currentPose = null; smoothedPoses = []; }
+}
+};
+slsWorker.postMessage({
+type: 'init', tfUrl, pdUrl,
+cfg: { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: _isHighEndDevice, maxPoses: _isHighEndDevice ? 3 : 2, scoreThreshold: _isHighEndDevice ? 0.4 : 0.45 }
+});
+} catch (e) { slsWorker = null; _warn('[SLS] Worker no disponible:', e && e.name); }
+}
+
+
+
 async function detectionLoop() {
     if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
         if (targetPoses.length) { targetPoses = []; smoothedPoses = []; }
@@ -3957,25 +4014,35 @@ ensureImageDrawn();
 if (!_isHighEndDevice) await _yieldUI(); // 🔒 pinta antes de bloquear
 try { await segmenter.send({image: analysisCanvas}); } catch(e){ lidarBusy = false; }
 }
-        } else if (aiDetector && state.isSLS && now - lastPoseTime > 33) {
-            lastPoseTime = now;
+        } else if (state.isSLS && now - lastPoseTime > 33) {
+lastPoseTime = now;
 ensureImageDrawn();
-if (!_isHighEndDevice) await _yieldUI(); // 🔒 pinta antes de bloquear
+if (slsWorkerReady && !slsBusy) {
+// 🔒 Inferencia en Web Worker: el hilo principal (video) NO se bloquea → sin micro-tirones
+slsBusy = true;
+try {
+const bmp = await createImageBitmap(analysisCanvas);
+slsWorker.postMessage({ type: 'detect', bitmap: bmp, maxPoses: _isHighEndDevice ? 3 : 2, score: AI_SENSITIVITY }, [bmp]);
+} catch (e) { slsBusy = false; }
+} else if (!slsWorkerReady && aiDetector) {
+// Fallback main-thread SOLO si el worker no está disponible
+if (!_isHighEndDevice) await _yieldUI();
 try {
 let newPoses = await aiDetector.estimatePoses(analysisCanvas, {
 maxPoses: _isHighEndDevice ? 3 : 2,
 flipHorizontal: false,
 scoreThreshold: AI_SENSITIVITY
 });
-                if (newPoses && newPoses.length > 0) {
-                    let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
-                    targetPoses = filterOverlapping(mappedPoses);
-                    if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
-                } else {
-                    targetPoses = []; currentPose = null; smoothedPoses = [];
-                }
-            } catch(e){}
-        }
+if (newPoses && newPoses.length > 0) {
+let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
+targetPoses = filterOverlapping(mappedPoses);
+if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
+} else {
+targetPoses = []; currentPose = null; smoothedPoses = [];
+}
+} catch(e){}
+}
+}
     } catch(e) {}
 
     const aiActive = state.isSLS || state.isLidar || state.isPareidolia;
