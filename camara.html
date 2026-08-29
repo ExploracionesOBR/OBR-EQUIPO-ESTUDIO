@@ -4338,8 +4338,7 @@ function executeAudioScanDeactivation(btnMenu) {
     }).catch(() => {
         window._isAnnouncement = false;
     });
-    requestAnimationFrame(resize);
-}
+    }
 
 // 🔒 CACHE DE TEXTO PARA AUDIO VISUALIZER (Evita recrear canvas de texto 60 veces/seg)
 let _userTextCanvas = null, _userTextCtx = null, _lastUserText = '';
@@ -4709,7 +4708,7 @@ function drawLidarEffect(c, width, height, currentFrame) {
     // 🔒 LiDAR a 20fps en gama baja (no 30fps) - imperceptible visualmente
 if (!_isHighEndDevice) {
   _lidarFrameSkip = (_lidarFrameSkip + 1) % 3; //  Cada 3 frames = ~20fps
-  if (_lidarFrameSkip !== 0) return;
+  if (_lidarFrameSkip !== 0 && !isRecordingActive) return;
 }
 
     const maskToUse = lidarMask || lastLidarMask;
@@ -4718,9 +4717,15 @@ if (!_isHighEndDevice) {
 
     // ── 0) Fondo: video atenuado (la escena se ve, no negro total) ──
     c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.filter = 'none';
-    c.clearRect(0, 0, width, height);
-c.fillStyle = 'rgba(4,6,10,0.55)';
-c.fillRect(0, 0, width, height);
+c.fillStyle = '#04060a'; c.fillRect(0, 0, width, height);
+if (hasSrc) {
+const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
+const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
+c.save(); c.globalAlpha = 0.5;
+c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)';
+c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
+c.restore(); c.filter = 'none'; c.globalAlpha = 1;
+}
 
     // ── 1) Buffers con aspect EXACTO de pantalla → NUNCA se aplasta al rotar ──
     const BH = 64;  // 🔒 reducido de 128 a 64
@@ -4981,24 +4986,15 @@ function computeSurfaceSize() {
 }
 
 function applyQualityScale() {
-// 🔒 NITIDEZ: el master se rasteriza a resolución física (dpr) para que el HUD
-// no se vea borroso ni en pantalla ni al componer fotos/video. Tope 2x.
-const dpr = Math.min(window.devicePixelRatio || 1, 2);
-let mw = Math.round(window.innerWidth * qualityScale * dpr);
-let mh = Math.round(window.innerHeight * qualityScale * dpr);
-// 🔒 Tope clase 1080p también para el master-canvas (overlays nunca en 4K)
-const capScale = Math.min(1, 1920 / Math.max(mw, 1), 1920 / Math.max(mh, 1));
-if (capScale < 1) { mw = Math.round(mw * capScale); mh = Math.round(mh * capScale); }
-el.masterCanvas.width = mw;
-el.masterCanvas.height = mh;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high'; // 🔒 siempre alto: el escalado no ablanda la imagen
-    // 🔒 LiDAR del mismo tamaño que el maestro (evita recortes de la línea de escaneo)
-    if (el.lidarCanvas) {
-        el.lidarCanvas.width = el.masterCanvas.width;
-        el.lidarCanvas.height = el.masterCanvas.height;
-    }
-    lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
+el.masterCanvas.width = Math.round(window.innerWidth * qualityScale);
+el.masterCanvas.height = Math.round(window.innerHeight * qualityScale);
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+if (el.lidarCanvas) {
+el.lidarCanvas.width = el.masterCanvas.width;
+el.lidarCanvas.height = el.masterCanvas.height;
+}
+lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
 }
 
 function resize() {
@@ -5618,23 +5614,22 @@ function takeScreenshot() {
 window.takeScreenshot = takeScreenshot;
 
 function performScreenshot() {
-  // 🔒 PREVENIR CAPTURAS MÚLTIPLES RÁPIDAS (evita saturación)
+// 🔒 PREVENIR CAPTURAS MÚLTIPLES RÁPIDAS (evita saturación)
 const now = Date.now();
 if (window._lastScreenshot && (now - window._lastScreenshot) < 1000) {
-    _warn('[SCREENSHOT] Throttle: espera 1s entre capturas');
-    return;
+_warn('[SCREENSHOT] Throttle: espera 1s entre capturas');
+return;
 }
 window._lastScreenshot = now;
-        const dims = (typeof chooseRecResolution === 'function') ? chooseRecResolution()
-        : { W: el.video.videoWidth || 1920, H: el.video.videoHeight || 1080 };
-    
-    // 🔒 1. DECLARAR PRIMERO las variables
-    let W = dims.W, H = dims.H;
-    
-    // 🔒 2. AHORA SÍ calcular isPortrait (usa las variables ya declaradas)
-    const isPortrait = H > W;
-    
-// 🔒 SIN dpr: la foto sale exactamente a la resolución de chooseRecResolution (clase 1080p, sin bordes)
+// 🔒 Resolución de salida AUTÓNOMA (aspecto de ventana, tope clase 1080p):
+// no depende del estado de chooseRecResolution() → la FOTO nunca crashea.
+const ww = window.innerWidth || 1920, wh = window.innerHeight || 1080;
+let W, H;
+if (wh > ww) { H = 1920; W = Math.round(H * ww / wh); if (W > 1080) { W = 1080; H = Math.round(W * wh / ww); } }
+else { W = 1920; H = Math.round(W * wh / ww); if (H > 1080) { H = 1080; W = Math.round(H * ww / wh); } }
+W -= W % 2; H -= H % 2;
+const isPortrait = H > W;
+// 🔒 SIN dpr: composeFullFrame() resetea el transform y dibuja exacto a W×H
 if (!_screenshotCanvas) {
 _screenshotCanvas = document.createElement('canvas');
 _screenshotCtx = _screenshotCanvas.getContext('2d', { willReadFrequently: true });
@@ -5644,35 +5639,30 @@ _screenshotCanvas.height = H;
 _screenshotCtx.setTransform(1, 0, 0, 1, 0, 0);
 _screenshotCtx.imageSmoothingEnabled = true;
 _screenshotCtx.imageSmoothingQuality = _isHighEndDevice ? 'high' : 'medium';
-
-// 🔒 5. Dibujar todo (Video + Filtros + SLS + LiDAR + HUD + Mapa)
+// 🔒 Dibujar todo (Video + Filtros + SLS + LiDAR + HUD + Mapa)
 composeFullFrame(_screenshotCtx, W, H);
 const hasTransparency = state.isSLS || state.isLidar;
 const mimeType = hasTransparency ? 'image/png' : 'image/jpeg';
 const quality = hasTransparency ? 0.9 : 0.85; // JPEG quality
-
 _screenshotCanvas.toBlob((blob) => {
-    if (!blob) {
-        showToast('❌ ERROR CAPTURA', true);
-        return;
-    }
-    // 🔒 LIBERAR MEMORIA después de 5 segundos
-    setTimeout(() => {
-        if (_screenshotCanvas) {
-            _screenshotCanvas.width = 0;
-            _screenshotCanvas.height = 0;
-        }
-        _log('[SCREENSHOT] Memoria liberada');
-    }, 5000);
-
-    const ext = hasTransparency ? 'png' : 'jpg';
-    const filename = `OBR_SNAP_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
-    
-    // 🔒 Usamos la función unificada (iOS Share Sheet / Android Download)
-    saveBlobToDevice(blob, filename);
-
-    showToast(`📸 FOTO ${W}×${H} GUARDADA`, false);
-    if (navigator.vibrate) navigator.vibrate(80);
+if (!blob) {
+showToast('❌ ERROR CAPTURA', true);
+return;
+}
+// 🔒 LIBERAR MEMORIA después de 5 segundos
+setTimeout(() => {
+if (_screenshotCanvas) {
+_screenshotCanvas.width = 0;
+_screenshotCanvas.height = 0;
+}
+_log('[SCREENSHOT] Memoria liberada');
+}, 5000);
+const ext = hasTransparency ? 'png' : 'jpg';
+const filename = `OBR_SNAP_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+// 🔒 Guardado unificado (iOS Share Sheet / Android Download)
+saveBlobToDevice(blob, filename);
+showToast(`📸 FOTO ${W}×${H} GUARDADA`, false);
+if (navigator.vibrate) navigator.vibrate(80);
 }, mimeType, quality);
 }
 window.takeScreenshot = takeScreenshot;
@@ -5866,120 +5856,100 @@ function updateSettingsIndicator() {
 }
 
 function telemetryLoop() {
-    const now = performance.now();
-    const elapsed = now - lastTime;
-    
-    // ==========================================================
-    // 1. CÁLCULO DE ESTADO (Se ejecuta SIEMPRE, es muy ligero)
-    // ==========================================================
-    if (elapsed >= 1000) {
-        currentFps = Math.round((frameCount * 1000) / elapsed);
-        frameCount = 0;
-        lastTime = now;
-    }
-    
-    if (currentFps < 15) performanceLagging = true;
-    else if (currentFps >= 25) performanceLagging = false;
-    
-    // Ajuste automático de calidad y Frame Skipper
-    AI_FRAME_SKIP.adjustForPerformance(currentFps);
-    
-    const fxActive = state.isSLS || state.isLidar || state.isAudioScan || isPareidoliaActive;
-if (!fxActive) {
-  if (_deviceCores <= 4 && !isRecordingActive) {
-    if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
-    else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
-    else { lowFpsTime = 0; highFpsTime = 0; }
-    if (lowFpsTime >= 3 && qualityScale > 0.85) {
-      qualityScale = Math.max(0.85, qualityScale - 0.15);
-      applyQualityScale();
-      lowFpsTime = 0;
-    } else if (highFpsTime >= 8 && qualityScale < 1) {
-      qualityScale = Math.min(1, qualityScale + 0.15);
-      applyQualityScale();
-      highFpsTime = 0;
-    }
-  } else if (qualityScale !== 1) {
-    qualityScale = 1;
-    applyQualityScale();
-  }
+const now = performance.now();
+const elapsed = now - lastTime;
+// ==========================================================
+// 1. CÁLCULO DE ESTADO (Se ejecuta SIEMPRE, es muy ligero)
+// ==========================================================
+if (elapsed >= 1000) {
+currentFps = Math.round((frameCount * 1000) / elapsed);
+frameCount = 0;
+lastTime = now;
 }
-
-    // ==========================================================
-    // 2. THROTTLE DE DOM (Freno de mano: solo actualiza textos cada 500ms)
-    // ==========================================================
-    if (now - (window._lastDOMUpdate || 0) < 500) {
-        return; // Salimos temprano, ahorramos el trabajo pesado del DOM
-    }
-    window._lastDOMUpdate = now;
-
-    // ==========================================================
-    // 3. ACTUALIZACIÓN DEL DOM (Solo se ejecuta cada 500ms)
-    // ==========================================================
-    if (!DOM_CACHE) initDOMCache();
-    
-    let signal = 0;
-    if (agoraClient && agoraClient.joined) signal += 2;
-    if (rtmClient && rtmClient.isLoggedIn) signal += 1;
-    
-    const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-    const hasStudio = (agoraClient && agoraClient.joined) || (rtmClient && rtmClient.isLoggedIn);
-    
-    if (hasRemote) {
-        if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC REM: ONLINE"; DOM_CACHE.micStat.className = "text-green-500 font-bold"; }
-    } else if (hasStudio) {
-        if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC LOCAL (ESTUDIO)"; DOM_CACHE.micStat.className = "text-yellow-500 font-bold"; }
-    } else if (isLocalMicForced && audioStream && audioStream.getAudioTracks().length > 0) {
-        if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC LOCAL (MANUAL)"; DOM_CACHE.micStat.className = "text-green-500 font-bold"; }
-    } else {
-        if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC: OFFLINE"; DOM_CACHE.micStat.className = "text-gray-500 font-bold"; }
-    }
-    
-    if (window.updateAudioScanVisibility) updateAudioScanVisibility();
-    
-    const vW = el.video.videoWidth || 0, vH = el.video.videoHeight || 0;
-    if (DOM_CACHE.res) DOM_CACHE.res.innerText = `${vW}x${vH}`;
-    if (DOM_CACHE.fps) DOM_CACHE.fps.innerText = `${currentFps} FPS`;
-    if (DOM_CACHE.sig) DOM_CACHE.sig.className = `signal-bars signal-level-${signal}`;
-    
-    let telemetryColor = "text-gray-400";
-    if (hasStudio) {
-        telemetryColor = signal >= 3 ? "text-green-400" : "text-yellow-400";
-    }
-    
-    const hasChanges = (
-        Math.abs(currentFps - lastTelemetryValues.fps) > 5 ||
-        Math.abs(window.motionLevel - lastTelemetryValues.motionLevel) > 0.01 ||
-        Math.abs(cumulativeEVPEnergy - lastTelemetryValues.audioEnergy) > 5
-    );
-    
-    if (hasChanges) {
-        showTelemetry();
-        lastTelemetryValues = { fps: currentFps, motionLevel: window.motionLevel, audioEnergy: cumulativeEVPEnergy };
-    }
-    
-    if (DOM_CACHE.statTxt) {
-        DOM_CACHE.statTxt.className = `${telemetryColor} font-bold font-mono`;
-        DOM_CACHE.statTxt.innerText = hasStudio ? "ONLINE (AGORA)" : "PREVIEW";
-    }
-    
-    if (DOM_CACHE.statDot) {
-        DOM_CACHE.statDot.className = hasStudio 
-            ? `w-2 h-2 rounded-full ${signal >= 3 ? 'bg-green-500' : 'bg-yellow-500'} shadow-[0_0_10px_lime]`
-            : "w-2 h-2 rounded-full bg-gray-600";
-    }
-    
-    if (DOM_CACHE.tally) {
-        DOM_CACHE.tally.className = hasStudio ? "online" : "preview";
-    }
-
-    updateSettingsIndicator();
-    
-    const telemetryContainer = document.getElementById('telemetry-container');
-    if (telemetryContainer) {
-        telemetryContainer.style.transition = 'opacity 1s ease-in-out';
-        telemetryContainer.style.opacity = '0.8'; 
-    }
+if (currentFps < 15) performanceLagging = true;
+else if (currentFps >= 25) performanceLagging = false;
+// Ajuste automático de calidad y Frame Skipper
+// 🔒 SIN wrapper fxActive: qualityScale nunca queda "congelado" para
+// restaurarse en el instante del toggle (eso causaba el reescalado).
+AI_FRAME_SKIP.adjustForPerformance(currentFps);
+if (_deviceCores <= 4 && !isRecordingActive) {
+if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
+else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
+else { lowFpsTime = 0; highFpsTime = 0; }
+if (lowFpsTime >= 3 && qualityScale > 0.85) {
+qualityScale = Math.max(0.85, qualityScale - 0.15);
+applyQualityScale();
+lowFpsTime = 0;
+} else if (highFpsTime >= 8 && qualityScale < 1) {
+qualityScale = Math.min(1, qualityScale + 0.15);
+applyQualityScale();
+highFpsTime = 0;
+}
+} else if (qualityScale !== 1) {
+qualityScale = 1;
+applyQualityScale();
+}
+// ==========================================================
+// 2. THROTTLE DE DOM (Freno de mano: solo actualiza textos cada 500ms)
+// ==========================================================
+if (now - (window._lastDOMUpdate || 0) < 500) {
+return; // Salimos temprano, ahorramos el trabajo pesado del DOM
+}
+window._lastDOMUpdate = now;
+// ==========================================================
+// 3. ACTUALIZACIÓN DEL DOM (Solo se ejecuta cada 500ms)
+// ==========================================================
+if (!DOM_CACHE) initDOMCache();
+let signal = 0;
+if (agoraClient && agoraClient.joined) signal += 2;
+if (rtmClient && rtmClient.isLoggedIn) signal += 1;
+const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
+const hasStudio = (agoraClient && agoraClient.joined) || (rtmClient && rtmClient.isLoggedIn);
+if (hasRemote) {
+if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC REM: ONLINE"; DOM_CACHE.micStat.className = "text-green-500 font-bold"; }
+} else if (hasStudio) {
+if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC LOCAL (ESTUDIO)"; DOM_CACHE.micStat.className = "text-yellow-500 font-bold"; }
+} else if (isLocalMicForced && audioStream && audioStream.getAudioTracks().length > 0) {
+if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC LOCAL (MANUAL)"; DOM_CACHE.micStat.className = "text-green-500 font-bold"; }
+} else {
+if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC: OFFLINE"; DOM_CACHE.micStat.className = "text-gray-500 font-bold"; }
+}
+if (window.updateAudioScanVisibility) updateAudioScanVisibility();
+const vW = el.video.videoWidth || 0, vH = el.video.videoHeight || 0;
+if (DOM_CACHE.res) DOM_CACHE.res.innerText = `${vW}x${vH}`;
+if (DOM_CACHE.fps) DOM_CACHE.fps.innerText = `${currentFps} FPS`;
+if (DOM_CACHE.sig) DOM_CACHE.sig.className = `signal-bars signal-level-${signal}`;
+let telemetryColor = "text-gray-400";
+if (hasStudio) {
+telemetryColor = signal >= 3 ? "text-green-400" : "text-yellow-400";
+}
+const hasChanges = (
+Math.abs(currentFps - lastTelemetryValues.fps) > 5 ||
+Math.abs(window.motionLevel - lastTelemetryValues.motionLevel) > 0.01 ||
+Math.abs(cumulativeEVPEnergy - lastTelemetryValues.audioEnergy) > 5
+);
+if (hasChanges) {
+showTelemetry();
+lastTelemetryValues = { fps: currentFps, motionLevel: window.motionLevel, audioEnergy: cumulativeEVPEnergy };
+}
+if (DOM_CACHE.statTxt) {
+DOM_CACHE.statTxt.className = `${telemetryColor} font-bold font-mono`;
+DOM_CACHE.statTxt.innerText = hasStudio ? "ONLINE (AGORA)" : "PREVIEW";
+}
+if (DOM_CACHE.statDot) {
+DOM_CACHE.statDot.className = hasStudio
+? `w-2 h-2 rounded-full ${signal >= 3 ? 'bg-green-500' : 'bg-yellow-500'} shadow-[0_0_10px_lime]`
+: "w-2 h-2 rounded-full bg-gray-600";
+}
+if (DOM_CACHE.tally) {
+DOM_CACHE.tally.className = hasStudio ? "online" : "preview";
+}
+updateSettingsIndicator();
+const telemetryContainer = document.getElementById('telemetry-container');
+if (telemetryContainer) {
+telemetryContainer.style.transition = 'opacity 1s ease-in-out';
+telemetryContainer.style.opacity = '0.8';
+}
 }
 
     function openConnect() { 
@@ -6152,8 +6122,7 @@ else document.body.classList.remove('lidar-fx-active');
     if (typeof showTelemetry === 'function') showTelemetry();
     
     refreshLiveFilterCache();
-    requestAnimationFrame(resize);
-}
+    }
 
     async function toggleTorch(force) { const t = videoStream?.getVideoTracks()[0]; if(!t) return; const on = (typeof force === 'boolean') ? force : !t.getSettings().torch; try { await t.applyConstraints({advanced:[{torch:on}]}); } catch(e){} }
 
@@ -7505,9 +7474,19 @@ let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCou
 let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
 
 function chooseRecResolution() {
-// 🔒 Aspecto de salida == aspecto de ventana (sin bordes negros ni overlays deformados)
-// 🔒 Tope clase 1080p: lado largo 1920, NUNCA más (adiós 4K)
-const s = computeSurfaceSize(); w = s.w; h = s.h;
+// 🔒 Aspecto de salida == aspecto de VENTANA (idéntico a la vista viva):
+// el canvas GL NO se re-encuadra al grabar y los overlays no se deforman.
+const wW = window.innerWidth || 1920, wH = window.innerHeight || 1080;
+const portrait = wH > wW;
+let W, H;
+if (portrait) {
+H = 1920; W = Math.round(H * wW / wH);
+if (W > 1080) { W = 1080; H = Math.round(W * wH / wW); }
+} else {
+W = 1920; H = Math.round(W * wH / wW);
+if (H > 1080) { H = 1080; W = Math.round(H * wW / wH); }
+}
+W -= W % 2; H -= H % 2;
 return { W, H, fps: 60 }; // 🔒 60 fps siempre
 }
 
@@ -7569,131 +7548,142 @@ function buildRecAudioTrack() {
   }
 }
 
+let _recStarting = false; // 🔒 candado: evita dos arranques encimados (doble-tap móvil)
 async function startScreenRecording() {
-    if (isRecording) return;
-    try {
-        await initAudioEngine();
-        
-        const res = chooseRecResolution();
-        if (!recCanvas4K) recCanvas4K = document.createElement('canvas');
-        // 🔒 SIN dpr: la resolución final es exactamente la de chooseRecResolution (clase 1080p)
-        recCanvas4K.width = res.W;
-        recCanvas4K.height = res.H;
-        recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
-        recCtx4K.imageSmoothingEnabled = true;
-        recCtx4K.imageSmoothingQuality = 'high';
-        
-        isRecordingActive = true;
-        
-        // Capturar stream del canvas (ya escalado correctamente)
-        const canvasStream = recCanvas4K.captureStream(res.fps);
-        const videoTrack = canvasStream.getVideoTracks()[0];
-        
-        // 🔒 Audio mezclado: interno(50%) + micro(100%)
-        let audioTrack = buildRecAudioTrack();
-        
-        const tracks = [videoTrack];
-        if (audioTrack) tracks.push(audioTrack);
-        const combinedStream = new MediaStream(tracks);
-        
-        // Seleccionar codec disponible
-        const mimeTypes = [
-            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-            'video/mp4;codecs=avc1',
-            'video/mp4',
-            'video/webm;codecs=vp9,opus',
-            'video/webm;codecs=vp8,opus',
-            'video/webm'
-        ];
-        let selectedMime = '';
-        for (const m of mimeTypes) {
-            try { if (MediaRecorder.isTypeSupported(m)) { selectedMime = m; break; } } catch (e) {}
-        }
-        
-        // Calcular bitrate basado en resolución
-        const bits = Math.max(8_000_000, Math.round(20_000_000 * (res.W * res.H) / (3840 * 2160) * (res.fps / 30)));
-        
-        recordedChunks = [];
-        mediaRecorder = new MediaRecorder(combinedStream, {
-            mimeType: selectedMime || undefined,
-            videoBitsPerSecond: bits,
-            audioBitsPerSecond: 192_000
-        });
-        mediaRecorder._ext = (mediaRecorder.mimeType || selectedMime || '').includes('mp4') ? 'mp4' : 'webm';
-        
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-        };
-        
-        mediaRecorder.onerror = (e) => {
-            _error('[REC] Error del codificador:', e);
-            showToast('❌ ERROR DE CODIFICADOR — REC DETENIDA', true);
-isRecordingActive = false;
-isRecording = false;
-            clearInterval(recordingTimer);
-            const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
-            const br = document.getElementById('btn-record'); if (br) br.classList.remove('active-state');
-            try { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(e2) {}
-            cleanupRecording();
-        };
-        
-        mediaRecorder.onstop = () => {
+if (isRecording || _recStarting) return;
+_recStarting = true;
+try {
+await initAudioEngine();
+
+const res = chooseRecResolution();
+let RW = Math.min(res.W || 1920, 1920), RH = Math.min(res.H || 1920, 1920);
+RW -= RW % 2; RH -= RH % 2;
+const RFPS = _isHighEndDevice ? 60 : 30;
+
+if (!recCanvas4K) recCanvas4K = document.createElement('canvas');
+recCanvas4K.width = RW; recCanvas4K.height = RH;
+recCtx4K = recCanvas4K.getContext('2d', { alpha: false });
+recCtx4K.imageSmoothingEnabled = true;
+recCtx4K.imageSmoothingQuality = 'high';
+isRecordingActive = true;
+
+const canvasStream = recCanvas4K.captureStream(RFPS);
+const videoTrack = canvasStream.getVideoTracks()[0];
+const audioTrack = buildRecAudioTrack();
+const tracks = [videoTrack]; if (audioTrack) tracks.push(audioTrack);
+const combinedStream = new MediaStream(tracks);
+
+// 🔒 Escalera de configs: si el codificador rechaza una, prueba la siguiente en el mismo clic
+const sup = (m) => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } };
+const mp4 = ['video/mp4;codecs=avc1.64002A,mp4a.40.2', 'video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4'].find(sup) || '';
+const webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(sup) || '';
+const cfgs = [];
+if (mp4) cfgs.push({ mime: mp4, fps: RFPS });
+if (webm) cfgs.push({ mime: webm, fps: RFPS });
+if (webm) cfgs.push({ mime: webm, fps: 24 });
+cfgs.push({ mime: '', fps: 24 });
+
+const next = (i, err) => {
+if (i + 1 < cfgs.length) {
+showToast(`🔁 REC REINTENTO ${i + 2}/${cfgs.length}…`, true);
+setTimeout(() => attempt(i + 1), 250);
+} else {
+_recStarting = false;
+console.error('[REC] AGOTADO — última causa:', err);
+showToast(`❌ REC IMPOSIBLE ${RW}×${RH}: ${err && (err.message || err.name) || 'sin detalle'}`, true);
+}
+};
+
+const attempt = (i) => {
+const cfg = cfgs[i];
+const bits = Math.max(8_000_000, Math.round(20_000_000 * (RW * RH) / (3840 * 2160) * (cfg.fps / 30)));
+recordedChunks = [];
+try {
+mediaRecorder = new MediaRecorder(combinedStream, {
+mimeType: cfg.mime || undefined,
+videoBitsPerSecond: bits,
+audioBitsPerSecond: 192_000
+});
+} catch (e) {
+console.error('[REC] ctor falló:', cfg.mime || 'default', e);
+return next(i, e);
+}
+mediaRecorder._ext = (mediaRecorder.mimeType || cfg.mime || '').includes('mp4') ? 'mp4' : 'webm';
+
+mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+
+mediaRecorder.onerror = (e) => {
+// 🔒 console.error DIRECTO (sin DEBUG_MODE): ahora el error SIEMPRE aparece en consola
+console.error('[REC] onerror con', `${RW}x${RH}@${cfg.fps}`, cfg.mime || 'default', e && (e.error || e));
+isRecordingActive = false; isRecording = false;
+clearInterval(recordingTimer);
+const ri = document.getElementById('recording-indicator'); if (ri) ri.classList.remove('active');
+const br = document.getElementById('btn-record'); if (br) br.classList.remove('active-state');
+try { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch (e2) {}
+// 🔒 NO cleanupRecording() aquí: mataría el canvasStream que el siguiente intento reutiliza
+next(i, e && (e.error || e));
+};
+
+mediaRecorder.onstop = () => {
 const totalSize = recordedChunks.reduce((s, c) => s + c.size, 0);
 if (totalSize > 8000) {
-const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || selectedMime });
+const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
 saveBlobToDevice(blob, `OBR_REC_${new Date().toISOString().replace(/[:.]/g, '-')}.${mediaRecorder._ext}`);
-showToast(`✅ VIDEO ${res.W}×${res.H} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
+showToast(`✅ VIDEO ${RW}×${RH} GUARDADO (${(totalSize / 1048576).toFixed(1)}MB)`, false);
 } else {
 showToast('⚠️ GRABACIÓN VACÍA', true);
 }
 recordedChunks = [];
-// 🔒 Liberación DIFERIDA del canvas de REC (la vista viva ya está en resolución viva)
 setTimeout(() => {
 if (!isRecordingActive && recCanvas4K) { recCanvas4K.width = 0; recCanvas4K.height = 0; recCtx4K = null; }
 }, 2000);
 };
-        
-        // Primer frame inmediato (con mapa actualizado)
-        lastMapCapture = 0; 
-        if (typeof captureMapToMirror === 'function') captureMapToMirror();
-        composeFullFrame(recCtx4K, res.W, res.H);
-        
-        mediaRecorder.start(1000);
-        isRecording = true;
-        recordingStartTime = Date.now();
-        
-        const recInd = document.getElementById('recording-indicator');
-        if (recInd) recInd.classList.add('active');
-        const btn = document.getElementById('btn-record');
-        if (btn) btn.classList.add('active-state');
-        
-        // 🔒 RELOJ DE GRABACIÓN + WATCHDOG
-        recordingTimer = setInterval(() => {
-            const s = Math.floor((Date.now() - recordingStartTime) / 1000);
-            const rt = document.getElementById('rec-time');
-            if (rt) rt.innerText = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-            
-            const recElapsed = Date.now() - recordingStartTime;
-            if (recElapsed > 5000 && typeof currentFps !== 'undefined' && currentFps < 15) {
-                lowRecFpsCount++;
-            } else {
-                lowRecFpsCount = 0;
-            }
-            if (lowRecFpsCount >= 8) {
-                lowRecFpsCount = 0;
-                // 🔒 Corregido de "4K fluido" a "1080p fluido" (Paso 2.8 de la Fase 1)
-                showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 1080p fluido', true); 
-            }
-        }, 1000);
-        
-        showToast(`🔴 REC ${res.W}×${res.H}·${res.fps}FPS + AUDIO`, false);
-        mediaRecorder._canvasStream = canvasStream;
-        
-    } catch (err) {
-        _error('Error grabando:', err);
-        showToast(' ERROR AL GRABAR: ' + err.message, true);
-        cleanupRecording();
-    }
+
+// 🔒 CRÍTICO: el onerror del intento anterior apagó isRecordingActive;
+// sin esto el renderLoop (paso 8.5) no compone el canvas de REC → "GRABACIÓN VACÍA"
+isRecordingActive = true;
+lastMapCapture = 0;
+if (typeof captureMapToMirror === 'function') captureMapToMirror();
+composeFullFrame(recCtx4K, RW, RH);
+
+try { mediaRecorder.start(1000); } catch (e) {
+console.error('[REC] start() lanzó:', e);
+return next(i, e);
+}
+console.info('[REC] START OK', `${RW}x${RH}@${cfg.fps}`, cfg.mime || 'default');
+
+isRecording = true;
+_recStarting = false;
+recordingStartTime = Date.now();
+
+const recInd = document.getElementById('recording-indicator'); if (recInd) recInd.classList.add('active');
+const btn = document.getElementById('btn-record'); if (btn) btn.classList.add('active-state');
+
+recordingTimer = setInterval(() => {
+const s = Math.floor((Date.now() - recordingStartTime) / 1000);
+const rt = document.getElementById('rec-time');
+if (rt) rt.innerText = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+const recElapsed = Date.now() - recordingStartTime;
+if (recElapsed > 5000 && typeof currentFps !== 'undefined' && currentFps < 15) { lowRecFpsCount++; } else { lowRecFpsCount = 0; }
+if (lowRecFpsCount >= 8) {
+lowRecFpsCount = 0;
+showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 1080p fluido', true);
+}
+}, 1000);
+
+showToast(`🔴 REC ${RW}×${RH}·${cfg.fps}FPS + AUDIO (${mediaRecorder._ext.toUpperCase()})`, false);
+mediaRecorder._canvasStream = canvasStream;
+};
+
+attempt(0);
+
+} catch (err) {
+console.error('[REC] catch general:', err);
+showToast(' ERROR AL GRABAR: ' + err.message, true);
+isRecordingActive = false;
+_recStarting = false;
+cleanupRecording();
+}
 }
 
 function stopScreenRecording() {
@@ -7907,16 +7897,13 @@ return true;
 
 function sizeGLCanvas() {
 if (!OBRL.ready) return;
+const cores = navigator.hardwareConcurrency || 4;
 let w, h;
 if (isRecordingActive && recCanvas4K) {
-// 🔒 Durante REC: el shader renderiza a la resolución de grabación (nítido y sin deformar)
 w = recCanvas4K.width; h = recCanvas4K.height;
 } else {
-// 🔒 VISTA VIVA tope clase 1080p (antes multiplicaba por dpr 1.5–2.0 = hasta 4K oculto)
-const ww = window.innerWidth || 1920, wh = window.innerHeight || 1080;
-if (wh > ww) { h = 1920; w = Math.round(h * ww / wh); if (w > 1080) { w = 1080; h = Math.round(w * wh / ww); } }
-else { w = 1920; h = Math.round(w * wh / ww); if (h > 1080) { h = 1080; w = Math.round(h * ww / wh); } }
-w -= w % 2; h -= h % 2;
+const dpr = Math.min(window.devicePixelRatio || 1, _isHighEndDevice ? 2.0 : 1.5);
+w = Math.round(window.innerWidth * dpr); h = Math.round(window.innerHeight * dpr);
 }
 if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w; OBRL.canvas.height = h; }
 }
