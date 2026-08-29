@@ -53,7 +53,7 @@
         body { background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; width: 100vw; height: 100vh; margin: 0; padding: 0; }
         
         #main-view-area { position: absolute; inset: 0; background: #000; overflow: hidden; transition: filter 0.2s; transform: translateZ(0); will-change: filter; }
-        #zoom-container { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: center center; transition: transform 0.2s ease-out; will-change: transform; backface-visibility: hidden; }
+        #zoom-container { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: center center;will-change: transform; backface-visibility: hidden; }
         #shared-video-element { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 1; pointer-events: none; }
         #master-canvas {
   position: absolute;
@@ -416,7 +416,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 }
 
 /* === DISEÑO VERTICAL ADAPTATIVO === */
-@media (orientation: portrait), .portrait-mode {
+@media (orientation: portrait) {
     /* Video sin estirarse */
     #shared-video-element {
         width: 100% !important;
@@ -600,7 +600,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 }
 
 /* Modo Horizontal (Landscape) - Ocultar controles */
-@media (orientation: landscape), .landscape-mode {
+@media (orientation: landscape) {
     #local-media-controls {
         opacity: 0 !important;
         pointer-events: none !important;
@@ -651,7 +651,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 }
 
 /* === MEDIA CONTROLS EN VERTICAL: ALINEADO CON BOTÓN MEDIA === */
-@media (orientation: portrait), .portrait-mode {
+@media (orientation: portrait) {
     #local-media-controls {
         position: fixed !important;
         bottom: 125px !important;  /* 🔒 Justo arriba del botón media (75px + 38px + 12px gap) */
@@ -688,7 +688,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 }
 
 /* Media controls en horizontal - se ocultan con los paneles */
-@media (orientation: landscape), .landscape-mode {
+@media (orientation: landscape) {
     #local-media-controls {
         opacity: 0 !important;
         pointer-events: none !important;
@@ -954,6 +954,12 @@ body.audio-scan-active #map-container-slot { display: none !important; }
 body.obr-offline #btn-ia, body.obr-offline #wrapper-audio-scan{ display:none !important; }
 body.gl-active #shared-video-element{ filter:none !important; opacity:0 !important; }
 body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; visibility:hidden; }
+
+/* === PARCHES ANTI-REESCALADO === */
+#main-view-area { transition: none; will-change: auto; }
+#zoom-container { will-change: auto; backface-visibility: visible; }
+/* Si quieres conservar la animación del zoom software, borra solo "transition" de la regla original de #zoom-container y deja esta línea sin transition */
+#master-canvas, #obr-gl-video { object-fit: fill !important; }
 
     </style>
 </head>
@@ -1354,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '43'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '13'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1896,10 +1902,10 @@ self.addEventListener('fetch', e => {
             const text = interimTranscript || finalTranscript;
             const txt = normalizarTexto(text);
             
-            if (txt) {
-                window._liveUserText = txt.toUpperCase();
-                window._liveUserLastUpdate = Date.now();
-            }
+            if (txt && Date.now() >= (window._ignoreSpeechUntil || 0)) {
+window._liveUserText = txt.toUpperCase();
+window._liveUserLastUpdate = Date.now();
+}
             
             const isMutedForTriggers = isTtsPlaying || isSpookySpeaking || window._isAnnouncement || Date.now() < (window._ignoreSpeechUntil || 0);
 
@@ -2383,7 +2389,7 @@ try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else if (ttsMainGain) 
             window._isAnnouncement = true; isTtsPlaying = true;
             cloudTTSPlayer.src = blobUrl; cloudTTSPlayer.playbackRate = 1.0; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
             cloudTTSPlayer.play().catch(() => {});
-            cloudTTSPlayer.addEventListener('ended', () => { isTtsPlaying = false; window._isAnnouncement = false; window._ignoreSpeechUntil = Date.now() + 1000; try { URL.revokeObjectURL(blobUrl); } catch(e) {} resolve(); }, { once: true });
+            cloudTTSPlayer.addEventListener('ended', () => { isTtsPlaying = false; window._isAnnouncement = false; window._ignoreSpeechUntil = Date.now() + 3000; try { URL.revokeObjectURL(blobUrl); } catch(e) {} resolve(); }, { once: true });
         });
     }
 
@@ -2415,14 +2421,14 @@ try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else if (ttsMainGain) 
                 await _ensureContextRunning();
                 const src3 = await playBlobWithFilters(rawBuf3, 0.94 + Math.random() * 0.03, 'iavision', 'none');
                 src3.start(0);
-                src3.onended = () => { clearTimeout(_ttsWatchdog); _activeBufSrc = null; isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; try { URL.revokeObjectURL(audioUrl); } catch(e){} };
+                src3.onended = () => { clearTimeout(_ttsWatchdog); _activeBufSrc = null; isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; try { URL.revokeObjectURL(audioUrl); } catch(e){} };
                 return;
             } catch(e) {}
         }
 
         cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
         try { await cloudTTSPlayer.play(); } catch(err) { isTtsPlaying = false; return; }
-        cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000; }, { once: true });
+        cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; }, { once: true });
     }
 
     async function speakSpooky(text) {
@@ -2465,11 +2471,11 @@ lastSpokenText = safeText; clearTimeout(speechTimer); speechTimer = setTimeout((
                 isSpookySpeaking = false; 
                 lastEvpTime = Date.now(); 
                 playResponseEnd(); 
-                window._ignoreSpeechUntil = Date.now() + 1000;
+                window._ignoreSpeechUntil = Date.now() + 3000;
                 try { URL.revokeObjectURL(blobUrl); } catch(e){} 
             };
         } catch(err) {
-            lastSpokenText = ""; isTtsPlaying = false; isSpookySpeaking = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 1000;
+            lastSpokenText = ""; isTtsPlaying = false; isSpookySpeaking = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000;
         }
     }
 
@@ -4332,6 +4338,7 @@ function executeAudioScanDeactivation(btnMenu) {
     }).catch(() => {
         window._isAnnouncement = false;
     });
+    requestAnimationFrame(resize);
 }
 
 // 🔒 CACHE DE TEXTO PARA AUDIO VISUALIZER (Evita recrear canvas de texto 60 veces/seg)
@@ -4364,23 +4371,24 @@ function drawAudioVisualizer(c, w, h) {
     const rmsLevel = Math.sqrt(rmsSum / bufferLength);
     const amplitude = maxVal - minVal;
     const isHardwareDead = isBufferFrozen || amplitude <= 1;
-    
-    if (!isHardwareDead) { lastValidAudioTime = Date.now(); }
-    else if (state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
-        if (Date.now() - lastValidAudioTime > 2500) { 
-            lastValidAudioTime = Date.now(); 
-            lastReconnectTime = 0; 
-            reconnectAudioNode(); 
-        }
-    }
-    
+if (!isHardwareDead) { lastValidAudioTime = Date.now(); }
+else if (isBufferFrozen && state.isAudioScan && !isTtsPlaying && !isSpookySpeaking) {
+// 🔒 Silencio ambiental (amplitude<=1) es NORMAL: NO reiniciar el mic.
+// Reiniciar cada 4s cortaba el reconocimiento y perdía palabras del usuario.
+if (Date.now() - lastValidAudioTime > 2500) {
+lastValidAudioTime = Date.now();
+lastReconnectTime = 0;
+reconnectAudioNode();
+}
+}    
     const isUserTalkingNow = window._liveUserText && window._liveUserLastUpdate && (Date.now() - window._liveUserLastUpdate < 1500);
     ambientNoiseLevel = ambientNoiseLevel * 0.985 + rmsLevel * 0.015;
     const dynamicThreshold = ambientNoiseLevel * 2.2 + 0.015;
     
-    if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && rmsLevel > dynamicThreshold) {
-        cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
-    }
+    const inEchoWindow = Date.now() < (window._ignoreSpeechUntil || 0);
+if (!isSpookySpeaking && !isTtsPlaying && !isUserTalkingNow && !inEchoWindow && rmsLevel > dynamicThreshold) {
+cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
+}
     cumulativeEVPEnergy *= 0.93;
     cumulativeEVPEnergy = Math.max(0, Math.min(100, cumulativeEVPEnergy));
 
@@ -4620,8 +4628,8 @@ function drawAudioVisualizer(c, w, h) {
     if (hasSpike && currentGap > 1500) currentGap = 1500;
     if (hasEnergy && currentGap > 3000) currentGap = 3000;
     const triggerProb = afterQuestion ? 0.20 : (hasSpike ? 0.15 : (hasEnergy ? 0.35 : 0.65));
-    const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement &&
-        (isForced || ((isSilent || hasEnergy || hasSpike) && timeSinceLastEvp > currentGap && Math.random() > triggerProb));
+    const shouldTrigger = micActive && !isSpookySpeaking && !isTtsPlaying && !window._isAnnouncement && !inEchoWindow &&
+(isForced || ((isSilent || hasEnergy || hasSpike) && timeSinceLastEvp > currentGap && Math.random() > triggerProb));
         
     if (shouldTrigger) {
         lastEvpTime = Date.now() + 99999;
@@ -4635,8 +4643,8 @@ function drawAudioVisualizer(c, w, h) {
             else window._evpNextGap = 20000 + Math.random() * 15000;
         }
         if (ttsMainGain) {
-            const volVar = 1.1 + Math.random() * 0.4;
-            ttsMainGain.gain.setTargetAtTime((volVar * 6.5) * VOLUMEN_EVP, evpAudioCtx?.currentTime || 0, 0.05);
+           const volVar = 0.9 + Math.random() * 0.3;
+ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_EVP * volVar, evpAudioCtx?.currentTime || 0, 0.05);
         }
         let evpText;
         const textRoll = Math.random();
@@ -4710,16 +4718,9 @@ if (!_isHighEndDevice) {
 
     // ── 0) Fondo: video atenuado (la escena se ve, no negro total) ──
     c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.filter = 'none';
-    c.fillStyle = '#04060a'; c.fillRect(0, 0, width, height);
-    if (hasSrc) {
-        const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
-        const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
-        c.save(); c.globalAlpha = 0.45;
-c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
-c.restore(); c.globalAlpha = 1;
-c.fillStyle = 'rgba(2,6,12,0.35)';
+    c.clearRect(0, 0, width, height);
+c.fillStyle = 'rgba(4,6,10,0.55)';
 c.fillRect(0, 0, width, height);
-    }
 
     // ── 1) Buffers con aspect EXACTO de pantalla → NUNCA se aplasta al rotar ──
     const BH = 64;  // 🔒 reducido de 128 a 64
@@ -4966,6 +4967,18 @@ c.fillRect(0, 0, width, height);
          const sCtx = scanlineCanvas.getContext('2d'); sCtx.fillStyle = 'rgba(0, 30, 0, 0.2)'; sCtx.beginPath();
          for(let i=0; i<h; i+=4) sCtx.rect(0, i, w, 1.5); sCtx.fill();
     }
+
+// 🔒 Fuente única de tamaño: GL y master comparten ráster (adiós saltos al toggle)
+function computeSurfaceSize() {
+  const ww = window.innerWidth || 1920, wh = window.innerHeight || 1080;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let w = Math.round(ww * qualityScale * dpr);
+  let h = Math.round(wh * qualityScale * dpr);
+  const cap = Math.min(1, 1920 / Math.max(w, 1), 1920 / Math.max(h, 1));
+  if (cap < 1) { w = Math.round(w * cap); h = Math.round(h * cap); }
+  w -= w % 2; h -= h % 2;
+  return { w, h };
+}
 
 function applyQualityScale() {
 // 🔒 NITIDEZ: el master se rasteriza a resolución física (dpr) para que el HUD
@@ -5679,7 +5692,7 @@ if (state.isLidar) { drawLidarEffect(tctx, W, H, frameCount); drawTallyBorder(tc
 }
 
 // 🔒 CACHE: evitar recalcular drawCoords si no cambió el tamaño
-let _lastDrawCoordsW = 0, _lastDrawCoordsH = 0;
+let _lastDrawCoordsW = 0, _lastDrawCoordsH = 0, _lastDrawCoordsVW = 0, _lastDrawCoordsVH = 0;
 
 function renderLoop(now, metadata) {
   if (!now) now = performance.now();
@@ -5718,12 +5731,14 @@ function renderLoop(now, metadata) {
   
   // ✅ 5. drawCoords: SOLO recalcular si cambió el tamaño
   const vW = el.video.videoWidth, vH = el.video.videoHeight;
-  if (vW && vH && (W !== _lastDrawCoordsW || H !== _lastDrawCoordsH)) {
+  if (vW && vH && (W !== _lastDrawCoordsW || H !== _lastDrawCoordsH || vW !== _lastDrawCoordsVW || vH !== _lastDrawCoordsVH)) {
     const sc = Math.max(W / vW, H / vH);
     const dW = vW * sc, dH = vH * sc, dX = (W - dW) / 2, dY = (H - dH) / 2;
     window.drawCoords = { dW, dH, dX, dY, vW, vH };
     _lastDrawCoordsW = W;
     _lastDrawCoordsH = H;
+    _lastDrawCoordsVW = vW;
+_lastDrawCoordsVH = vH;
   }
   
   // ✅ 6. Animaciones HUD
@@ -5869,24 +5884,26 @@ function telemetryLoop() {
     // Ajuste automático de calidad y Frame Skipper
     AI_FRAME_SKIP.adjustForPerformance(currentFps);
     
-    if (_deviceCores <= 4 && !isRecordingActive) {
-        if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
-        else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
-        else { lowFpsTime = 0; highFpsTime = 0; }
-        
-        if (lowFpsTime >= 3 && qualityScale > 0.85) {
-            qualityScale = Math.max(0.85, qualityScale - 0.15);
-            applyQualityScale(); 
-            lowFpsTime = 0;
-        } else if (highFpsTime >= 8 && qualityScale < 1) {
-            qualityScale = Math.min(1, qualityScale + 0.15);
-            applyQualityScale(); 
-            highFpsTime = 0;
-        }
-    } else if (qualityScale !== 1) {
-        qualityScale = 1; 
-        applyQualityScale();
+    const fxActive = state.isSLS || state.isLidar || state.isAudioScan || isPareidoliaActive;
+if (!fxActive) {
+  if (_deviceCores <= 4 && !isRecordingActive) {
+    if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
+    else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
+    else { lowFpsTime = 0; highFpsTime = 0; }
+    if (lowFpsTime >= 3 && qualityScale > 0.85) {
+      qualityScale = Math.max(0.85, qualityScale - 0.15);
+      applyQualityScale();
+      lowFpsTime = 0;
+    } else if (highFpsTime >= 8 && qualityScale < 1) {
+      qualityScale = Math.min(1, qualityScale + 0.15);
+      applyQualityScale();
+      highFpsTime = 0;
     }
+  } else if (qualityScale !== 1) {
+    qualityScale = 1;
+    applyQualityScale();
+  }
+}
 
     // ==========================================================
     // 2. THROTTLE DE DOM (Freno de mano: solo actualiza textos cada 500ms)
@@ -6135,6 +6152,7 @@ else document.body.classList.remove('lidar-fx-active');
     if (typeof showTelemetry === 'function') showTelemetry();
     
     refreshLiveFilterCache();
+    requestAnimationFrame(resize);
 }
 
     async function toggleTorch(force) { const t = videoStream?.getVideoTracks()[0]; if(!t) return; const on = (typeof force === 'boolean') ? force : !t.getSettings().torch; try { await t.applyConstraints({advanced:[{torch:on}]}); } catch(e){} }
@@ -7489,17 +7507,7 @@ let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se d
 function chooseRecResolution() {
 // 🔒 Aspecto de salida == aspecto de ventana (sin bordes negros ni overlays deformados)
 // 🔒 Tope clase 1080p: lado largo 1920, NUNCA más (adiós 4K)
-const wW = window.innerWidth || 1920, wH = window.innerHeight || 1080;
-const portrait = wH > wW;
-let W, H;
-if (portrait) {
-H = 1920; W = Math.round(H * wW / wH);
-if (W > 1080) { W = 1080; H = Math.round(W * wH / wW); }
-} else {
-W = 1920; H = Math.round(W * wH / wW);
-if (H > 1080) { H = 1080; W = Math.round(H * wW / wH); }
-}
-W -= W % 2; H -= H % 2;
+const s = computeSurfaceSize(); w = s.w; h = s.h;
 return { W, H, fps: 60 }; // 🔒 60 fps siempre
 }
 
