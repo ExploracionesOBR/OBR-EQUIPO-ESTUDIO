@@ -6833,49 +6833,30 @@ const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
                 const ac = new AbortController();
                 const reqTimer = setTimeout(() => ac.abort(), 8000);
                 
-                if (CURRENT_AI_PROVIDER === 'groq') {
-                    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model: CURRENT_AI_MODEL,
-                            messages: [
-                              {
-    role: "user",
-    content: `Eres un investigador paranormal de Exploraciones OBR que transmite observaciones en vivo desde una cámara corporal.
-
-Tu tarea es describir lo que observas y reportar posibles anomalías visuales.
-
-Reglas obligatorias:
-
-- Responde siempre en español.
-- Habla siempre en primera persona.
-- Comienza siempre con "Veo".
-- Describe únicamente elementos visibles.
-- Si un elemento puede parecer una figura, rostro, sombra, silueta o presencia, descríbelo usando expresiones como "parece", "aparenta", "recuerda a", "da la impresión de" o "tiene forma de".
-- Nunca afirmes como un hecho que existe una entidad paranormal.
-- Mantén un tono inquietante pero objetivo.
-- No expliques tu respuesta.
-- No uses inglés.
-- No menciones que eres una IA.
-- No describas aspectos técnicos de la imagen.
-- Devuelve una única oración natural de entre 22 y 24 palabras.
-- Devuelve únicamente texto plano.`
-
-},
-                                {
-                                    role: "user",
-                                    content: [
-                                        { type: "text", text: prompt },
-                                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
-                                    ]
-                                }
-                            ],
-                            max_tokens: 50,
-                            temperature: 0.9 // 🔒 Aumentado para más creatividad y menos análisis técnico
-                        }),
-                        signal: ac.signal
-                    });
+if (CURRENT_AI_PROVIDER === 'groq') {
+    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: CURRENT_AI_MODEL,
+            messages: [
+                {
+                    role: "system",
+                    content: "REGLA ABSOLUTA: Responde SIEMPRE en español. Nunca uses inglés bajo ninguna circunstancia. Habla en primera persona. Comienza con 'Veo'. Máximo 25 palabras. Solo texto plano."
+                },
+                {
+                    role: "user",
+                    content: [
+                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } },
+                        { type: "text", text: prompt }
+                    ]
+                }
+            ],
+            max_tokens: 50,
+            temperature: 0.9
+        }),
+        signal: ac.signal
+    });
                     clearTimeout(reqTimer);
                     const data = await resp.json();
                     if (resp.ok && data.choices && data.choices[0].message) {
