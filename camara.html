@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '56'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '33'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1382,10 +1382,10 @@ let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialst
 const RTM_TOKEN = undefined;
 const MIC_CHANNEL = 'obr-mic';
 const AI_SENSITIVITY = 0.35;
-const VOLUMEN_BARRIDO = 0.40;
-const VOLUMEN_RESPUESTA = 0.35;
-const VOLUMEN_EVP = 2.2;
-const VOLUMEN_IA_VISION = 2.0;
+const VOLUMEN_BARRIDO = 0.25;      // ← Era 0.40, bajar para que no sature el gráfico
+const VOLUMEN_RESPUESTA = 0.20;    // ← Era 0.35, bajar un poco
+const VOLUMEN_EVP = 3.0;           // ← Era 2.2, subir para que se escuche mejor
+const VOLUMEN_IA_VISION = 3.0;     // ← Mantener igual
 
 // === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
 const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
@@ -1881,7 +1881,6 @@ self.addEventListener('fetch', e => {
     let overlayInterval = null;
     let micRtcClient = null;
 
-    // ---------- MOTOR DE RECONOCIMIENTO DE VOZ LOCAL ----------
     function startLocalSpeech() {
     if (!('webkitSpeechRecognition' in window)) return;
     if (localSpeechRec) return;
@@ -1890,7 +1889,7 @@ self.addEventListener('fetch', e => {
     localSpeechRec.continuous = true;
     localSpeechRec.interimResults = true;
     localSpeechRec.lang = 'es-MX';
-    
+
     localSpeechRec.onresult = (event) => {
         if (!state.isAudioScan) return;
         let finalTranscript = '';
@@ -1901,37 +1900,46 @@ self.addEventListener('fetch', e => {
         }
         const text = interimTranscript || finalTranscript;
         const txt = normalizarTexto(text);
+        
         if (txt && Date.now() >= (window._ignoreSpeechUntil || 0)) {
             window._liveUserText = txt.toUpperCase();
             window._liveUserLastUpdate = Date.now();
+            _log('[SPEECH] Texto detectado:', txt); // 🔒 Debug para verificar
         }
+        
         const isMutedForTriggers = isTtsPlaying || isSpookySpeaking || window._isAnnouncement || Date.now() < (window._ignoreSpeechUntil || 0);
+
         if (event.results[event.resultIndex].isFinal && txt.trim() && !isMutedForTriggers) {
             procesarComandoEVP(txt);
         }
     };
-    
+
     localSpeechRec.onerror = (e) => {
         if (e.error !== 'no-speech') {
             _warn("Local Speech Error:", e.error);
         }
     };
-    
-    // 🔒 REINICIO SUAVE: Evita el sonido "tun-tun" del OS y la interrupción de MP3s
+
+    // 🔒 REINICIO SUAVE MEJORADO: Evita el sonido "tun-tun" y mantiene el reconocimiento activo
     localSpeechRec.onend = () => {
         localSpeechRec = null;
         if (state.isAudioScan && audioStream && !window.remoteMicStream && _speechWanted) {
+            // 🔒 Delay más largo (2s) para que el OS no lo considere agresivo
             setTimeout(() => {
-                // 🔒 Verificar nuevamente antes de reiniciar y NO hacerlo si el EVP está hablando
                 if (state.isAudioScan && _speechWanted && !localSpeechRec && !isTtsPlaying && !isSpookySpeaking) {
+                    _log('[SPEECH] Reiniciando reconocimiento...');
                     startLocalSpeech();
                 }
-            }, 1500); // 🔒 Delay de 1.5s para que el OS no lo considere un inicio agresivo
+            }, 2000);
         }
     };
     
-    // 🔒 ESTAS LÍNEAS SON CRÍTICAS, NO LAS BORRES:
-    try { localSpeechRec.start(); } catch(e) {}
+    try { 
+        localSpeechRec.start(); 
+        _log('[SPEECH] Reconocimiento iniciado');
+    } catch(e) {
+        _warn('[SPEECH] Error al iniciar:', e);
+    }
 }
 
     function stopLocalSpeech() {
@@ -2764,26 +2772,83 @@ function playResponseStart() {
 
     function playResponseIntro() { return playResponseStart(); }
 
-    function _ensureSweepRouting() {
-const ctxA = audioCtx || evpAudioCtx; if (!ctxA) return;
-try { if (!window._sweepSource) window._sweepSource = ctxA.createMediaElementSource(sweepAudio); } catch(e){}
-try { if (!window._respSource)  window._respSource  = ctxA.createMediaElementSource(responseAudio); } catch(e){}
-try { if (window._sweepSource) { window._sweepSource.connect(ctxA.destination); if (mixDestination) window._sweepSource.connect(mixDestination); } } catch(e){}
-try { if (window._respSource)  { window._respSource.connect(ctxA.destination);  if (mixDestination) window._respSource.connect(mixDestination); } } catch(e){}
+function _ensureSweepRouting() {
+    const ctxA = audioCtx || evpAudioCtx; 
+    if (!ctxA) {
+        _warn('[AUDIO] No hay AudioContext disponible');
+        return;
+    }
+    
+    try { 
+        if (!window._sweepSource) {
+            window._sweepSource = ctxA.createMediaElementSource(sweepAudio);
+            _log('[AUDIO] sweepSource creado');
+        }
+    } catch(e) {
+        _warn('[AUDIO] Error creando sweepSource:', e);
+    }
+    
+    try { 
+        if (!window._respSource) {
+            window._respSource = ctxA.createMediaElementSource(responseAudio);
+            _log('[AUDIO] respSource creado');
+        }
+    } catch(e) {
+        _warn('[AUDIO] Error creando respSource:', e);
+    }
+    
+    try { 
+        if (window._sweepSource) { 
+            window._sweepSource.connect(ctxA.destination); 
+            if (mixDestination) window._sweepSource.connect(mixDestination);
+            _log('[AUDIO] sweepSource conectado');
+        }
+    } catch(e) {
+        _warn('[AUDIO] Error conectando sweepSource:', e);
+    }
+    
+    try { 
+        if (window._respSource) { 
+            window._respSource.connect(ctxA.destination);  
+            if (mixDestination) window._respSource.connect(mixDestination);
+            _log('[AUDIO] respSource conectado');
+        }
+    } catch(e) {
+        _warn('[AUDIO] Error conectando respSource:', e);
+    }
 }
 
 
 function startSweepAudio() {
     _ensureSweepRouting();
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
-    sweepAudio.volume = VOLUMEN_BARRIDO; 
-    sweepAudio.currentTime = 0;
     
-    // 🔒 REINTENTO AUTOMÁTICO SI EL OS PAUSÓ EL AUDIO POR EL MIC
-    const playSweep = () => sweepAudio.play().catch(() => {
-        setTimeout(() => sweepAudio.play().catch(() => { sweepFileAvailable = false; }), 500);
-    });
-    playSweep();
+    // 🔒 CRÍTICO: Asegurar que el AudioContext esté corriendo
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().then(() => {
+            _log('[AUDIO] Contexto reanudado, iniciando barrido');
+            playSweep();
+        }).catch(e => _warn('[AUDIO] Error al reanudar contexto:', e));
+    } else {
+        playSweep();
+    }
+    
+    function playSweep() {
+        sweepAudio.volume = 0; // Empezar en 0 para el fade
+        sweepAudio.currentTime = 0;
+        
+        // 🔒 REINTENTO AUTOMÁTICO SI EL OS PAUSÓ EL AUDIO
+        sweepAudio.play().then(() => {
+            _log('[AUDIO] Barrido iniciado correctamente');
+        }).catch((err) => {
+            _warn('[AUDIO] Error al reproducir barrido, reintentando...', err);
+            setTimeout(() => {
+                sweepAudio.play().catch(() => { 
+                    sweepFileAvailable = false;
+                    _warn('[AUDIO] Barrido no disponible');
+                });
+            }, 300);
+        });
+    }
 }
 
 
@@ -4338,66 +4403,75 @@ applyGoogleTTSFilters(false);
             executeAudioScanDeactivation(btnMenu);
         }
     } else {
-        // === ACTIVAR ===
-        state.isAudioScan = true;
-        
-        // Verificar APIs TTS
-        const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
-        const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
-        if (!hasElevenLabs && !hasVoiceRSS) {
-            state.isAudioScan = false;
-            ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
-            return;
-        }
-        
-        // Configurar micrófono si es necesario
-        if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
-            if (!audioStream) {
-                try {
-                    audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } 
-                    });
-                } catch(e) { _warn("Permiso de micrófono local denegado."); }
-            }
-        }
-        
-        await initAudioEngine();
-        updateAudioRouting();
-        
-        // Verificar que haya micrófono activo
-        const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-        const hasLocal = audioStream && audioStream.getAudioTracks().length > 0;
-        if (!hasRemote && !hasLocal) {
-            showToast("NO HAY MIC SENDER O ESTUDIO CONECTADO", true);
-            state.isAudioScan = false;
-            if (btnMenu) btnMenu.classList.remove('active-state');
-            return;
-        }
-        
-        // Activar UI
-        if (btnMenu) btnMenu.classList.add('active-state');
-        
-        // === OCULTAR ELEMENTOS ===
-        document.body.classList.add('audio-scan-active');
-        
-        window._audioScanStartTime = Date.now();
-        window._evpNextGap = 999999;
-        window._waitingFirstInteraction = true;
-        window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
-        lastValidAudioTime = Date.now();
-        window._isAnnouncement = true;
-        
-await _ensureContextRunning();      // 🔒 contexto despierto antes de sonar
-startSweepAudio();                  // 🔒 el barrido suena YA, no espera al anuncio
+     // === ACTIVAR ===
+state.isAudioScan = true;
+// Verificar APIs TTS
+const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
+const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
+if (!hasElevenLabs && !hasVoiceRSS) {
+    state.isAudioScan = false;
+    ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
+    return;
+}
+
+// Configurar micrófono si es necesario
+if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
+    if (!audioStream) {
+        try {
+            audioStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
+            });
+        } catch(e) { _warn("Permiso de micrófono local denegado."); }
+    }
+}
+
+await initAudioEngine();
+updateAudioRouting();
+
+// 🔒 CRÍTICO: Esperar 800ms antes de iniciar el reconocimiento de voz
+// Esto evita el sonido "tun-tun" del OS al pedir el micrófono agresivamente
+await new Promise(resolve => setTimeout(resolve, 800));
+
+// Verificar que haya micrófono activo
+const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
+const hasLocal = audioStream && audioStream.getAudioTracks().length > 0;
+if (!hasRemote && !hasLocal) {
+    showToast("NO HAY MIC SENDER O ESTUDIO CONECTADO", true);
+    state.isAudioScan = false;
+    if (btnMenu) btnMenu.classList.remove('active-state');
+    return;
+}
+
+// Activar UI
+if (btnMenu) btnMenu.classList.add('active-state');
+
+// === OCULTAR ELEMENTOS ===
+document.body.classList.add('audio-scan-active');
+window._audioScanStartTime = Date.now();
+window._evpNextGap = 999999;
+window._waitingFirstInteraction = true;
+window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
+lastValidAudioTime = Date.now();
+window._isAnnouncement = true;
+
+await _ensureContextRunning();
+
+// 🔒 CRÍTICO: Asegurar que el sweep se inicialice correctamente
+_ensureSweepRouting();
+await new Promise(resolve => setTimeout(resolve, 200)); // Dar tiempo al routing
+
+startSweepAudio();
 _fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200);
+
 speakAnnouncement('ESPIRIT BOX ACTIVADO').catch(() => {});
+
 setTimeout(() => {
-if (!state.isAudioScan) return;
-lastReconnectTime = 0;
-reconnectAudioNode();
-window._isAnnouncement = false;
-lastEvpTime = Date.now();
-scheduleBackgroundAIContext(true);
+    if (!state.isAudioScan) return;
+    lastReconnectTime = 0;
+    reconnectAudioNode();
+    window._isAnnouncement = false;
+    lastEvpTime = Date.now();
+    scheduleBackgroundAIContext(true);
 }, 150);
     }
 }
