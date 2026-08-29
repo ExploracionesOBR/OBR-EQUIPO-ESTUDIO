@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.7</title>
+    <title>CAMARA OBR PRO v7.9</title>
     
 <!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
 <link rel="icon" type="image/png" href="obr-logo.png?v=1">
@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '13'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '33'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1384,8 +1384,8 @@ const MIC_CHANNEL = 'obr-mic';
 const AI_SENSITIVITY = 0.35;
 const VOLUMEN_BARRIDO = 0.40;
 const VOLUMEN_RESPUESTA = 0.35;
-const VOLUMEN_EVP = 1.5;
-const VOLUMEN_IA_VISION = 1.5;
+const VOLUMEN_EVP = 2.2;
+const VOLUMEN_IA_VISION = 2.0;
 
 // === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
 const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
@@ -2068,48 +2068,38 @@ async function fetchBackgroundAIContext() {
         }
     };
 
-    function updateAudioRouting() {
-        if (!audioCtx || !micGainNode) return;
-        
-        if (micSource) {
-            micSource.disconnect();
-            micSource = null;
-        }
+    let _routedStream = null;   // 🔒 último stream conectado a la cadena de mic
+let _speechWanted = false;  // 🔒 estado deseado del reconocimiento de voz
 
-        let activeStream = null;
-        let usingRemote = false;
+function updateAudioRouting() {
+if (!audioCtx || !micGainNode) return;
+const usingRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
+const activeStream = usingRemote ? window.remoteMicStream : audioStream;
+// 🔒 MIC SIEMPRE ABIERTO: la cadena física SOLO se conecta si el stream cambia.
+// Activar/desactivar AUDIO SCAN ya no desconecta/reconecta → sin "clip-clip"
+// y sin pausas en Agora/REC.
+if (activeStream !== _routedStream) {
+if (micSource) { try { micSource.disconnect(); } catch (e) {} micSource = null; }
+if (activeStream) {
+try {
+micSource = audioCtx.createMediaStreamSource(activeStream);
+micSource.connect(micGainNode);
+_routedStream = activeStream;
+} catch (e) { _warn('[AUDIO] No se pudo conectar micSource:', e); }
+} else {
+_routedStream = null;
+}
+}
+// 🔒 Reconocimiento de voz SOLO cuando cambia el estado deseado
+// (evita el churn de foco de audio que cortaba barrido.mp3 / respuesta.mp3)
+const wantSpeech = state.isAudioScan && !usingRemote && !!activeStream;
+if (wantSpeech !== _speechWanted) {
+_speechWanted = wantSpeech;
+if (wantSpeech) startLocalSpeech(); else stopLocalSpeech();
+}
+}
 
-        if (window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0) {
-            activeStream = window.remoteMicStream;
-            usingRemote = true;
-        } else if (audioStream && audioStream.getAudioTracks().length > 0) {
-            activeStream = audioStream;
-        }
 
-        if (activeStream) {
-            try {
-                micSource = audioCtx.createMediaStreamSource(activeStream);
-                micSource.connect(micGainNode);
-            } catch(e) {
-                _error("Error routing audio:", e);
-                try {
-                    const freshStream = new MediaStream(activeStream.getAudioTracks());
-                    micSource = audioCtx.createMediaStreamSource(freshStream);
-                    micSource.connect(micGainNode);
-                } catch(e2) {
-                    _error("Fallo crítico de enrutamiento:", e2);
-                }
-            }
-        }
-        
-        if (state.isAudioScan) {
-            if (usingRemote) stopLocalSpeech();
-            else if (activeStream) startLocalSpeech();
-            else stopLocalSpeech();
-        } else {
-            stopLocalSpeech();
-        }
-    }
     let activeRemoteCall = null;
     async function initRemoteMicReceiverAgora() {
         if (micRtcClient) {
@@ -2356,8 +2346,11 @@ async function fetchBackgroundAIContext() {
             audioAnalyser.connect(silentSink);
             silentSink.connect(audioCtx.destination);
 
-            micGainNode.connect(compressor);
-            compressor.connect(mixDestination);
+            micDuckGain = audioCtx.createGain();
+micDuckGain.gain.value = 1;
+micGainNode.connect(micDuckGain);   // 🔒 el análisis sigue ANTES del duck (visualizer/EVP ven la señal real)
+micDuckGain.connect(compressor);
+compressor.connect(mixDestination);
             
             updateAudioRouting();
 
@@ -2365,7 +2358,7 @@ async function fetchBackgroundAIContext() {
                 initTTSPipeline();
             } else {
                if (mixDestination) {
-try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
+try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else if (ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
                     try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
                     try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
                 }
@@ -2389,16 +2382,16 @@ try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
             window._isAnnouncement = true; isTtsPlaying = true;
             cloudTTSPlayer.src = blobUrl; cloudTTSPlayer.playbackRate = 1.0; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
             cloudTTSPlayer.play().catch(() => {});
-            cloudTTSPlayer.addEventListener('ended', () => { isTtsPlaying = false; window._isAnnouncement = false; window._ignoreSpeechUntil = Date.now() + 3000; try { URL.revokeObjectURL(blobUrl); } catch(e) {} resolve(); }, { once: true });
+            cloudTTSPlayer.addEventListener('ended', () => { isTtsPlaying = false; window._isAnnouncement = false; window._ignoreSpeechUntil = Date.now() + 3000; setMicDuck(false);  try { URL.revokeObjectURL(blobUrl); } catch(e) {} resolve(); }, { once: true });
         });
     }
 
     async function speakText(text) {
         if (!text) return;
         isTtsPlaying = true; isSpookySpeaking = false;
-        
-        clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
-        await initAudioEngine();
+setMicDuck(true); // 🦆
+clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
+await initAudioEngine();
 
         if (ttsMainGain) ttsMainGain.gain.setTargetAtTime(6.0 * VOLUMEN_IA_VISION, evpAudioCtx?.currentTime || 0, 0.05);
 
@@ -2421,19 +2414,20 @@ try { if(ttsMainGain) ttsMainGain.connect(mixDestination); } catch(e){}
                 await _ensureContextRunning();
                 const src3 = await playBlobWithFilters(rawBuf3, 0.94 + Math.random() * 0.03, 'iavision', 'none');
                 src3.start(0);
-                src3.onended = () => { clearTimeout(_ttsWatchdog); _activeBufSrc = null; isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; try { URL.revokeObjectURL(audioUrl); } catch(e){} };
+                src3.onended = () => { clearTimeout(_ttsWatchdog); _activeBufSrc = null; isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; setMicDuck(false);  try { URL.revokeObjectURL(audioUrl); } catch(e){} };
                 return;
             } catch(e) {}
         }
 
         cloudTTSPlayer.src = audioUrl; cloudTTSPlayer.playbackRate = 0.94 + Math.random() * 0.03; cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION); cloudTTSPlayer.load();
         try { await cloudTTSPlayer.play(); } catch(err) { isTtsPlaying = false; return; }
-        cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; }, { once: true });
+        cloudTTSPlayer.addEventListener('ended', () => { clearTimeout(_ttsWatchdog); isTtsPlaying = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; setMicDuck(false);  }, { once: true });
     }
 
-    async function speakSpooky(text) {
-        if (!text) return;
-        isTtsPlaying = true; isSpookySpeaking = true;
+async function speakSpooky(text) {
+if (!text) return;
+isTtsPlaying = true; isSpookySpeaking = true;
+setMicDuck(true); // 🦆
 
         clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
         const safeText = text.substring(0, 120); const randomVoice = getRandomVoice();
@@ -2471,11 +2465,11 @@ lastSpokenText = safeText; clearTimeout(speechTimer); speechTimer = setTimeout((
                 isSpookySpeaking = false; 
                 lastEvpTime = Date.now(); 
                 playResponseEnd(); 
-                window._ignoreSpeechUntil = Date.now() + 3000;
+                window._ignoreSpeechUntil = Date.now() + 3000; setMicDuck(false); 
                 try { URL.revokeObjectURL(blobUrl); } catch(e){} 
             };
         } catch(err) {
-            lastSpokenText = ""; isTtsPlaying = false; isSpookySpeaking = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000;
+            lastSpokenText = ""; isTtsPlaying = false; isSpookySpeaking = false; lastEvpTime = Date.now(); window._ignoreSpeechUntil = Date.now() + 3000; setMicDuck(false); 
         }
     }
 
@@ -2703,11 +2697,12 @@ const paranormalQuestions = [
     cloudTTSPlayer.volume = Math.min(1.0, VOLUMEN_IA_VISION);
     if (typeof cloudTTSPlayer.setSinkId === 'function') cloudTTSPlayer.setSinkId("default").catch(() => {});
 
-let ttsSource      = null;
-let ttsMainGain    = null;
-let bassBoost      = null;
-let darkFilter     = null;
-let ttsGainNode    = null;
+let ttsSource = null;
+let ttsMainGain = null;
+let bassBoost = null;
+let darkFilter = null;
+let ttsGainNode = null;
+let ttsLimiter = null; // 🔒 limitador anti-saturación
 
     function getTTSFilters() {
         const ls  = (k, def) => { const v = parseFloat(localStorage.getItem(k)); return isNaN(v) ? def : v; };
@@ -2717,7 +2712,7 @@ let ttsGainNode    = null;
     }
 
     const sweepAudio    = new Audio('./barrido.mp3'); sweepAudio.loop = true; sweepAudio.volume = VOLUMEN_BARRIDO; sweepAudio.preload = 'auto';
-    const responseAudio = new Audio('./respuesta.mp3'); responseAudio.loop = true; responseAudio.volume = VOLUMEN_RESPUESTA; responseAudio.preload = 'auto';
+    const responseAudio = new Audio('./respuesta.mp3'); responseAudio.loop = true; responseAudio.volume = VOLUMEN_RESPUESTA;
 
     let sweepFileAvailable = true; let responseFileAvailable = true; // 🔒 optimista: play() con catch detecta ausencia
 
@@ -2730,15 +2725,16 @@ let ttsGainNode    = null;
         _xfadeTimers.set(audio, timer);
     }
 
-    function playResponseStart() {
-return new Promise(resolve => {
-_ensureSweepRouting();
-if (state.isAudioScan) _fadeVolume(sweepAudio, 0.60, 200);
-responseAudio.volume = VOLUMEN_RESPUESTA;
-responseAudio.currentTime = 0;
-responseAudio.play().catch(() => { responseFileAvailable = false; _warn('[AUDIO] respuesta.mp3 no disponible'); });
-resolve();
-});
+function playResponseStart() {
+    return new Promise(resolve => {
+        _ensureSweepRouting();
+        if (state.isAudioScan) _fadeVolume(sweepAudio, 0.60, 200);
+        responseAudio.volume = VOLUMEN_RESPUESTA;
+        setMicDuck(true); // 🦆 agacha el mic cuando suena respuesta.mp3
+        responseAudio.currentTime = 0;
+        responseAudio.play().catch(() => { responseFileAvailable = false; _warn('[AUDIO] respuesta.mp3 no disponible'); });
+        resolve();
+    });
 }
 
     function playResponseEnd() {
@@ -2785,6 +2781,22 @@ sweepAudio.play().catch(() => { sweepFileAvailable = false; _warn('[AUDIO] barri
         responseAudio.volume = 0;
         responseAudio.currentTime = 0;
     }
+
+
+// ==========================================================
+// 🦆 DUCKING CONTROLADO DEL MIC (anti-clip / anti-feedback)
+// El mic permanece SIEMPRE conectado; solo se atenúa su nivel hacia
+// Agora/REC mientras la app habla. Rampas suaves = sin clicks.
+// ==========================================================
+let micDuckGain = null;
+function setMicDuck(on) {
+if (!audioCtx || !micDuckGain) return;
+const t = audioCtx.currentTime;
+micDuckGain.gain.cancelScheduledValues(t);
+// 🔒 ataque rápido (50 ms) al agachar, release suave (250 ms) al soltar
+micDuckGain.gain.setTargetAtTime(on ? 0.12 : 1.0, t, on ? 0.05 : 0.25);
+}
+
 
     function unlockAudioContext() {
         if (audioCtx && audioCtx.state === 'suspended') {
@@ -3470,6 +3482,7 @@ if (sharpSlider) {
         const now = Date.now();
         if (now - lastReconnectTime < 4000) return; 
         lastReconnectTime = now;
+        _routedStream = null; // 🔒 fuerza reconexión física SOLO en congelamiento real
 
         if (audioCtx && micGainNode) {
             try {
@@ -4183,9 +4196,17 @@ const dryGain = audioCtx.createGain(); dryGain.gain.value = 0.5;
         _ttsBassFilter = ctx1.createBiquadFilter(); _ttsBassFilter.type = 'lowshelf';
         _ttsHighFilter = ctx1.createBiquadFilter(); _ttsHighFilter.type = 'highshelf';
         
-  ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
+ttsMainGain = ctx1.createGain(); ttsMainGain.gain.value = 6.0; ttsGainNode = ttsMainGain;
+// 🔒 LIMITADOR: recorta picos antes del clipping → voz fuerte pero limpia
+ttsLimiter = ctx1.createDynamicsCompressor();
+ttsLimiter.threshold.value = -6;
+ttsLimiter.knee.value = 3;
+ttsLimiter.ratio.value = 12;
+ttsLimiter.attack.value = 0.002;
+ttsLimiter.release.value = 0.18;
 ttsSource.connect(_ttsBassFilter); _ttsBassFilter.connect(_ttsHighFilter); _ttsHighFilter.connect(ttsMainGain);
-ttsMainGain.connect(ctx1.destination);
+ttsMainGain.connect(ttsLimiter);
+ttsLimiter.connect(ctx1.destination);
         
         try { 
             if (!window._sweepSource) window._sweepSource = ctx1.createMediaElementSource(sweepAudio); 
@@ -4196,8 +4217,8 @@ ttsMainGain.connect(ctx1.destination);
             window._respSource.connect(ctx1.destination); 
         } catch(e){}
 
-       if (mixDestination) {
-try { ttsMainGain.connect(mixDestination); } catch(e){}
+if (mixDestination) {
+try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else ttsMainGain.connect(mixDestination); } catch(e){}
 try { if(window._sweepSource) window._sweepSource.connect(mixDestination); } catch(e){}
 try { if(window._respSource) window._respSource.connect(mixDestination); } catch(e){}
 }
@@ -4374,6 +4395,8 @@ function executeAudioScanDeactivation(btnMenu) {
     
     // === MOSTRAR ELEMENTOS NUEVAMENTE ===
     document.body.classList.remove('audio-scan-active');
+stopSweepAudio();
+setMicDuck(false); // 🦆 mic al 100% al apagar
     
     stopSweepAudio();
     clearTimeout(_ttsWatchdog);
