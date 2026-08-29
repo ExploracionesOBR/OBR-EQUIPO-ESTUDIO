@@ -1108,7 +1108,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal</p>
+    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.1</p>
     
     <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
     <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">LISTO PARA INICIAR</div>
@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '33'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '67'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1388,8 +1388,11 @@ const VOLUMEN_EVP = 3.0;           // ← Era 2.2, subir para que se escuche mej
 const VOLUMEN_IA_VISION = 3.0;     // ← Mantener igual
 
 // === CLAVES POR DEFECTO PARA INICIO RÁPIDO ===
-const DEFAULT_ELEVENLABS_KEY = '7c13713032cdc888d1290fd212f4e9f558dc5220f668c8d135bf313dd580558b';
+const DEFAULT_ELEVENLABS_KEY = 'sk_5bf6f7227060b118d99db7dd8691bd071120f303ef31ba43';
 const DEFAULT_VOICERSS_KEY = '776fa230d3574c4097aa44e4e3c3949c';
+
+
+
 
 // ============ ESTADO GLOBAL ============
 const state = {
@@ -1438,15 +1441,20 @@ const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 const disableGrainOnIOS = isIOS; 
 
 
-// ==========================================================
-// CONFIGURACIÓN DE APIs Y CRÉDITOS (Con fallback a tus claves)
-// ==========================================================
-let ELEVENLABS_API_KEY = localStorage.getItem('obr_el_key') || DEFAULT_ELEVENLABS_KEY;
-let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || DEFAULT_VOICERSS_KEY;
+// === ASIGNACIÓN DE CLAVES CON PROTECCIÓN ANTI-ERRORES ===
+let storedElKey = localStorage.getItem('obr_el_key');
 
+// Si la clave guardada empieza con prefijos de otros servicios, se asume que está mal guardada y se limpia
+if (storedElKey && (storedElKey.startsWith('gsk_') || storedElKey.startsWith('sk_') || storedElKey.startsWith('AIza'))) {
+    console.warn('[CONFIG] Se detectó una clave de otro servicio en "obr_el_key". Se ha limpiado para usar la correcta.');
+    localStorage.removeItem('obr_el_key');
+    storedElKey = null;
+}
+
+let ELEVENLABS_API_KEY = storedElKey || DEFAULT_ELEVENLABS_KEY;
+let VOICERSS_API_KEY = localStorage.getItem('obr_voicerss_key') || DEFAULT_VOICERSS_KEY;
 let GEMINI_API_KEY = localStorage.getItem('obr_gemini_key') || '';
 let GEMINI_MODEL = localStorage.getItem('obr_gemini_model') || 'gemini-2.0-flash';
-
 let GROQ_API_KEY = localStorage.getItem('obr_groq_key') || '';
 let GROQ_MODEL = localStorage.getItem('obr_groq_model') || 'llama-3.2-90b-vision-preview';
 
@@ -1483,8 +1491,14 @@ let _activeBufSrc = null;
 let _ttsWatchdog = null;
 
 function normalizarTexto(texto) {
-        return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    }
+    return texto
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Elimina tildes (á -> a)
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'¡¿]/g, "") // Elimina TODA puntuación y comas
+        .replace(/\s{2,}/g, " ") // Elimina espacios dobles accidentales
+        .toLowerCase()
+        .trim();
+}
 
     function getRandomVoice() {
         const voices = ['N2lVS1w4EtoT3dr4eOWO', 'jBpfuIE2acCO8z3wKNLl', 'EXAVITQu4vr4xnSDxMaL'];
@@ -1853,6 +1867,17 @@ self.addEventListener('fetch', e => {
     let remoteDataConn = null;
     let localSpeechRec = null;
 
+
+    // ========== RECONOCIMIENTO DE VOZ BASADO EN GROQ/GEMINI (SIN WEBKIT) ==========
+let voiceRecDestination = null;
+let voiceRecRecorder = null;
+let voiceRecChunks = [];
+let voiceRecInterval = null;
+let voiceRecMimeType = 'audio/webm;codecs=opus';
+let voiceRecLastTranscript = '';
+let voiceRecLastTranscriptTime = 0;
+
+
     let DOM_CACHE = null;
     function initDOMCache() {
         if (!DOM_CACHE) {
@@ -1881,74 +1906,269 @@ self.addEventListener('fetch', e => {
     let overlayInterval = null;
     let micRtcClient = null;
 
-    function startLocalSpeech() {
-    if (!('webkitSpeechRecognition' in window)) return;
-    if (localSpeechRec) return;
+    // ========== NUEVO SISTEMA DE RECONOCIMIENTO CON GROQ/GEMINI ==========
+function getSupportedMimeType() {
+    const types = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac',
+        'audio/ogg'
+    ];
+    for (const type of types) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+            return type;
+        }
+    }
+    return null;
+}
+
+function initVoiceRecognition() {
+    if (!audioCtx) return;
     
-    localSpeechRec = new webkitSpeechRecognition();
-    localSpeechRec.continuous = true;
-    localSpeechRec.interimResults = true;
-    localSpeechRec.lang = 'es-MX';
-
-    localSpeechRec.onresult = (event) => {
-        if (!state.isAudioScan) return;
-        let finalTranscript = '';
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-            else interimTranscript += event.results[i][0].transcript;
-        }
-        const text = interimTranscript || finalTranscript;
-        const txt = normalizarTexto(text);
-        
-        if (txt && Date.now() >= (window._ignoreSpeechUntil || 0)) {
-            window._liveUserText = txt.toUpperCase();
-            window._liveUserLastUpdate = Date.now();
-            _log('[SPEECH] Texto detectado:', txt); // 🔒 Debug para verificar
-        }
-        
-        const isMutedForTriggers = isTtsPlaying || isSpookySpeaking || window._isAnnouncement || Date.now() < (window._ignoreSpeechUntil || 0);
-
-        if (event.results[event.resultIndex].isFinal && txt.trim() && !isMutedForTriggers) {
-            procesarComandoEVP(txt);
-        }
-    };
-
-    localSpeechRec.onerror = (e) => {
-        if (e.error !== 'no-speech') {
-            _warn("Local Speech Error:", e.error);
-        }
-    };
-
-    // 🔒 REINICIO SUAVE MEJORADO: Evita el sonido "tun-tun" y mantiene el reconocimiento activo
-    localSpeechRec.onend = () => {
-        localSpeechRec = null;
-        if (state.isAudioScan && audioStream && !window.remoteMicStream && _speechWanted) {
-            // 🔒 Delay más largo (2s) para que el OS no lo considere agresivo
-            setTimeout(() => {
-                if (state.isAudioScan && _speechWanted && !localSpeechRec && !isTtsPlaying && !isSpookySpeaking) {
-                    _log('[SPEECH] Reiniciando reconocimiento...');
-                    startLocalSpeech();
-                }
-            }, 2000);
-        }
-    };
+    // Crear un destino separado SOLO para el micrófono (no incluye audio de la app)
+    voiceRecDestination = audioCtx.createMediaStreamDestination();
     
-    try { 
-        localSpeechRec.start(); 
-        _log('[SPEECH] Reconocimiento iniciado');
-    } catch(e) {
-        _warn('[SPEECH] Error al iniciar:', e);
+    // Conectar el micrófono a este destino
+    if (micGainNode) {
+        try {
+            micGainNode.connect(voiceRecDestination);
+            _log('[VOICE REC] Micrófono conectado al destino de reconocimiento');
+        } catch (e) {
+            _warn('[VOICE REC] Error conectando micrófono:', e);
+        }
+    }
+    
+    // Detectar el formato de audio soportado
+    const supportedType = getSupportedMimeType();
+    if (supportedType) {
+        voiceRecMimeType = supportedType;
+        _log('[VOICE REC] Formato de audio:', voiceRecMimeType);
+    } else {
+        _warn('[VOICE REC] No se encontró formato de audio soportado');
     }
 }
 
-    function stopLocalSpeech() {
-        if (localSpeechRec) {
-            localSpeechRec.onend = null;
-            try { localSpeechRec.stop(); } catch(e){}
-            localSpeechRec = null;
+let isTranscribing = false; // 🔒 Bandera para evitar llamadas simultáneas a la API
+
+function startVoiceRecognition() {
+    if (!voiceRecDestination || voiceRecRecorder) return;
+    
+    voiceRecChunks = [];
+    isTranscribing = false; // Resetear bandera al iniciar
+    
+    try {
+        voiceRecRecorder = new MediaRecorder(voiceRecDestination.stream, {
+            mimeType: voiceRecMimeType
+        });
+    } catch (e) {
+        _warn('[VOICE REC] Error creando MediaRecorder:', e);
+        return;
+    }
+    
+    voiceRecRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+            voiceRecChunks.push(e.data);
+        }
+    };
+    
+    voiceRecRecorder.onstop = async () => {
+        if (voiceRecChunks.length === 0 || !state.isAudioScan) return;
+        
+        const blob = new Blob(voiceRecChunks, { type: voiceRecMimeType });
+        voiceRecChunks = [];
+        
+        if (blob.size < 1000) {
+            if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
+                voiceRecRecorder.start();
+            }
+            return;
+        }
+        
+        // 🔒 Si ya estamos esperando una respuesta de la API, no saturar con otra llamada
+        if (isTranscribing) {
+            if (state.isAudioScan && voiceRecRecorder.state === 'inactive') {
+                voiceRecRecorder.start();
+            }
+            return;
+        }
+        
+        isTranscribing = true;
+        
+        try {
+            const transcript = await transcribeAudioWithFallback(blob, voiceRecMimeType);
+            if (transcript && transcript.trim()) {
+                if (!isFeedback(transcript)) {
+                    const txt = normalizarTexto(transcript);
+                    if (txt.length > 2) {
+                        window._liveUserText = txt.toUpperCase();
+                        window._liveUserLastUpdate = Date.now();
+                        
+                        const isMutedForTriggers = Date.now() < (window._ignoreSpeechUntil || 0);
+                        if (!isMutedForTriggers) {
+                            procesarComandoEVP(txt);
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            _warn('[VOICE REC] Error transcribiendo:', e);
+        } finally {
+            isTranscribing = false; // 🔒 Liberar la bandera
+        }
+        
+        if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
+            voiceRecRecorder.start();
+        }
+    };
+    
+    voiceRecRecorder.start();
+    _log('[VOICE REC] Reconocimiento iniciado');
+    
+    // 🔒 Reducido a 1500ms para que se sienta más rápido y responsivo
+    voiceRecInterval = setInterval(() => {
+        if (voiceRecRecorder && voiceRecRecorder.state === 'recording') {
+            voiceRecRecorder.stop();
+        }
+    }, 1500);
+}
+
+function stopVoiceRecognition() {
+    if (voiceRecInterval) {
+        clearInterval(voiceRecInterval);
+        voiceRecInterval = null;
+    }
+    
+    if (voiceRecRecorder && voiceRecRecorder.state !== 'inactive') {
+        voiceRecRecorder.stop();
+    }
+    
+    voiceRecRecorder = null;
+    _log('[VOICE REC] Reconocimiento detenido');
+}
+
+async function transcribeAudioWithFallback(audioBlob, mimeType) {
+    const primary = getActiveAIConfig();
+    if (!primary) throw new Error("No hay APIs configuradas");
+    
+    const secondary = (AI_MODE === 'auto') ?
+        (primary.provider === 'gemini' && GROQ_API_KEY ? { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL } :
+         primary.provider === 'groq' && GEMINI_API_KEY ? { provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL } : null)
+        : null;
+    
+    for (const cfg of [primary, secondary].filter(Boolean)) {
+        try {
+            const result = await transcribeWithSingleAPI(cfg, audioBlob, mimeType);
+            if (result !== null) {
+                return result;
+            }
+        } catch(e) { 
+            _warn(`[VOICE REC] ${cfg.provider} falló:`, e.message); 
         }
     }
+    
+    throw new Error("Todas las APIs de transcripción fallaron");
+}
+
+async function transcribeWithSingleAPI(cfg, audioBlob, mimeType) {
+    // Convertir el blob a base64
+    const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+    });
+    
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 8000);
+    
+    try {
+        if (cfg.provider === 'groq') {
+            // Groq Whisper - Transcripción de audio
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'audio.webm');
+            formData.append('model', 'whisper-large-v3');
+            formData.append('language', 'es');
+            formData.append('response_format', 'text');
+            
+            const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${cfg.key}` },
+                body: formData,
+                signal: ac.signal
+            });
+            
+            clearTimeout(t);
+            
+            if (!resp.ok) return null;
+            const text = await resp.text();
+            return text.trim() || null;
+            
+        } else {
+            // Gemini - Transcripción de audio
+            const geminiMimeType = mimeType.includes('webm') ? 'audio/webm' : 
+                                   mimeType.includes('mp4') ? 'audio/mp4' : 
+                                   mimeType.includes('aac') ? 'audio/aac' : 'audio/webm';
+            
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: "Transcribe el siguiente audio en español. Devuelve SOLO el texto transcrito, sin explicaciones ni comentarios. Si no hay voz o el audio es silencio, devuelve la cadena vacía." },
+                            { inlineData: { mimeType: geminiMimeType, data: base64 } }
+                        ]
+                    }]
+                }),
+                signal: ac.signal
+            });
+            
+            clearTimeout(t);
+            
+            if (!response.ok) return null;
+            const data = await response.json();
+            
+            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+                const text = data.candidates[0].content.parts[0].text;
+                // Limpiar la respuesta de Gemini
+                const cleaned = text.replace(/```[\s\S]*?```/g, '').trim();
+                return cleaned || null;
+            }
+            
+            return null;
+        }
+    } catch(e) { 
+        clearTimeout(t); 
+        throw e; 
+    }
+}
+
+function isFeedback(transcript) {
+    if (!lastSpokenText || !transcript) return false;
+    
+    const normTranscript = normalizarTexto(transcript);
+    const normLastSpoken = normalizarTexto(lastSpokenText);
+    
+    if (normTranscript.length < 3 || normLastSpoken.length < 3) return false;
+    
+    const words = normTranscript.split(' ').filter(w => w.length > 2);
+    const lastWords = normLastSpoken.split(' ').filter(w => w.length > 2);
+    
+    if (words.length === 0) return false;
+    
+    let matchCount = 0;
+    for (const word of words) {
+        if (lastWords.includes(word)) {
+            matchCount++;
+        }
+    }
+    
+    return matchCount / words.length > 0.5;
+}
 
 async function fetchBackgroundAIContext() {
     if (!state.isAudioScan || isAIProcessing) return;
@@ -2088,8 +2308,8 @@ function updateAudioRouting() {
     if (!audioCtx || !micGainNode) return;
     const usingRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
     const activeStream = usingRemote ? window.remoteMicStream : audioStream;
-
-    // 🔒 MIC SIEMPRE ABIERTO: la cadena física SOLO se conecta si el stream cambia.
+    
+    // 🔒 MIC SIEMPRE ABIERTO: la cadena física SOLO se conecta si el stream cambia
     if (activeStream !== _routedStream) {
         if (micSource) { try { micSource.disconnect(); } catch (e) {} micSource = null; }
         if (activeStream) {
@@ -2102,18 +2322,7 @@ function updateAudioRouting() {
             _routedStream = null;
         }
     }
-
-    // 🔒 Reconocimiento de voz SOLO cuando cambia el estado deseado (EVITA REINICIOS FANTASMA)
-    const wantSpeech = state.isAudioScan && !usingRemote && !!activeStream;
-    if (wantSpeech !== _speechWanted) {
-        _speechWanted = wantSpeech;
-        if (wantSpeech) {
-            if (!localSpeechRec) startLocalSpeech(); // 🔒 Solo iniciar si no está ya activo
-        } else {
-            if (localSpeechRec) stopLocalSpeech();   // 🔒 Solo detener si está activo
-        }
     }
-}
 
 
     let activeRemoteCall = null;
@@ -2321,6 +2530,81 @@ function updateAudioRouting() {
         } else if (cmd.type === 'tally') { const tallyEl = document.getElementById('tally-border'); if (cmd.state === 'program') { tallyEl.className = 'online'; } else if (cmd.state === 'preview') { tallyEl.className = 'preview'; } else { tallyEl.className = ''; } }
     }
 
+
+// ---------- MOTOR DE RECONOCIMIENTO DE VOZ LOCAL ----------
+function startLocalSpeech() {
+    if (!('webkitSpeechRecognition' in window)) return;
+    if (localSpeechRec) return;
+    
+    localSpeechRec = new webkitSpeechRecognition();
+    localSpeechRec.continuous = true;
+    localSpeechRec.interimResults = true;
+    localSpeechRec.lang = 'es-MX';
+
+    localSpeechRec.onresult = (event) => {
+        if (!state.isAudioScan) return;
+        let finalTranscript = '';
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+            else interimTranscript += event.results[i][0].transcript;
+        }
+        const text = interimTranscript || finalTranscript;
+        const txt = normalizarTexto(text);
+        
+        // 🔒 CRÍTICO: Definir PRIMERO si el sistema está silenciado (IA hablando o anuncio)
+        const isMutedForTriggers = isTtsPlaying || isSpookySpeaking || window._isAnnouncement || Date.now() < (window._ignoreSpeechUntil || 0);
+
+        // 🔒 CRÍTICO: SOLO actualizar el texto en pantalla si NO está silenciado
+        if (txt && !isMutedForTriggers) {
+            window._liveUserText = txt.toUpperCase();
+            window._liveUserLastUpdate = Date.now();
+            _log('[SPEECH] Texto detectado (Usuario):', txt);
+        } else if (txt && isMutedForTriggers) {
+            // Esto evita que el texto de la IA aparezca en pantalla como si fuera el usuario
+            _log('[SPEECH] Ignorado (Feedback de audio de la IA):', txt);
+        }
+
+        if (event.results[event.resultIndex].isFinal && txt.trim() && !isMutedForTriggers) {
+            procesarComandoEVP(txt);
+        }
+    };
+
+    localSpeechRec.onerror = (e) => {
+        if (e.error !== 'no-speech') {
+            _warn("Local Speech Error:", e.error);
+        }
+    };
+
+    localSpeechRec.onend = () => {
+        localSpeechRec = null;
+        if (state.isAudioScan && audioStream && !window.remoteMicStream && _speechWanted) {
+            setTimeout(() => {
+                if (state.isAudioScan && _speechWanted && !localSpeechRec && !isTtsPlaying && !isSpookySpeaking) {
+                    _log('[SPEECH] Reiniciando reconocimiento...');
+                    startLocalSpeech();
+                }
+            }, 2000);
+        }
+    };
+    
+    try { 
+        localSpeechRec.start(); 
+        _log('[SPEECH] Reconocimiento iniciado');
+    } catch(e) {
+        _warn('[SPEECH] Error al iniciar:', e);
+    }
+}
+
+function stopLocalSpeech() {
+    if (localSpeechRec) {
+        localSpeechRec.onend = null;
+        try { localSpeechRec.stop(); } catch(e){}
+        localSpeechRec = null;
+    }
+}
+
+
     async function initAudioEngine() {
         if (audioEngineInitialized && audioCtx) {
             if (audioCtx.state === 'suspended' && !document.hidden) audioCtx.resume().catch(() => {});
@@ -2369,6 +2653,7 @@ micDuckGain.connect(compressor);
 compressor.connect(mixDestination);
             
             updateAudioRouting();
+            initVoiceRecognition(); // 🔒 Inicializar el destino de reconocimiento de voz
 
             if (!ttsSource) {
                 initTTSPipeline();
@@ -2895,37 +3180,100 @@ micDuckGain.gain.setTargetAtTime(on ? 0.12 : 1.0, t, on ? 0.05 : 0.25);
 
 // NOTA: ELEVENLABS_API_KEY y VOICERSS_API_KEY ya se declararon al inicio del script con fallback a DEFAULT_
 async function getElevenLabsAudio(text, voiceId) {
+    const baseUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+    // Proxy CORS de respaldo (los navegadores bloquean ElevenLabs por seguridad)
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`;
+
+    const tryFetch = async (url, isProxy = false) => {
         try {
-            const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
-                method: 'POST', headers: { 'Accept': 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-                body: JSON.stringify({ text: text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.35, similarity_boost: 0.85, style: 0.75, use_speaker_boost: true } })
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'audio/mpeg',
+                    'Content-Type': 'application/json',
+                    'xi-api-key': ELEVENLABS_API_KEY
+                },
+                body: JSON.stringify({
+                    text: text,
+                    model_id: "eleven_multilingual_v2",
+                    voice_settings: {
+                        stability: 0.35,
+                        similarity_boost: 0.85,
+                        style: 0.75,
+                        use_speaker_boost: true
+                    }
+                })
             });
-            if (!response.ok) return null;
-            elevenlabsCreditsUsed += text.length; elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
-            localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed); updateTTSStatusUI(); 
-            return URL.createObjectURL(await response.blob());
-        } catch (e) { return null; }
+
+            if (!response.ok) {
+                const errText = await response.text();
+                console.error(`[TTS-EL] ${isProxy ? 'PROXY' : 'DIRECTO'} Falló (${response.status}):`, errText);
+                // Si es error 401/429, es falta de créditos o key inválida
+                if (response.status === 401 || response.status === 429) {
+                    showToast('⚠️ ELEVENLABS: SIN CRÉDITOS O KEY INVÁLIDA', true);
+                }
+                return null;
+            }
+
+            const blob = await response.blob();
+            if (blob.size < 500) {
+                console.warn(`[TTS-EL] ${isProxy ? 'PROXY' : 'DIRECTO'} Audio vacío o error`, blob.size);
+                return null;
+            }
+
+            elevenlabsCreditsUsed += text.length;
+            elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
+            localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
+            updateTTSStatusUI();
+
+            return URL.createObjectURL(blob);
+        } catch (e) {
+            console.error(`[TTS-EL] ${isProxy ? 'PROXY' : 'DIRECTO'} Error de red/CORS:`, e.message);
+            return null;
+        }
+    };
+
+    // 1. Intentar directo (más rápido)
+    let audioUrl = await tryFetch(baseUrl, false);
+
+    // 2. Si falla (CORS), intentar con Proxy
+    if (!audioUrl) {
+        console.warn("[TTS-EL] Fallo directo, intentando Proxy CORS...");
+        audioUrl = await tryFetch(proxyUrl, true);
     }
 
-    async function fetchElevenLabsCredits() {
+    return audioUrl;
+}
+
+async function fetchElevenLabsCredits() {
     if (!ELEVENLABS_API_KEY) return;
-    try {
-        const resp = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
-            headers: { 'xi-api-key': ELEVENLABS_API_KEY }
-        });
-        if (resp.ok) {
-            const data = await resp.json();
-            if (data.character_count !== undefined && data.character_limit !== undefined) {
-                elevenlabsCreditsUsed = data.character_count;
-                elevenlabsCreditsTotal = data.character_limit;
-                elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
-                localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
-                updateTTSStatusUI();
-                _log(`[TTS] ElevenLabs: ${elevenlabsCreditsRemaining}/${elevenlabsCreditsTotal} créditos disponibles`);
-            }
+    
+    const baseUrl = 'https://api.elevenlabs.io/v1/user/subscription';
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`;
+
+    const tryFetch = async (url) => {
+        try {
+            const resp = await fetch(url, {
+                headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+            });
+            if (resp.ok) return await resp.json();
+        } catch (e) {
+            console.warn("[TTS-EL] Error consultando créditos (CORS/Red):", e.message);
         }
-    } catch(e) {
-        _warn('[TTS] No se pudo consultar créditos de ElevenLabs:', e);
+        return null;
+    };
+
+    // Intentar directo, luego proxy
+    let data = await tryFetch(baseUrl);
+    if (!data) data = await tryFetch(proxyUrl);
+
+    if (data && data.character_count !== undefined && data.character_limit !== undefined) {
+        elevenlabsCreditsUsed = data.character_count;
+        elevenlabsCreditsTotal = data.character_limit;
+        elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
+        localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
+        updateTTSStatusUI();
+        console.log(`[TTS] ElevenLabs: ${elevenlabsCreditsRemaining}/${elevenlabsCreditsTotal} créditos disponibles`);
     }
 }
 
@@ -4367,113 +4715,181 @@ applyGoogleTTSFilters(false);
         
         // ✅ AQUÍ YA NO SE BORRA EL TEXTO DEL USUARIO. Se eliminaron las líneas que lo vaciaban.
         
-        setTimeout(() => {
-            let respText;
-            if (contextResponse) {
-                respText = contextResponse;
-            } else if (matchedCat) {
-                respText = matchedCat.respuestas[Math.floor(Math.random() * matchedCat.respuestas.length)];
-            } else if (isQuestion) {
-                respText = obtenerRespuestaContextual(txt);
-            } else {
-                respText = evpFrasesAmbiguaMemoria[Math.floor(Math.random() * evpFrasesAmbiguaMemoria.length)];
-            }
-            speakSpooky(respText);
-        }, 1500 + Math.random() * 1000);
+setTimeout(() => {
+    let respText;
+    // ... código de respuesta
+    speakSpooky(respText);
+}, 1500 + Math.random() * 1000);  // ← Cambiar a 300-500ms
     }
 }
 
-    async function toggleAudioScanner() {
-      if (OBR_NET.offline) { showToast('📴 AUDIO SCAN no disponible en OFFLINE', true); return; }  // ← PRIMERA línea
+async function toggleAudioScanner() {
+    if (OBR_NET.offline) { 
+        showToast(' AUDIO SCAN no disponible en OFFLINE', true); 
+        return; 
+    }
+    
     const btnMenu = document.getElementById('btn-audio-menu');
     
+    // === DESACTIVAR ===
     if (state.isAudioScan) {
-        // === DESACTIVAR ===
         if (window._waitingAudioDeactivation) return;
+        
         if (isTtsPlaying || isSpookySpeaking) {
             window._waitingAudioDeactivation = true;
             const checkInterval = setInterval(() => {
                 if (!isTtsPlaying && !isSpookySpeaking) {
                     clearInterval(checkInterval);
                     window._waitingAudioDeactivation = false;
-                    if(state.isAudioScan) executeAudioScanDeactivation(btnMenu);
+                    if (state.isAudioScan) executeAudioScanDeactivation(btnMenu);
                 }
             }, 500);
         } else {
             executeAudioScanDeactivation(btnMenu);
         }
-    } else {
-     // === ACTIVAR ===
-state.isAudioScan = true;
-// Verificar APIs TTS
-const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
-const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
-if (!hasElevenLabs && !hasVoiceRSS) {
-    state.isAudioScan = false;
-    ttsNoDisponible('Sin APIs TTS configuradas o sin créditos');
-    return;
-}
-
-// Configurar micrófono si es necesario
-if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
-    if (!audioStream) {
-        try {
-            audioStream = await navigator.mediaDevices.getUserMedia({
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
-            });
-        } catch(e) { _warn("Permiso de micrófono local denegado."); }
+        return;
     }
+    
+    // === ACTIVAR ===
+    
+    // 1. Validar APIs TTS (necesarias para la voz del EVP)
+    const hasElevenLabs = !!ELEVENLABS_API_KEY && elevenlabsCreditsRemaining > 5;
+    const hasVoiceRSS = !!VOICERSS_API_KEY && voicerssRemaining > 0;
+    if (!hasElevenLabs && !hasVoiceRSS) {
+        showToast('Sin APIs TTS configuradas o sin créditos', true);
+        return;
+    }
+    
+    // 2. Configurar micrófono si es necesario
+    if (!window.remoteMicStream && (isLocalMicForced || (agoraClient && agoraClient.joined))) {
+        if (!audioStream) {
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { 
+                        echoCancellation: false, 
+                        noiseSuppression: false, 
+                        autoGainControl: false, 
+                        channelCount: 1 
+                    }
+                });
+            } catch(e) { 
+                _warn("Permiso de micrófono local denegado."); 
+                showToast("Permiso de micrófono denegado", true);
+                return;
+            }
+        }
+    }
+    
+    // 3. Inicializar motor de audio
+    await initAudioEngine();
+    
+    // 4. Verificar que haya micrófono activo
+    const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
+    const hasLocal = audioStream && audioStream.getAudioTracks().length > 0;
+    if (!hasRemote && !hasLocal) {
+        showToast("NO HAY MIC SENDER O ESTUDIO CONECTADO", true);
+        if (btnMenu) btnMenu.classList.remove('active-state');
+        return;
+    }
+    
+    // 5. Activar estado
+    state.isAudioScan = true;
+    if (btnMenu) btnMenu.classList.add('active-state');
+    document.body.classList.add('audio-scan-active');
+    
+    // 6. Inicializar variables de sesión
+    window._audioScanStartTime = Date.now();
+    window._evpNextGap = 999999;
+    window._waitingFirstInteraction = true;
+    window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
+    lastValidAudioTime = Date.now();
+    window._isAnnouncement = true;
+    window._liveUserText = '';
+    window._liveUserLastUpdate = 0;
+    lastSpokenText = '';
+    evpContextMemory = [];
+    cumulativeEVPEnergy = 0;
+    ambientNoiseLevel = 0.01;
+    
+    // 7. Asegurar que el AudioContext esté corriendo
+    await _ensureContextRunning();
+    
+    // 8. Configurar routing de audio (esto inicia webkitSpeechRecognition automáticamente)
+    updateAudioRouting();
+    
+    // 9. Esperar un momento para que el reconocimiento de voz se inicialice
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 10. Configurar y reproducir el barrido
+    _ensureSweepRouting();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    startSweepAudio();
+    _fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200);
+    
+    // 11. Anuncio de activación
+    speakAnnouncement('ESPIRIT BOX ACTIVADO').catch(() => {});
+    
+    // 12. Finalizar inicialización
+    setTimeout(() => {
+        if (!state.isAudioScan) return;
+        lastReconnectTime = 0;
+        reconnectAudioNode();
+        window._isAnnouncement = false;
+        lastEvpTime = Date.now();
+        scheduleBackgroundAIContext(true);
+    }, 150);
 }
 
-await initAudioEngine();
-updateAudioRouting();
-
-// 🔒 CRÍTICO: Esperar 800ms antes de iniciar el reconocimiento de voz
-// Esto evita el sonido "tun-tun" del OS al pedir el micrófono agresivamente
-await new Promise(resolve => setTimeout(resolve, 800));
-
-// Verificar que haya micrófono activo
-const hasRemote = window.remoteMicStream && window.remoteMicStream.getAudioTracks().length > 0;
-const hasLocal = audioStream && audioStream.getAudioTracks().length > 0;
-if (!hasRemote && !hasLocal) {
-    showToast("NO HAY MIC SENDER O ESTUDIO CONECTADO", true);
+function executeAudioScanDeactivation(btnMenu) {
     state.isAudioScan = false;
     if (btnMenu) btnMenu.classList.remove('active-state');
-    return;
-}
-
-// Activar UI
-if (btnMenu) btnMenu.classList.add('active-state');
-
-// === OCULTAR ELEMENTOS ===
-document.body.classList.add('audio-scan-active');
-window._audioScanStartTime = Date.now();
-window._evpNextGap = 999999;
-window._waitingFirstInteraction = true;
-window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
-lastValidAudioTime = Date.now();
-window._isAnnouncement = true;
-
-await _ensureContextRunning();
-
-// 🔒 CRÍTICO: Asegurar que el sweep se inicialice correctamente
-_ensureSweepRouting();
-await new Promise(resolve => setTimeout(resolve, 200)); // Dar tiempo al routing
-
-startSweepAudio();
-_fadeVolume(sweepAudio, VOLUMEN_BARRIDO, 1200);
-
-speakAnnouncement('ESPIRIT BOX ACTIVADO').catch(() => {});
-
-setTimeout(() => {
-    if (!state.isAudioScan) return;
-    lastReconnectTime = 0;
-    reconnectAudioNode();
-    window._isAnnouncement = false;
-    lastEvpTime = Date.now();
-    scheduleBackgroundAIContext(true);
-}, 150);
+    document.body.classList.remove('audio-scan-active');
+    
+    // Detener reconocimiento de voz
+    stopLocalSpeech();
+    
+    // Detener audio
+    stopSweepAudio();
+    setMicDuck(false);
+    
+    // Limpiar timers
+    clearTimeout(_ttsWatchdog);
+    clearTimeout(backgroundAITimer);
+    clearTimeout(speechTimer);
+    
+    // Limpiar estado
+    window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
+    window._liveUserText = '';
+    window._liveUserLastUpdate = 0;
+    lastSpokenText = '';
+    lastEvpTime = Date.now() + 99999;
+    simulatedPikes.fill(0);
+    cumulativeEVPEnergy = 0;
+    ambientNoiseLevel = 0.01;
+    evpContextMemory = [];
+    
+    // Detener TTS
+    if (cloudTTSPlayer) { 
+        cloudTTSPlayer.pause(); 
+        cloudTTSPlayer.src = ''; 
     }
+    if (_activeBufSrc) { 
+        try { _activeBufSrc.stop(); } catch(e){} 
+        _activeBufSrc = null; 
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    
+    isTtsPlaying = false;
+    isSpookySpeaking = false;
+    
+    // Anuncio de desactivación
+    window._isAnnouncement = true;
+    speakAnnouncement('ESPIRIT BOX DESACTIVADO', true).then(() => {
+        window._isAnnouncement = false;
+    }).catch(() => {
+        window._isAnnouncement = false;
+    });
 }
 
 
@@ -4481,32 +4897,51 @@ function executeAudioScanDeactivation(btnMenu) {
     state.isAudioScan = false;
     if (btnMenu) btnMenu.classList.remove('active-state');
     
-    // === MOSTRAR ELEMENTOS NUEVAMENTE ===
     document.body.classList.remove('audio-scan-active');
-stopSweepAudio();
-setMicDuck(false); // 🦆 mic al 100% al apagar
+    
+    // Detener reconocimiento inmediatamente
+    stopVoiceRecognition();
     
     stopSweepAudio();
+    setMicDuck(false);
+    
     clearTimeout(_ttsWatchdog);
     clearTimeout(backgroundAITimer);
-    window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
-    if (cloudTTSPlayer) { cloudTTSPlayer.pause(); cloudTTSPlayer.src = ''; }
-    if (_activeBufSrc) { try { _activeBufSrc.stop(); } catch(e){} _activeBufSrc = null; }
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    stopLocalSpeech();
-    isTtsPlaying = false; isSpookySpeaking = false;
-    lastSpokenText = ''; clearTimeout(speechTimer);
-    lastEvpTime = Date.now() + 99999;
-    simulatedPikes.fill(0); cumulativeEVPEnergy = 0; ambientNoiseLevel = 0.01;
-    evpContextMemory = [];
-    window._isAnnouncement = true;
     
+    // 🔒 LIMPIEZA EXPLÍCITA DE ESTADOS
+    window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
+    window._liveUserText = '';
+    window._liveUserLastUpdate = 0;
+    lastSpokenText = '';
+    
+    if (cloudTTSPlayer) { 
+        cloudTTSPlayer.pause(); 
+        cloudTTSPlayer.src = ''; 
+    }
+    if (_activeBufSrc) { 
+        try { _activeBufSrc.stop(); } catch(e){} 
+        _activeBufSrc = null; 
+    }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    
+    isTtsPlaying = false; 
+    isSpookySpeaking = false;
+    isTranscribing = false; // 🔒 Asegurar que se libere la bandera
+    
+    clearTimeout(speechTimer);
+    lastEvpTime = Date.now() + 99999;
+    simulatedPikes.fill(0); 
+    cumulativeEVPEnergy = 0; 
+    ambientNoiseLevel = 0.01;
+    evpContextMemory = [];
+    
+    window._isAnnouncement = true;
     speakAnnouncement('ESPIRIT BOX DESACTIVADO', true).then(() => {
         window._isAnnouncement = false;
     }).catch(() => {
         window._isAnnouncement = false;
     });
-    }
+}
 
 // 🔒 CACHE DE TEXTO PARA AUDIO VISUALIZER (Evita recrear canvas de texto 60 veces/seg)
 let _userTextCanvas = null, _userTextCtx = null, _lastUserText = '';
