@@ -1108,7 +1108,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.1</p>
+    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.27</p>
     
     <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
     <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">LISTO PARA INICIAR</div>
@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '67'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '27'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -2144,27 +2144,24 @@ function stopVoiceRecognition() {
 }
 
 async function transcribeAudioWithFallback(audioBlob, mimeType) {
-    const primary = getActiveAIConfig();
-    if (!primary) throw new Error("No hay APIs configuradas");
+    // 🔒 PRIORIDAD: Groq Whisper es el mejor para audio. Si falla (429), usa Gemini.
+    const apisToTry = [];
+    if (GROQ_API_KEY) apisToTry.push({ provider: 'groq', key: GROQ_API_KEY });
+    if (GEMINI_API_KEY) apisToTry.push({ provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL });
     
-    const secondary = (AI_MODE === 'auto') ?
-        (primary.provider === 'gemini' && GROQ_API_KEY ? { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL } :
-         primary.provider === 'groq' && GEMINI_API_KEY ? { provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL } : null)
-        : null;
-    
-    for (const cfg of [primary, secondary].filter(Boolean)) {
+    for (const cfg of apisToTry) {
         try {
             const result = await transcribeWithSingleAPI(cfg, audioBlob, mimeType);
-            if (result !== null) {
+            if (result !== null && result.trim() !== '') {
                 return result;
             }
-        } catch(e) { 
-            _warn(`[VOICE REC] ${cfg.provider} falló:`, e.message); 
+        } catch(e) {
+            _warn(`[VOICE REC] ${cfg.provider} falló:`, e.message);
         }
     }
-    
-    throw new Error("Todas las APIs de transcripción fallaron");
+    return null; // Devolver null silenciosamente para no saturar la consola con errores
 }
+
 
 async function transcribeWithSingleAPI(cfg, audioBlob, mimeType) {
     const ac = new AbortController();
@@ -2265,10 +2262,13 @@ Reglas:
         clearTimeout(t);
 
         if (!response.ok) {
-            const errText = await response.text().catch(() => '');
-            console.error('[VOICE REC] Gemini transcripción HTTP', response.status, errText.substring(0, 300));
-            return null;
-        }
+    if (response.status === 429) {
+        _warn(`[VOICE REC] ${cfg.provider} cuota agotada (429), probando fallback silencioso...`);
+    } else {
+        _warn(`[VOICE REC] ${cfg.provider} transcripción HTTP`, response.status);
+    }
+    return null;
+}
 
         const data = await response.json();
 
@@ -5235,10 +5235,14 @@ cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
 // ===== TEXTO DEL USUARIO (cacheado) =====
 if (window._liveUserText && window._liveUserLastUpdate) {
     const timeSinceUpdate = Date.now() - window._liveUserLastUpdate;
-    // 🔒 MANTENER VISIBLE SI EL EVP ESTÁ HABLANDO O SI EL USUARIO ACABA DE HABLAR
     const isEvpActive = isSpookySpeaking || isTtsPlaying || window._isAnnouncement;
     
-    if (timeSinceUpdate < 4000 || isEvpActive) { // ← CAMBIADO: ahora incluye isEvpActive
+    // 🔒 FORZAR LIMPIEZA: Si pasaron más de 5 segundos y el EVP no está hablando, borrar para que no se quede pegado
+    if (timeSinceUpdate > 5000 && !isEvpActive) {
+        window._liveUserText = '';
+        window._liveUserLastUpdate = 0;
+        _lastUserText = ''; // Limpiar caché de canvas
+    } else if (timeSinceUpdate < 4000 || isEvpActive) {
         c.save();
         c.globalAlpha = 0.95;
         let displayUserText = window._liveUserText;
@@ -6936,31 +6940,31 @@ const AI_PROMPTS = [
 ];
 
 const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
-    try {
-        let attempts = 0, success = false, textResult = "Analizando...";
-        const _aiTimeout = setTimeout(() => {
-            if (isAIProcessing) {
-                isAIProcessing = false;
-                currentAiText = "";
-                if (state.isPareidolia) startScanningEffect();
-            }
-        }, 20000);
-        
-        while (attempts < 3 && !success) {
 try {
-const ac = new AbortController();
-const reqTimer = setTimeout(() => ac.abort(), 8000); // 🔒 8s por intento (antes 10s)
-
-if (CURRENT_AI_PROVIDER === 'groq') {
-    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: CURRENT_AI_MODEL,
-            messages: [
-                {
-                    role: "system",
-                    content: `Eres un investigador paranormal de Exploraciones OBR.
+    let attempts = 0, success = false, textResult = "Analizando...";
+    const _aiTimeout = setTimeout(() => {
+        if (isAIProcessing) {
+            isAIProcessing = false;
+            currentAiText = "";
+            if (state.isPareidolia) startScanningEffect();
+        }
+    }, 18000); // 🔒 Timeout global reducido a 18s
+    
+    while (attempts < 3 && !success) {
+        try {
+            const ac = new AbortController();
+            const reqTimer = setTimeout(() => ac.abort(), 6000); // 🔒 6s por intento (más rápido)
+            
+            if (CURRENT_AI_PROVIDER === 'groq') {
+                const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: CURRENT_AI_MODEL,
+                        messages: [
+                            {
+                                role: "system",
+                                content: `Eres un investigador paranormal de Exploraciones OBR.
 REGLAS ABSOLUTAS:
 1. Responde ÚNICA Y EXCLUSIVAMENTE en español.
 2. Habla SIEMPRE en primera persona.
@@ -6970,39 +6974,50 @@ REGLAS ABSOLUTAS:
 6. Devuelve ÚNICAMENTE texto plano.
 7. Usa "parece", "aparenta", "recuerda a" para formas ambiguas.
 8. Tono inquietante pero objetivo.`
-                },
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: prompt },
-                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
-                    ]
+                            },
+                            {
+                                role: "user",
+                                content: [
+                                    { type: "text", text: prompt },
+                                    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
+                                ]
+                            }
+                        ],
+                        max_tokens: 100,
+                        temperature: 0.4
+                    }),
+                    signal: ac.signal
+                });
+                clearTimeout(reqTimer);
+                
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.choices && data.choices[0] && data.choices[0].message) {
+                        const rawText = data.choices[0].message.content;
+                        if (rawText && rawText.trim().length > 0) {
+                            success = true;
+                            textResult = rawText;
+                        } else {
+                            _warn('[IA VISION] Groq respondió vacío');
+                            attempts++;
+                            await new Promise(r => setTimeout(r, 800));
+                        }
+                    } else { 
+                        _warn('[IA VISION] Groq sin choices válidos');
+                        attempts++; 
+                        await new Promise(r => setTimeout(r, 800)); 
+                    }
+                } else {
+                    const errBody = await resp.text().catch(() => '');
+                    _warn('[IA VISION] Groq HTTP ' + resp.status + ': ' + errBody.substring(0, 200));
+                    attempts++;
+                    await new Promise(r => setTimeout(r, 800));
                 }
-            ],
-            max_tokens: 100,
-            temperature: 0.4
-        }),
-        signal: ac.signal
-    });
-    clearTimeout(reqTimer);
-
-    if (resp.ok) {
-        const data = await resp.json();
-        if (data.choices && data.choices[0] && data.choices[0].message) {
-            success = true;
-            textResult = data.choices[0].message.content;
-        } else { attempts++; await new Promise(r => setTimeout(r, 800)); }
-    } else {
-        const errBody = await resp.text().catch(() => '');
-        _warn('[IA VISION] Groq HTTP ' + resp.status + ': ' + errBody.substring(0, 200));
-        attempts++;
-        await new Promise(r => setTimeout(r, 800));
-    }
-
-} else if (CURRENT_AI_PROVIDER === 'gemini') {
-    const geminiModel = getSafeGeminiVisionModel();
-
-    const geminiPrompt = `Eres un investigador paranormal de Exploraciones OBR que transmite observaciones en vivo desde una cámara corporal.
+                
+            } else if (CURRENT_AI_PROVIDER === 'gemini') {
+                const geminiModel = getSafeGeminiVisionModel();
+                
+                const geminiPrompt = `Eres un investigador paranormal de Exploraciones OBR que transmite observaciones en vivo desde una cámara corporal.
 
 REGLAS ABSOLUTAS:
 1. Responde ÚNICA Y EXCLUSIVAMENTE en español.
@@ -7017,193 +7032,197 @@ REGLAS ABSOLUTAS:
 10. No menciones que eres una IA.
 
 Observa la imagen y responde.`;
-
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${AI_API_KEY}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            contents: [{
-                role: 'user',
-                parts: [
-                    {
-                        text: geminiPrompt
+                
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${AI_API_KEY}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
                     },
-                    {
-                        inlineData: {
-                            mimeType: 'image/jpeg',
-                            data: base64
+                    body: JSON.stringify({
+                        contents: [{
+                            role: 'user',
+                            parts: [
+                                {
+                                    text: geminiPrompt
+                                },
+                                {
+                                    inlineData: {
+                                        mimeType: 'image/jpeg',
+                                        data: base64
+                                    }
+                                }
+                            ]
+                        }],
+                        generationConfig: {
+                            temperature: 0.35,
+                            maxOutputTokens: 100,
+                            topP: 0.8,
+                            topK: 32
                         }
+                    }),
+                    signal: ac.signal
+                });
+                
+                clearTimeout(reqTimer);
+                
+                if (!resp.ok) {
+                    const errBody = await resp.text().catch(() => '');
+                    console.error('[IA VISION] Gemini HTTP ' + resp.status + ':', errBody.substring(0, 1000));
+                    attempts++;
+                    await new Promise(r => setTimeout(r, 800));
+                    if (typeof _yieldUI === 'function') await _yieldUI();
+                } else {
+                    const data = await resp.json();
+                    
+                    if (data.promptFeedback && data.promptFeedback.blockReason) {
+                        console.error('[IA VISION] Gemini bloqueó prompt:', data.promptFeedback);
+                        attempts++;
+                        await new Promise(r => setTimeout(r, 800));
+                        continue;
                     }
-                ]
-            }],
-            generationConfig: {
-                temperature: 0.35,
-                maxOutputTokens: 100,
-                topP: 0.8,
-                topK: 32
+                    
+                    const candidate = data.candidates && data.candidates[0] ? data.candidates[0] : null;
+                    
+                    if (candidate && candidate.finishReason && candidate.finishReason !== 'STOP') {
+                        console.warn('[IA VISION] Gemini finishReason:', candidate.finishReason);
+                    }
+                    
+                    let geminiText = '';
+                    
+                    if (
+                        candidate &&
+                        candidate.content &&
+                        candidate.content.parts &&
+                        Array.isArray(candidate.content.parts)
+                    ) {
+                        geminiText = candidate.content.parts
+                            .map(p => p.text || '')
+                            .join(' ')
+                            .trim();
+                    }
+                    
+                    if (geminiText && geminiText.length > 0) {
+                        success = true;
+                        textResult = geminiText;
+                    } else {
+                        console.error('[IA VISION] Gemini respondió sin texto útil:', JSON.stringify(data).substring(0, 1500));
+                        attempts++;
+                        await new Promise(r => setTimeout(r, 800));
+                        if (typeof _yieldUI === 'function') await _yieldUI();
+                    }
+                }
+                
+            } else {
+                _warn('[IA VISION] Provider no configurado: ' + CURRENT_AI_PROVIDER);
+                break;
             }
-        }),
-        signal: ac.signal
-    });
-
-    clearTimeout(reqTimer);
-
-    if (!resp.ok) {
-        const errBody = await resp.text().catch(() => '');
-        console.error('[IA VISION] Gemini HTTP ' + resp.status + ':', errBody.substring(0, 1000));
-        attempts++;
-        await new Promise(r => setTimeout(r, 800));
-        if (typeof _yieldUI === 'function') await _yieldUI();
-    } else {
-        const data = await resp.json();
-
-        if (data.promptFeedback && data.promptFeedback.blockReason) {
-            console.error('[IA VISION] Gemini bloqueó prompt:', data.promptFeedback);
-        }
-
-        const candidate = data.candidates && data.candidates[0] ? data.candidates[0] : null;
-
-        if (candidate && candidate.finishReason) {
-            console.warn('[IA VISION] Gemini finishReason:', candidate.finishReason);
-        }
-
-        let geminiText = '';
-
-        if (
-            candidate &&
-            candidate.content &&
-            candidate.content.parts &&
-            Array.isArray(candidate.content.parts)
-        ) {
-            geminiText = candidate.content.parts
-                .map(p => p.text || '')
-                .join(' ')
-                .trim();
-        }
-
-        if (geminiText) {
-            success = true;
-            textResult = geminiText;
-        } else {
-            console.error('[IA VISION] Gemini respondió sin texto útil:', JSON.stringify(data).substring(0, 1500));
+            
+        } catch (err) {
+            clearTimeout(reqTimer);
+            _warn('[IA VISION] Error intento ' + (attempts + 1) + ':', err.message);
             attempts++;
             await new Promise(r => setTimeout(r, 800));
-            if (typeof _yieldUI === 'function') await _yieldUI();
         }
     }
-
-} else {
-    _warn('[IA VISION] Provider no configurado: ' + CURRENT_AI_PROVIDER);
-    break;
-}
-
-} catch (err) {
-    clearTimeout(reqTimer);
-    _warn('[IA VISION] Error intento ' + (attempts + 1) + ':', err.message);
-    attempts++;
-    await new Promise(r => setTimeout(r, 800));
-}
-}
-        
-        clearTimeout(_aiTimeout);
-
-// === LIMPIEZA AGRESIVA DE RESPUESTAS ===
-                // === LIMPIEZA AGRESIVA DE RESPUESTAS v2 ===
-                let text = textResult || '';
-
-                // 1. Eliminar etiquetas de razonamiento (todos los formatos conocidos)
-                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-                text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-                text = text.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '');
-                text = text.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '');
-                text = text.replace(/<\|[^|]*\|>/g, ''); // Qwen special tokens
-
-                // 2. Eliminar párrafos de razonamiento sin etiqueta (inglés y español)
-                text = text.replace(/(?:the user (?:wants|asks|is asking|needs|requests)[\s\S]*?)(?=\n\n|$)/gi, '');
-                text = text.replace(/(?:let me (?:analyze|look|examine|think|consider)[\s\S]*?)(?=\n\n|$)/gi, '');
-                text = text.replace(/(?:i need to[\s\S]*?)(?=\n\n|$)/gi, '');
-                text = text.replace(/(?:i('| a)?m (?:going to|about to|looking at)[\s\S]*?)(?=\n\n|$)/gi, '');
-                text = text.replace(/(?:el usuario (?:quiere|pide|necesita|solicita)[\s\S]*?)(?=\n\n|$)/gi, '');
-                text = text.replace(/(?:déjame (?:analizar|observar|examinar|pensar)[\s\S]*?)(?=\n\n|$)/gi, '');
-                text = text.replace(/(?:rol|punto de vista|acción|contexto|instrucción)\s*:\s*[\s\S]*?(?=\n|$)/gi, '');
-
-                // 3. Eliminar etiquetas HTML/XML residuales y markdown
-                text = text.replace(/<[^>]+>/g, '');
-                text = text.replace(/[*_#`\[\](){}]/g, '');
-                text = text.replace(/```[\s\S]*?```/g, '');
-
-                // 4. Normalizar puntuación
-                text = text.replace(/\.{2,}/g, '.');
-                text = text.replace(/,{2,}/g, ',');
-                text = text.replace(/\n{2,}/g, ' ');
-                text = text.replace(/\n/g, ' ');
-                text = text.replace(/\s{2,}/g, ' ');
-                text = text.trim();
-
-                // 5. ESTRATEGIA "VEO": buscar la última aparición de "Veo" (el prompt lo exige)
-                //    Si el modelo emitió razonamiento antes, lo descartamos todo.
-                const veoIdx = text.lastIndexOf('Veo ');
-                const veoIdxLower = text.lastIndexOf('veo ');
-                const bestVeoIdx = Math.max(veoIdx, veoIdxLower);
-                if (bestVeoIdx > 0) {
-                    text = text.substring(bestVeoIdx);
-                } else if (bestVeoIdx === -1) {
-                    // No contiene "Veo" → intentar extraer la última oración válida
-                    const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 10);
-                    text = sentences.length > 0 ? sentences[sentences.length - 1] : text;
-                }
-
-                // 6. DETECCIÓN DE INGLÉS: si la respuesta parece inglés, descartar
-                const englishMarkers = /\b(the|is|are|was|were|this|that|with|from|have|has|can|will|would|could|should|there|here|what|when|where|which|who|how|why|because|about|into|over|after|before|between|through|during|without|within|along|across|behind|beyond|except|inside|outside|above|below|upon|around|among|throughout|against|toward|towards|image|photo|picture|scene|shows|appears|seems|looks|contains|features|displays|depicts|illustrates|represents|captures|reveals)\b/gi;
-                const spanishMarkers = /\b(veo|una|unos|unas|el|la|los|las|es|está|hay|parece|parecen|sombra|figura|forma|luz|oscuridad|pasillo|puerta|ventana|pared|habitación|cuarto|reflejo|contorno|silueta|presencia|algo|nada|aquí|cerca|lejos|fondo|esquina|techo|suelo|piso)\b/gi;
-                const enCount = (text.match(englishMarkers) || []).length;
-                const esCount = (text.match(spanishMarkers) || []).length;
-                if (enCount > esCount && enCount >= 3) {
-                    _warn('[IA] Respuesta en inglés detectada, usando fallback');
-                    text = "señal interferida";
-                }
-
-                // 7. Limitar a ~24 palabras
-                const words = text.split(/\s+/).filter(w => w.length > 0);
-                if (words.length > 24) {
-                    text = words.slice(0, 24).join(' ') + '.';
-                }
-
-                // 8. Validación final
-                if (text.length < 3 || /^(error|analizando|usuario|user|sorry|apologize|cannot|unable)/i.test(text)) {
-                    text = "señal interferida";
-                }
-
-stopScanningEffect();
-
-        currentAiText = text;
-        currentAiImgEl = pendingAiImgEl;
-        currentAiImage = pendingAiImageSrc;
-        
-        clearTimeout(aiTextTimer);
-        aiTextTimer = setTimeout(() => {
-            if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} }
-            currentAiText = "";
-            currentAiImage = null;
-            currentAiImgEl = null;
-            window._aiImageCache = null;
-            if (state.isPareidolia) startScanningEffect();
-        }, 9000);
-        
-        speakText(text);
-    } catch (e) {
-        isAIProcessing = false;
-        currentAiText = "error de señal";
-        setTimeout(() => {
-            if (currentAiText === "error de señal") {
-                currentAiText = "";
-                if (state.isPareidolia) startScanningEffect();
-            }
-        }, 3000);
+    
+    clearTimeout(_aiTimeout);
+    
+    // === LIMPIEZA AGRESIVA DE RESPUESTAS ===
+    let text = textResult || '';
+    
+    // 1. Eliminar etiquetas de razonamiento (todos los formatos conocidos)
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    text = text.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '');
+    text = text.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '');
+    text = text.replace(/<\|[^|]*\|>/g, ''); // Qwen special tokens
+    
+    // 2. Eliminar párrafos de razonamiento sin etiqueta (inglés y español)
+    text = text.replace(/(?:the user (?:wants|asks|is asking|needs|requests)[\s\S]*?)(?=\n|$)/gi, '');
+    text = text.replace(/(?:let me (?:analyze|look|examine|think|consider)[\s\S]*?)(?=\n|$)/gi, '');
+    text = text.replace(/(?:i need to[\s\S]*?)(?=\n|$)/gi, '');
+    text = text.replace(/(?:i('| a)?m (?:going to|about to|looking at)[\s\S]*?)(?=\n|$)/gi, '');
+    text = text.replace(/(?:el usuario (?:quiere|pide|necesita|solicita)[\s\S]*?)(?=\n|$)/gi, '');
+    text = text.replace(/(?:déjame (?:analizar|observar|examinar|pensar)[\s\S]*?)(?=\n|$)/gi, '');
+    text = text.replace(/(?:rol|punto de vista|acción|contexto|instrucción)\s*:\s*[\s\S]*?(?=\n|$)/gi, '');
+    
+    // 3. Eliminar etiquetas HTML/XML residuales y markdown
+    text = text.replace(/<[^>]+>/g, '');
+    text = text.replace(/[*_#`\[\](){}]/g, '');
+    text = text.replace(/```[\s\S]*?```/g, '');
+    
+    // 4. Normalizar puntuación
+    text = text.replace(/\.{2,}/g, '.');
+    text = text.replace(/,{2,}/g, ',');
+    text = text.replace(/\n{2,}/g, ' ');
+    text = text.replace(/\n/g, ' ');
+    text = text.replace(/\s{2,}/g, ' ');
+    text = text.trim();
+    
+    // 5. ESTRATEGIA "VEO": buscar la última aparición de "Veo" (el prompt lo exige)
+    const veoIdx = text.lastIndexOf('Veo ');
+    const veoIdxLower = text.lastIndexOf('veo ');
+    const bestVeoIdx = Math.max(veoIdx, veoIdxLower);
+    
+    if (bestVeoIdx > 0) {
+        text = text.substring(bestVeoIdx);
+    } else if (bestVeoIdx === -1) {
+        // No contiene "Veo" → intentar extraer la última oración válida
+        const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 10);
+        text = sentences.length > 0 ? sentences[sentences.length - 1] : text;
     }
+    
+    // 6. DETECCIÓN DE INGLÉS: si la respuesta parece inglés, descartar
+    const englishMarkers = /\b(the|is|are|was|were|this|that|with|from|have|has|can|will|would|could|should|there|here|what|when|where|which|who|how|why|because|about|into|over|after|before|between|through|during|without|within|along|across|behind|beyond|except|inside|outside|above|below|upon|around|among|throughout|against|toward|towards|image|photo|picture|scene|shows|appears|seems|looks|contains|features|displays|depicts|illustrates|represents|captures|reveals)\b/gi;
+    const spanishMarkers = /\b(veo|una|unos|unas|el|la|los|las|es|está|hay|parece|parecen|sombra|figura|forma|luz|oscuridad|pasillo|puerta|ventana|pared|habitación|cuarto|reflejo|contorno|silueta|presencia|algo|nada|aquí|cerca|lejos|fondo|esquina|techo|suelo|piso)\b/gi;
+    
+    const enCount = (text.match(englishMarkers) || []).length;
+    const esCount = (text.match(spanishMarkers) || []).length;
+    
+    if (enCount > esCount && enCount >= 3) {
+        _warn('[IA] Respuesta en inglés detectada, usando fallback');
+        text = "señal interferida";
+    }
+    
+    // 7. Limitar a ~24 palabras
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+    if (words.length > 24) {
+        text = words.slice(0, 24).join(' ') + '.';
+    }
+    
+    // 8. Validación final
+    if (text.length < 3 || /^(error|analizando|usuario|user|sorry|apologize|cannot|unable)/i.test(text)) {
+        text = "señal interferida";
+    }
+    
+    stopScanningEffect();
+    currentAiText = text;
+    currentAiImgEl = pendingAiImgEl;
+    currentAiImage = pendingAiImageSrc;
+    
+    clearTimeout(aiTextTimer);
+    aiTextTimer = setTimeout(() => {
+        if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} }
+        currentAiText = "";
+        currentAiImage = null;
+        currentAiImgEl = null;
+        window._aiImageCache = null;
+        if (state.isPareidolia) startScanningEffect();
+    }, 9000);
+    
+    speakText(text);
+    
+} catch (e) {
     isAIProcessing = false;
+    currentAiText = "error de señal";
+    setTimeout(() => {
+        if (currentAiText === "error de señal") {
+            currentAiText = "";
+            if (state.isPareidolia) startScanningEffect();
+        }
+    }, 3000);
+}
+isAIProcessing = false;
 }
 
     function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
