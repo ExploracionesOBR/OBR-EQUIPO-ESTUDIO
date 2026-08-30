@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '67'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1951,8 +1951,69 @@ function initVoiceRecognition() {
 
 let isTranscribing = false; // 🔒 Bandera para evitar llamadas simultáneas a la API
 
+function isGhostTranscript(rawText, audioBlob) {
+    if (!rawText) return true;
+
+    const original = String(rawText).trim();
+    const txt = normalizarTexto(original)
+        .toLowerCase()
+        .replace(/[.,;:!?¿¡"'“”]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!txt) return true;
+
+    const words = txt.split(/\s+/).filter(Boolean);
+
+    // Frases típicas que Whisper/Gemini inventan con silencio o ruido.
+    const exactGhosts = new Set([
+        'gracias',
+        'muchas gracias',
+        'thank you',
+        'thanks',
+        'vamos',
+        'vamonos',
+        'vámonos',
+        'vale',
+        'ok',
+        'okay',
+        'amen',
+        'amén',
+        'hola',
+        'subtitulos',
+        'subtítulos',
+        'subtitulo',
+        'subtítulo',
+        'musica',
+        'música',
+        'silencio'
+    ]);
+
+    if (exactGhosts.has(txt)) {
+        console.warn('[VOICE REC] Transcripción fantasma descartada:', original, 'size=', audioBlob ? audioBlob.size : 0);
+        return true;
+    }
+
+    // Patrones comunes de subtítulos o ruido.
+    if (/^\[.*\]$/.test(txt)) return true;
+    if (/^\(.*\)$/.test(txt)) return true;
+    if (/^\.{1,}$/.test(txt)) return true;
+    if (/^…+$/.test(txt)) return true;
+
+    // Si es una sola palabra muy corta y el blob también es pequeño, probablemente es ruido.
+    if (words.length === 1 && txt.length <= 3 && audioBlob && audioBlob.size < 18000) {
+        console.warn('[VOICE REC] Fragmento corto descartado:', original, 'size=', audioBlob.size);
+        return true;
+    }
+
+    return false;
+}
+
+
+
 function startVoiceRecognition() {
     if (!voiceRecDestination || voiceRecRecorder) return;
+
     voiceRecChunks = [];
     isTranscribing = false;
 
@@ -1961,108 +2022,111 @@ function startVoiceRecognition() {
             mimeType: voiceRecMimeType
         });
     } catch (e) {
-        _warn('[VOICE REC] Error creando MediaRecorder:', e);
+        console.error('[VOICE REC] Error creando MediaRecorder:', e);
         return;
     }
 
     voiceRecRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data && e.data.size > 0) {
             voiceRecChunks.push(e.data);
         }
     };
 
-    voiceRecRecorder.onstop = async () => {
-        if (voiceRecChunks.length === 0 || !state.isAudioScan) return;
+    voiceRecRecorder.onstop = () => {
+        if (!state.isAudioScan) return;
 
-        const blob = new Blob(voiceRecChunks, { type: voiceRecMimeType });
+        const chunks = voiceRecChunks.slice();
         voiceRecChunks = [];
 
-        // 🔒 Aumentado de 1000 a 3000 bytes: descarta silencios cortos
-        // que Whisper convierte en "gracias"
-        if (blob.size < 3000) {
-            if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
+        // Reiniciar grabación inmediatamente para no perder audio
+        if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
+            try {
                 voiceRecRecorder.start();
+            } catch (e) {
+                console.warn('[VOICE REC] No se pudo reiniciar recorder:', e.message);
             }
+        }
+
+        if (!chunks.length) return;
+
+        const blob = new Blob(chunks, { type: voiceRecMimeType });
+
+        // Filtra audios demasiado pequeños. Estos suelen producir "gracias", "vamos", etc.
+        if (blob.size < 4500) {
+            console.warn('[VOICE REC] Blob muy pequeño descartado:', blob.size);
             return;
         }
 
+        // Evita saturar APIs si una transcripción anterior sigue pendiente.
         if (isTranscribing) {
-            if (state.isAudioScan && voiceRecRecorder.state === 'inactive') {
-                voiceRecRecorder.start();
-            }
+            console.warn('[VOICE REC] Transcripción anterior pendiente, fragmento descartado');
             return;
         }
 
         isTranscribing = true;
 
-        try {
-            const transcript = await transcribeAudioWithFallback(blob, voiceRecMimeType);
+        (async () => {
+            try {
+                const transcript = await transcribeAudioWithFallback(blob, voiceRecMimeType);
 
-            if (transcript && transcript.trim()) {
-                const cleaned = transcript.trim();
+                if (!transcript || !transcript.trim()) return;
 
-                // 🔒 FILTRO ANTI-FANTASMA: Whisper genera estas respuestas
-                // cuando el audio es silencio, ruido o muy corto
-                const ghostPatterns = [
-                    /^gracias[.\s]*$/i,
-                    /^thank(s| you)[.\s]*$/i,
-                    /^subt[íi]tulos?[.\s]*$/i,
-                    /^subtitles?[.\s]*$/i,
-                    /^\[.*\]$/,          // "[música]", "[silencio]", etc.
-                    /^\(.*\)$/,          // "(música)", "(silencio)", etc.
-                    /^…$/,
-                    /^\.+$/,
-                    /^amén[.\s]*$/i,
-                    /^hola[.\s]*$/i
-                ];
+                if (isGhostTranscript(transcript, blob)) return;
 
-                const isGhost = ghostPatterns.some(p => p.test(cleaned));
-
-                if (!isGhost && !isFeedback(cleaned)) {
-                    const txt = normalizarTexto(cleaned);
-
-                    if (txt.length > 2) {
-                        const isMutedForTriggers = isTtsPlaying || isSpookySpeaking ||
-                            window._isAnnouncement ||
-                            Date.now() < (window._ignoreSpeechUntil || 0);
-
-                        if (!isMutedForTriggers) {
-                            window._liveUserText = txt.toUpperCase();
-                            window._liveUserLastUpdate = Date.now();
-                            procesarComandoEVP(txt);
-                        }
-                    }
+                if (isFeedback(transcript)) {
+                    console.warn('[VOICE REC] Feedback descartado:', transcript);
+                    return;
                 }
+
+                const txt = normalizarTexto(transcript);
+
+                if (txt.length <= 2) return;
+
+                const isMutedForTriggers =
+                    isTtsPlaying ||
+                    isSpookySpeaking ||
+                    window._isAnnouncement ||
+                    Date.now() < (window._ignoreSpeechUntil || 0);
+
+                if (isMutedForTriggers) {
+                    console.warn('[VOICE REC] Ignorado porque el sistema está hablando:', txt);
+                    return;
+                }
+
+                window._liveUserText = txt.toUpperCase();
+                window._liveUserLastUpdate = Date.now();
+
+                procesarComandoEVP(txt);
+
+            } catch (e) {
+                console.error('[VOICE REC] Error transcribiendo:', e);
+            } finally {
+                isTranscribing = false;
             }
-        } catch (e) {
-            _warn('[VOICE REC] Error transcribiendo:', e.message);
-        } finally {
-            isTranscribing = false;
-        }
-
-        // 🔒 Pausa de 200ms antes de reiniciar para no cortar
-        // la siguiente palabra inmediatamente
-        if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
-            setTimeout(() => {
-                if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
-                    voiceRecRecorder.start();
-                }
-            }, 200);
-        }
+        })();
     };
 
-    voiceRecRecorder.start();
-    _log('[VOICE REC] Reconocimiento iniciado (intervalo 3s)');
+    try {
+        voiceRecRecorder.start();
+    } catch (e) {
+        console.error('[VOICE REC] No se pudo iniciar MediaRecorder:', e);
+        voiceRecRecorder = null;
+        return;
+    }
 
-    // 🔒 CAMBIADO de 1500ms a 3000ms:
-    // - 1500ms cortaba palabras a mitad ("luis mari")
-    // - 3000ms captura frases más completas
-    // - Reduce llamadas a la API a la mitad → menos cuello de botella
+    console.log('[VOICE REC] Reconocimiento iniciado');
+
+    // 2200ms: más rápido que 3000ms, pero menos agresivo que 1500ms.
+    // 1500ms cortaba palabras como "mari..." en vez de "mario".
     voiceRecInterval = setInterval(() => {
         if (voiceRecRecorder && voiceRecRecorder.state === 'recording') {
-            voiceRecRecorder.stop();
+            try {
+                voiceRecRecorder.stop();
+            } catch (e) {
+                console.warn('[VOICE REC] Error deteniendo recorder:', e.message);
+            }
         }
-    }, 3000);
+    }, 2200);
 }
 
 function stopVoiceRecognition() {
@@ -2103,79 +2167,131 @@ async function transcribeAudioWithFallback(audioBlob, mimeType) {
 }
 
 async function transcribeWithSingleAPI(cfg, audioBlob, mimeType) {
-    // Convertir el blob a base64
-    const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(audioBlob);
-    });
-    
     const ac = new AbortController();
-const t = setTimeout(() => ac.abort(), 5000); // 🔒 5s (antes 8s) → menos retraso
-    
+    const t = setTimeout(() => ac.abort(), 4500);
+
     try {
         if (cfg.provider === 'groq') {
-            // Groq Whisper - Transcripción de audio
+            // Groq Whisper NO necesita base64. Enviar directo como FormData.
             const formData = new FormData();
             formData.append('file', audioBlob, 'audio.webm');
             formData.append('model', 'whisper-large-v3');
             formData.append('language', 'es');
             formData.append('response_format', 'text');
-            
+
+            // Ayuda a reducir alucinaciones en silencio.
+            formData.append('temperature', '0');
+            formData.append('prompt', 'Transcribe únicamente voz humana en español. Si no hay voz clara, devuelve texto vacío.');
+
             const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${cfg.key}` },
+                headers: {
+                    'Authorization': `Bearer ${cfg.key}`
+                },
                 body: formData,
                 signal: ac.signal
             });
-            
+
             clearTimeout(t);
-            
-            if (!resp.ok) return null;
+
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => '');
+                console.error('[VOICE REC] Groq transcripción HTTP', resp.status, errText.substring(0, 300));
+                return null;
+            }
+
             const text = await resp.text();
             return text.trim() || null;
-            
-        } else {
-            // Gemini - Transcripción de audio
-            const geminiMimeType = mimeType.includes('webm') ? 'audio/webm' : 
-                                   mimeType.includes('mp4') ? 'audio/mp4' : 
-                                   mimeType.includes('aac') ? 'audio/aac' : 'audio/webm';
-            
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: "Transcribe el siguiente audio en español. Devuelve SOLO el texto transcrito, sin explicaciones ni comentarios. Si no hay voz o el audio es silencio, devuelve la cadena vacía." },
-                            { inlineData: { mimeType: geminiMimeType, data: base64 } }
-                        ]
-                    }]
-                }),
-                signal: ac.signal
-            });
-            
-            clearTimeout(t);
-            
-            if (!response.ok) return null;
-            const data = await response.json();
-            
-            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-                const text = data.candidates[0].content.parts[0].text;
-                // Limpiar la respuesta de Gemini
-                const cleaned = text.replace(/```[\s\S]*?```/g, '').trim();
-                return cleaned || null;
-            }
-            
+        }
+
+        // Gemini sí necesita base64.
+        const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onloadend = () => {
+                try {
+                    const result = String(reader.result || '');
+                    const b64 = result.includes(',') ? result.split(',')[1] : result;
+                    resolve(b64);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+
+            reader.onerror = reject;
+            reader.readAsDataURL(audioBlob);
+        });
+
+        const geminiMimeType =
+            mimeType && mimeType.includes('webm') ? 'audio/webm' :
+            mimeType && mimeType.includes('mp4') ? 'audio/mp4' :
+            mimeType && mimeType.includes('aac') ? 'audio/aac' :
+            'audio/webm';
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        {
+                            text: `Transcribe el siguiente audio en español.
+
+Reglas:
+- Devuelve SOLO el texto transcrito.
+- No expliques nada.
+- No inventes palabras.
+- Si no hay voz clara, devuelve una cadena vacía.
+- No devuelvas "gracias", "vamos", "ok", "vale" ni texto de subtítulos si no se escucha claramente.`
+                        },
+                        {
+                            inlineData: {
+                                mimeType: geminiMimeType,
+                                data: base64
+                            }
+                        }
+                    ]
+                }],
+                generationConfig: {
+                    temperature: 0,
+                    maxOutputTokens: 80
+                }
+            }),
+            signal: ac.signal
+        });
+
+        clearTimeout(t);
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            console.error('[VOICE REC] Gemini transcripción HTTP', response.status, errText.substring(0, 300));
             return null;
         }
-    } catch(e) { 
-        clearTimeout(t); 
-        throw e; 
+
+        const data = await response.json();
+
+        const text = data &&
+            data.candidates &&
+            data.candidates[0] &&
+            data.candidates[0].content &&
+            data.candidates[0].content.parts
+                ? data.candidates[0].content.parts.map(p => p.text || '').join(' ').trim()
+                : '';
+
+        return text || null;
+
+    } catch (e) {
+        clearTimeout(t);
+
+        if (e && e.name === 'AbortError') {
+            console.warn('[VOICE REC] Timeout transcripción:', cfg.provider);
+        } else {
+            console.error('[VOICE REC] Error transcripción:', cfg.provider, e);
+        }
+
+        return null;
     }
 }
 
@@ -3211,70 +3327,85 @@ micDuckGain.gain.setTargetAtTime(on ? 0.12 : 1.0, t, on ? 0.05 : 0.25);
     document.addEventListener('touchend', unlockAudioContext, { once: true });
 
 // NOTA: ELEVENLABS_API_KEY y VOICERSS_API_KEY ya se declararon al inicio del script con fallback a DEFAULT_
-async function getElevenLabsAudio(text, voiceId) {
-    const baseUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-    // Proxy CORS de respaldo (los navegadores bloquean ElevenLabs por seguridad)
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`;
+async function getElevenLabsAudio(text) {
+    if (!ELEVENLABS_API_KEY) return null;
+    if (!text || !text.trim()) return null;
 
-    const tryFetch = async (url, isProxy = false) => {
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'audio/mpeg',
-                    'Content-Type': 'application/json',
-                    'xi-api-key': ELEVENLABS_API_KEY
-                },
-                body: JSON.stringify({
-                    text: text,
-                    model_id: "eleven_multilingual_v2",
-                    voice_settings: {
-                        stability: 0.35,
-                        similarity_boost: 0.85,
-                        style: 0.75,
-                        use_speaker_boost: true
-                    }
-                })
-            });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                console.error(`[TTS-EL] ${isProxy ? 'PROXY' : 'DIRECTO'} Falló (${response.status}):`, errText);
-                // Si es error 401/429, es falta de créditos o key inválida
-                if (response.status === 401 || response.status === 429) {
-                    showToast('⚠️ ELEVENLABS: SIN CRÉDITOS O KEY INVÁLIDA', true);
-                }
-                return null;
-            }
-
-            const blob = await response.blob();
-            if (blob.size < 500) {
-                console.warn(`[TTS-EL] ${isProxy ? 'PROXY' : 'DIRECTO'} Audio vacío o error`, blob.size);
-                return null;
-            }
-
-            elevenlabsCreditsUsed += text.length;
-            elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
-            localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
-            updateTTSStatusUI();
-
-            return URL.createObjectURL(blob);
-        } catch (e) {
-            console.error(`[TTS-EL] ${isProxy ? 'PROXY' : 'DIRECTO'} Error de red/CORS:`, e.message);
-            return null;
-        }
-    };
-
-    // 1. Intentar directo (más rápido)
-    let audioUrl = await tryFetch(baseUrl, false);
-
-    // 2. Si falla (CORS), intentar con Proxy
-    if (!audioUrl) {
-        console.warn("[TTS-EL] Fallo directo, intentando Proxy CORS...");
-        audioUrl = await tryFetch(proxyUrl, true);
+    // Si ya sabemos que ElevenLabs no puede usarse en esta sesión,
+    // no perder tiempo intentando de nuevo. Pasar directo a VoiceRSS.
+    if (elevenLabsSessionBlocked) {
+        console.warn('[TTS-EL] Omitido por bloqueo de sesión:', elevenLabsSessionBlockReason);
+        return null;
     }
 
-    return audioUrl;
+    const voiceId = ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
+    const baseUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+
+    try {
+        const response = await fetch(baseUrl, {
+            method: 'POST',
+            headers: {
+                'Accept': 'audio/mpeg',
+                'Content-Type': 'application/json',
+                'xi-api-key': ELEVENLABS_API_KEY
+            },
+            body: JSON.stringify({
+                text: text,
+                model_id: 'eleven_multilingual_v2',
+                voice_settings: {
+                    stability: 0.35,
+                    similarity_boost: 0.85,
+                    style: 0.75,
+                    use_speaker_boost: true
+                }
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+
+            console.error(`[TTS-EL] Falló (${response.status}):`, errText);
+
+            // 402 = plan requerido. El proxy NO lo arregla.
+            // 401 = key inválida.
+            // 429 = límite/créditos.
+            // En estos casos bloqueamos ElevenLabs durante la sesión.
+            if (response.status === 402 || response.status === 401 || response.status === 429) {
+                elevenLabsSessionBlocked = true;
+
+                if (response.status === 402) {
+                    elevenLabsSessionBlockReason = 'Plan requerido o voz no disponible en cuenta gratuita';
+                    showToast('⚠️ ELEVENLABS REQUIERE PLAN — USANDO VOICERSS', true);
+                } else if (response.status === 401) {
+                    elevenLabsSessionBlockReason = 'API key inválida';
+                    showToast('⚠️ ELEVENLABS KEY INVÁLIDA — USANDO VOICERSS', true);
+                } else {
+                    elevenLabsSessionBlockReason = 'Límite o créditos agotados';
+                    showToast('⚠️ ELEVENLABS SIN CRÉDITOS — USANDO VOICERSS', true);
+                }
+            }
+
+            return null;
+        }
+
+        const blob = await response.blob();
+
+        if (!blob || blob.size < 500) {
+            console.warn('[TTS-EL] Audio vacío o inválido:', blob ? blob.size : 0);
+            return null;
+        }
+
+        elevenlabsCreditsUsed += text.length;
+        elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
+        localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
+        updateTTSStatusUI();
+
+        return URL.createObjectURL(blob);
+
+    } catch (e) {
+        console.error('[TTS-EL] Error de red:', e.message);
+        return null;
+    }
 }
 
 // 🔒 SIN CONSULTAS A LA API DE ELEVENLABS.
@@ -6736,6 +6867,23 @@ function fillAiSnapshot(destCtx, dw, dh) {
   return true;
 }
 
+
+
+function getSafeGeminiVisionModel() {
+    const model = CURRENT_AI_MODEL || GEMINI_MODEL || '';
+
+    if (model.startsWith('gemini-')) {
+        return model;
+    }
+
+    if (GEMINI_MODEL && GEMINI_MODEL.startsWith('gemini-')) {
+        return GEMINI_MODEL;
+    }
+
+    return 'gemini-1.5-flash';
+}
+
+
     async function triggerPareidolia() {
     const video = el.video;
     if (!AI_API_KEY) return;
@@ -6852,32 +7000,98 @@ REGLAS ABSOLUTAS:
     }
 
 } else if (CURRENT_AI_PROVIDER === 'gemini') {
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
+    const geminiModel = getSafeGeminiVisionModel();
+
+    const geminiPrompt = `Eres un investigador paranormal de Exploraciones OBR que transmite observaciones en vivo desde una cámara corporal.
+
+REGLAS ABSOLUTAS:
+1. Responde ÚNICA Y EXCLUSIVAMENTE en español.
+2. Habla SIEMPRE en primera persona.
+3. Tu respuesta DEBE comenzar exactamente con "Veo".
+4. NO incluyas razonamiento, análisis interno ni explicaciones.
+5. Devuelve UNA sola oración natural.
+6. Devuelve ÚNICAMENTE texto plano.
+7. Usa "parece", "aparenta" o "recuerda a" para formas ambiguas.
+8. Nunca afirmes como hecho que existe una entidad paranormal.
+9. Tono inquietante pero objetivo.
+10. No menciones que eres una IA.
+
+Observa la imagen y responde.`;
+
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${AI_API_KEY}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
             contents: [{
+                role: 'user',
                 parts: [
-                    { text: prompt },
-                    { inlineData: { mimeType: "image/jpeg", data: base64 } }
+                    {
+                        text: geminiPrompt
+                    },
+                    {
+                        inlineData: {
+                            mimeType: 'image/jpeg',
+                            data: base64
+                        }
+                    }
                 ]
-            }]
+            }],
+            generationConfig: {
+                temperature: 0.35,
+                maxOutputTokens: 100,
+                topP: 0.8,
+                topK: 32
+            }
         }),
         signal: ac.signal
     });
+
     clearTimeout(reqTimer);
 
-    if (resp.ok) {
-        const data = await resp.json();
-        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-            success = true;
-            textResult = data.candidates[0].content.parts[0].text;
-        } else { attempts++; await new Promise(r => setTimeout(r, 800)); }
-    } else {
+    if (!resp.ok) {
         const errBody = await resp.text().catch(() => '');
-        _warn('[IA VISION] Gemini HTTP ' + resp.status + ': ' + errBody.substring(0, 200));
+        console.error('[IA VISION] Gemini HTTP ' + resp.status + ':', errBody.substring(0, 1000));
         attempts++;
         await new Promise(r => setTimeout(r, 800));
+        if (typeof _yieldUI === 'function') await _yieldUI();
+    } else {
+        const data = await resp.json();
+
+        if (data.promptFeedback && data.promptFeedback.blockReason) {
+            console.error('[IA VISION] Gemini bloqueó prompt:', data.promptFeedback);
+        }
+
+        const candidate = data.candidates && data.candidates[0] ? data.candidates[0] : null;
+
+        if (candidate && candidate.finishReason) {
+            console.warn('[IA VISION] Gemini finishReason:', candidate.finishReason);
+        }
+
+        let geminiText = '';
+
+        if (
+            candidate &&
+            candidate.content &&
+            candidate.content.parts &&
+            Array.isArray(candidate.content.parts)
+        ) {
+            geminiText = candidate.content.parts
+                .map(p => p.text || '')
+                .join(' ')
+                .trim();
+        }
+
+        if (geminiText) {
+            success = true;
+            textResult = geminiText;
+        } else {
+            console.error('[IA VISION] Gemini respondió sin texto útil:', JSON.stringify(data).substring(0, 1500));
+            attempts++;
+            await new Promise(r => setTimeout(r, 800));
+            if (typeof _yieldUI === 'function') await _yieldUI();
+        }
     }
 
 } else {
