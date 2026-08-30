@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '45'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1967,27 +1967,9 @@ function isGhostTranscript(rawText, audioBlob) {
 
     // Frases típicas que Whisper/Gemini inventan con silencio o ruido.
     const exactGhosts = new Set([
-        'gracias',
-        'muchas gracias',
-        'thank you',
-        'thanks',
-        'vamos',
-        'vamonos',
-        'vámonos',
-        'vale',
-        'ok',
-        'okay',
-        'amen',
-        'amén',
-        'hola',
-        'subtitulos',
-        'subtítulos',
-        'subtitulo',
-        'subtítulo',
-        'musica',
-        'música',
-        'silencio'
-    ]);
+    'gracias', 'muchas gracias', 'thank you', 'thanks', 'vamos', 'vamonos', 'vámonos', 'vale', 'ok', 'okay', 'amen', 'amén', 'hola', 'subtitulos', 'subtítulos', 'subtitulo', 'subtítulo', 'musica', 'música', 'silencio', 
+    'siguiente', 'como te llamas', 'hola como te llamas', 'buenos dias', 'buenas tardes', 'buenas noches', 'esto es una prueba'
+]);
 
     if (exactGhosts.has(txt)) {
         console.warn('[VOICE REC] Transcripción fantasma descartada:', original, 'size=', audioBlob ? audioBlob.size : 0);
@@ -2010,10 +1992,26 @@ function isGhostTranscript(rawText, audioBlob) {
 }
 
 
+// 🔒 CALCULADORA DE RMS (Root Mean Square) PARA DETECTAR SILENCIO
+async function getAudioRMS(audioBlob) {
+    try {
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const channelData = audioBuffer.getChannelData(0);
+        let sum = 0;
+        for (let i = 0; i < channelData.length; i++) {
+            sum += channelData[i] * channelData[i];
+        }
+        return Math.sqrt(sum / channelData.length);
+    } catch (e) {
+        return 1; // Si falla la decodificación, asumimos que hay audio para no bloquear
+    }
+}
+
 
 function startVoiceRecognition() {
     if (!voiceRecDestination || voiceRecRecorder) return;
-    voiceRecChunks = [];
+    isTranscribing = false;
     
     try {
         voiceRecRecorder = new MediaRecorder(voiceRecDestination.stream, {
@@ -2024,34 +2022,44 @@ function startVoiceRecognition() {
         return;
     }
 
-    // 🔒 TIEMPO REAL: ondataavailable se dispara cada 1500ms SIN detener la grabación
     voiceRecRecorder.ondataavailable = async (e) => {
-// 🔒 FILTRO ANTI-ERROR 400 MEJORADO: Groq rechaza chunks corruptos o de silencio inflado. Subido a 45KB para garantizar audio válido.
-if (!e.data || e.data.size < 45000) {
-    console.warn(`[VOICE REC] Chunk descartado (muy pequeño o silencio): ${e.data ? e.data.size : 0} bytes`);
-    return; 
-}
-        
+        // 🔒 FILTRO ANTI-ERROR 400: Groq rechaza chunks webm menores a 25KB
+        if (!e.data || e.data.size < 25000) return;
         const blob = e.data;
+
+        // 🔒 FILTRO DE SILENCIO (RMS): Evita gastar tokens si no hay voz humana
+        const rms = await getAudioRMS(blob);
+        if (rms < 0.015) {
+            // Silencio o ruido de fondo muy bajo, no enviar a la API
+            return;
+        }
+
+        // Evita saturar APIs si una transcripción anterior sigue pendiente
+        if (isTranscribing) {
+            console.warn('[VOICE REC] Transcripción anterior pendiente, fragmento descartado');
+            return;
+        }
+        
+        isTranscribing = true;
         
         try {
-            // 1. Transcribir chunk con fallback en segundo plano (sin bloquear el hilo)
+            // 1. Transcribir chunk con fallback en segundo plano
             const transcript = await transcribeAudioWithFallback(blob, voiceRecMimeType);
             if (!transcript || !transcript.trim()) return;
             if (isGhostTranscript(transcript, blob)) return;
             if (isFeedback(transcript)) return;
-
+            
             const txt = normalizarTexto(transcript);
             if (txt.length <= 2) return;
-
-            // 2. 🔒 SIEMPRE mostrar en pantalla inmediatamente
+            
+            // 🔒 SIEMPRE mostrar en pantalla inmediatamente
             window._liveUserText = transcript.toUpperCase();
             window._liveUserLastUpdate = Date.now();
-
+            
             const isSystemSpeaking = isTtsPlaying || isSpookySpeaking || window._isAnnouncement;
             
             if (isSystemSpeaking) {
-                // Lógica de resta de eco (para no procesar lo que el propio EVP dijo)
+                // Lógica de resta de eco
                 let cleanTxt = txt;
                 if (lastSpokenText) {
                     const normSpoken = normalizarTexto(lastSpokenText);
@@ -2069,36 +2077,78 @@ if (!e.data || e.data.size < 45000) {
                     cleanTxt = transcriptWords.join(' ');
                 }
                 
-                // 3. 🔒 SI el usuario habló durante el EVP, guardar en cola pendiente
                 if (cleanTxt.length > 2 && !isFeedback(cleanTxt)) {
                     window._pendingUserCommand = cleanTxt;
                 }
             } else {
-                // 4. Sistema en silencio, procesar comando normal
                 procesarComandoEVP(txt);
             }
         } catch (e) {
-            console.error('[VOICE REC] Error transcribiendo chunk:', e);
+            console.error('[VOICE REC] Error transcribiendo:', e);
+        } finally {
+            isTranscribing = false;
         }
     };
 
     try {
-        // 🔒 start(timeslice) dispara ondataavailable cada 1500ms SIN detener el micrófono
-        voiceRecRecorder.start(1500);
-        console.log('[VOICE REC] Reconocimiento iniciado (Modo Tiempo Real 1.5s - Sin Error 400)');
+        // 🔒 Usamos timeslice de 3000ms: genera blobs WebM completos y válidos automáticamente
+        // sin necesidad de usar stop()/start() manualmente.
+        voiceRecRecorder.start(3000);
+        console.log('[VOICE REC] Reconocimiento iniciado (Modo 3s timeslice + filtro RMS)');
     } catch (e) {
         console.error('[VOICE REC] No se pudo iniciar MediaRecorder:', e);
         voiceRecRecorder = null;
+        return;
     }
 }
 
 function stopVoiceRecognition() {
+    if (voiceRecInterval) {
+        clearInterval(voiceRecInterval);
+        voiceRecInterval = null;
+    }
     if (voiceRecRecorder && voiceRecRecorder.state !== 'inactive') {
         try { voiceRecRecorder.stop(); } catch(e){}
     }
     voiceRecRecorder = null;
     _log('[VOICE REC] Reconocimiento detenido');
 }
+
+// 🔒 CONVERSIÓN NATIVA A WAV 16kHz: Elimina problemas de códec Opus/WebM de iOS/Android
+async function convertBlobToWav16k(audioBlob) {
+    try {
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        
+        const targetSampleRate = 16000;
+        const numChannels = 1;
+        const length = Math.round(audioBuffer.length * targetSampleRate / audioBuffer.sampleRate);
+        const wavBuffer = new ArrayBuffer(44 + length * 2);
+        const view = new DataView(wavBuffer);
+        
+        const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+        writeStr(0, 'RIFF'); view.setUint32(4, 36 + length * 2, true); writeStr(8, 'WAVE');
+        writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true); view.setUint32(24, targetSampleRate, true);
+        view.setUint32(28, targetSampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+        writeStr(36, 'data'); view.setUint32(40, length * 2, true);
+        
+        const channelData = audioBuffer.getChannelData(0);
+        const step = audioBuffer.sampleRate / targetSampleRate;
+        let offset = 44;
+        for (let i = 0; i < length; i++) {
+            let s = channelData[Math.floor(i * step)];
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            offset += 2;
+        }
+        return new Blob([wavBuffer], { type: 'audio/wav' });
+    } catch (e) {
+        console.error('[AUDIO] Fallback: Error convirtiendo a WAV, enviando original.', e);
+        return audioBlob;
+    }
+}
+
+
 
 async function transcribeAudioWithFallback(audioBlob, mimeType) {
     // 🔒 PRIORIDAD: Groq Whisper es el mejor para audio. Si falla (429), usa Gemini.
@@ -2126,44 +2176,37 @@ async function transcribeWithSingleAPI(cfg, audioBlob, mimeType) {
 
     try {
         if (cfg.provider === 'groq') {
-    // Groq Whisper NO necesita base64. Enviar directo como FormData.
+    // 🔒 CONVERSIÓN A WAV 16kHz: Garantiza que Whisper lea el audio sin importar el navegador
+    const wavBlob = await convertBlobToWav16k(audioBlob);
+    
     const formData = new FormData();
-    
-    // 🔒 CORRECCIÓN ERROR 400: Usar la extensión correcta según el mimeType real del blob
-    let ext = 'webm';
-    if (mimeType && mimeType.includes('mp4')) ext = 'mp4';
-    else if (mimeType && mimeType.includes('ogg')) ext = 'ogg';
-    else if (mimeType && mimeType.includes('aac')) ext = 'aac';
-    
-    formData.append('file', audioBlob, `audio.${ext}`);
+    formData.append('file', wavBlob, 'audio.wav'); // 🔒 Forzar .wav
     formData.append('model', 'whisper-large-v3');
     formData.append('language', 'es');
     formData.append('response_format', 'text');
     formData.append('temperature', '0');
-    formData.append('prompt', 'Transcribe únicamente voz humana en español. Si no hay voz clara, devuelve texto vacío.');
+    formData.append('prompt', 'Transcribe SOLO si hay voz humana clara en español. Si es silencio, ruido de fondo o no hay voz, devuelve EXACTAMENTE una cadena vacía. No inventes palabras ni frases como "siguiente".');
     
-    console.log(`[VOICE REC] 📤 Enviando a Groq: tipo=${mimeType}, extensión=.${ext}, tamaño=${audioBlob.size} bytes`);
+    console.log(`[VOICE REC] 📤 Enviando a Groq: WAV 16kHz, tamaño=${wavBlob.size} bytes (Original: ${audioBlob.size})`);
     
     const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${cfg.key}`
-                },
-                body: formData,
-                signal: ac.signal
-            });
-
-            clearTimeout(t);
-
-            if (!resp.ok) {
-                const errText = await resp.text().catch(() => '');
-                console.error('[VOICE REC] Groq transcripción HTTP', resp.status, errText.substring(0, 300));
-                return null;
-            }
-
-            const text = await resp.text();
-            return text.trim() || null;
-        }
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${cfg.key}` },
+        body: formData,
+        signal: ac.signal
+    });
+    clearTimeout(t);
+    
+    // 🔒 LOG CRÍTICO: Ver exactamente qué responde Groq
+    const rawText = await resp.text();
+    console.log(`[VOICE REC] 🟢 Groq RAW Response: "${rawText.substring(0, 150)}"`);
+    
+    if (!resp.ok) {
+        console.error('[VOICE REC] Groq transcripción HTTP', resp.status, rawText.substring(0, 300));
+        return null;
+    }
+    return rawText.trim() || null;
+}
 
         // Gemini sí necesita base64.
         const base64 = await new Promise((resolve, reject) => {
