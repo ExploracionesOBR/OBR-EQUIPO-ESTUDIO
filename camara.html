@@ -1108,7 +1108,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.2</p>
+    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.1</p>
     
     <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
     <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">LISTO PARA INICIAR</div>
@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '51'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1953,10 +1953,9 @@ let isTranscribing = false; // 🔒 Bandera para evitar llamadas simultáneas a 
 
 function startVoiceRecognition() {
     if (!voiceRecDestination || voiceRecRecorder) return;
-    
     voiceRecChunks = [];
-    isTranscribing = false; // Resetear bandera al iniciar
-    
+    isTranscribing = false;
+
     try {
         voiceRecRecorder = new MediaRecorder(voiceRecDestination.stream, {
             mimeType: voiceRecMimeType
@@ -1965,72 +1964,105 @@ function startVoiceRecognition() {
         _warn('[VOICE REC] Error creando MediaRecorder:', e);
         return;
     }
-    
+
     voiceRecRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
             voiceRecChunks.push(e.data);
         }
     };
-    
+
     voiceRecRecorder.onstop = async () => {
         if (voiceRecChunks.length === 0 || !state.isAudioScan) return;
-        
+
         const blob = new Blob(voiceRecChunks, { type: voiceRecMimeType });
         voiceRecChunks = [];
-        
-        if (blob.size < 1000) {
+
+        // 🔒 Aumentado de 1000 a 3000 bytes: descarta silencios cortos
+        // que Whisper convierte en "gracias"
+        if (blob.size < 3000) {
             if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
                 voiceRecRecorder.start();
             }
             return;
         }
-        
-        // 🔒 Si ya estamos esperando una respuesta de la API, no saturar con otra llamada
+
         if (isTranscribing) {
             if (state.isAudioScan && voiceRecRecorder.state === 'inactive') {
                 voiceRecRecorder.start();
             }
             return;
         }
-        
+
         isTranscribing = true;
-        
+
         try {
             const transcript = await transcribeAudioWithFallback(blob, voiceRecMimeType);
+
             if (transcript && transcript.trim()) {
-                if (!isFeedback(transcript)) {
-                    const txt = normalizarTexto(transcript);
+                const cleaned = transcript.trim();
+
+                // 🔒 FILTRO ANTI-FANTASMA: Whisper genera estas respuestas
+                // cuando el audio es silencio, ruido o muy corto
+                const ghostPatterns = [
+                    /^gracias[.\s]*$/i,
+                    /^thank(s| you)[.\s]*$/i,
+                    /^subt[íi]tulos?[.\s]*$/i,
+                    /^subtitles?[.\s]*$/i,
+                    /^\[.*\]$/,          // "[música]", "[silencio]", etc.
+                    /^\(.*\)$/,          // "(música)", "(silencio)", etc.
+                    /^…$/,
+                    /^\.+$/,
+                    /^amén[.\s]*$/i,
+                    /^hola[.\s]*$/i
+                ];
+
+                const isGhost = ghostPatterns.some(p => p.test(cleaned));
+
+                if (!isGhost && !isFeedback(cleaned)) {
+                    const txt = normalizarTexto(cleaned);
+
                     if (txt.length > 2) {
-                        window._liveUserText = txt.toUpperCase();
-                        window._liveUserLastUpdate = Date.now();
-                        
-                        const isMutedForTriggers = Date.now() < (window._ignoreSpeechUntil || 0);
+                        const isMutedForTriggers = isTtsPlaying || isSpookySpeaking ||
+                            window._isAnnouncement ||
+                            Date.now() < (window._ignoreSpeechUntil || 0);
+
                         if (!isMutedForTriggers) {
+                            window._liveUserText = txt.toUpperCase();
+                            window._liveUserLastUpdate = Date.now();
                             procesarComandoEVP(txt);
                         }
                     }
                 }
             }
         } catch (e) {
-            _warn('[VOICE REC] Error transcribiendo:', e);
+            _warn('[VOICE REC] Error transcribiendo:', e.message);
         } finally {
-            isTranscribing = false; // 🔒 Liberar la bandera
+            isTranscribing = false;
         }
-        
+
+        // 🔒 Pausa de 200ms antes de reiniciar para no cortar
+        // la siguiente palabra inmediatamente
         if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
-            voiceRecRecorder.start();
+            setTimeout(() => {
+                if (state.isAudioScan && voiceRecRecorder && voiceRecRecorder.state === 'inactive') {
+                    voiceRecRecorder.start();
+                }
+            }, 200);
         }
     };
-    
+
     voiceRecRecorder.start();
-    _log('[VOICE REC] Reconocimiento iniciado');
-    
-    // 🔒 Reducido a 1500ms para que se sienta más rápido y responsivo
+    _log('[VOICE REC] Reconocimiento iniciado (intervalo 3s)');
+
+    // 🔒 CAMBIADO de 1500ms a 3000ms:
+    // - 1500ms cortaba palabras a mitad ("luis mari")
+    // - 3000ms captura frases más completas
+    // - Reduce llamadas a la API a la mitad → menos cuello de botella
     voiceRecInterval = setInterval(() => {
         if (voiceRecRecorder && voiceRecRecorder.state === 'recording') {
             voiceRecRecorder.stop();
         }
-    }, 1500);
+    }, 3000);
 }
 
 function stopVoiceRecognition() {
@@ -2083,7 +2115,7 @@ async function transcribeWithSingleAPI(cfg, audioBlob, mimeType) {
     });
     
     const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 8000);
+const t = setTimeout(() => ac.abort(), 5000); // 🔒 5s (antes 8s) → menos retraso
     
     try {
         if (cfg.provider === 'groq') {
@@ -3245,36 +3277,14 @@ async function getElevenLabsAudio(text, voiceId) {
     return audioUrl;
 }
 
-async function fetchElevenLabsCredits() {
-    if (!ELEVENLABS_API_KEY) return;
-    
-    const baseUrl = 'https://api.elevenlabs.io/v1/user/subscription';
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`;
-
-    const tryFetch = async (url) => {
-        try {
-            const resp = await fetch(url, {
-                headers: { 'xi-api-key': ELEVENLABS_API_KEY }
-            });
-            if (resp.ok) return await resp.json();
-        } catch (e) {
-            console.warn("[TTS-EL] Error consultando créditos (CORS/Red):", e.message);
-        }
-        return null;
-    };
-
-    // Intentar directo, luego proxy
-    let data = await tryFetch(baseUrl);
-    if (!data) data = await tryFetch(proxyUrl);
-
-    if (data && data.character_count !== undefined && data.character_limit !== undefined) {
-        elevenlabsCreditsUsed = data.character_count;
-        elevenlabsCreditsTotal = data.character_limit;
-        elevenlabsCreditsRemaining = elevenlabsCreditsTotal - elevenlabsCreditsUsed;
-        localStorage.setItem('obr_tts_used', elevenlabsCreditsUsed);
-        updateTTSStatusUI();
-        console.log(`[TTS] ElevenLabs: ${elevenlabsCreditsRemaining}/${elevenlabsCreditsTotal} créditos disponibles`);
-    }
+// 🔒 SIN CONSULTAS A LA API DE ELEVENLABS.
+// El crédito se rastrea localmente (text.length por uso).
+// Si ElevenLabs falla en getElevenLabsAudio(), el fallback a VoiceRSS es automático.
+function fetchElevenLabsCredits() {
+    // Solo recalcula desde localStorage, NUNCA llama a la API
+    elevenlabsCreditsUsed = parseInt(localStorage.getItem('obr_tts_used') || '0');
+    elevenlabsCreditsRemaining = Math.max(0, elevenlabsCreditsTotal - elevenlabsCreditsUsed);
+    updateTTSStatusUI();
 }
 
     function showTtsWarning() {
@@ -3841,11 +3851,10 @@ function generateUIHideGrid() {
 // === FIN DE FUNCIONES UI ===
 
 window.onload = () => {
-    // 1. Consultar créditos reales de ElevenLabs al iniciar (protegido)
-    if (ELEVENLABS_API_KEY) {
-        fetchElevenLabsCredits();
-    }
-    
+        // 1. 🔒 Cargar créditos locales de ElevenLabs (SIN llamada a API)
+    fetchElevenLabsCredits();
+
+
     // 2. Cargar claves en los campos del modal (SOLO si existen)
     const geminiInput = document.getElementById('gemini-key-input');
     if (geminiInput) geminiInput.value = GEMINI_API_KEY;
@@ -4715,11 +4724,19 @@ applyGoogleTTSFilters(false);
         
         // ✅ AQUÍ YA NO SE BORRA EL TEXTO DEL USUARIO. Se eliminaron las líneas que lo vaciaban.
         
-setTimeout(() => {
-    let respText;
-    // ... código de respuesta
-    speakSpooky(respText);
-}, 1500 + Math.random() * 1000);  // ← Cambiar a 300-500ms
+        setTimeout(() => {
+            // 🔒 Generar respuesta: contexto IA > respuesta contextual > EVP aleatorio
+            let respText = contextResponse;
+            if (!respText) {
+                respText = obtenerRespuestaContextual(txt);
+            }
+            if (!respText) {
+                respText = obtenerEVP();
+            }
+            if (respText) {
+                speakSpooky(respText);
+            }
+        }, 300 + Math.random() * 400);
     }
 }
 
@@ -4814,8 +4831,13 @@ async function toggleAudioScanner() {
     // 7. Asegurar que el AudioContext esté corriendo
     await _ensureContextRunning();
     
-    // 8. Configurar routing de audio (esto inicia webkitSpeechRecognition automáticamente)
-    updateAudioRouting();
+                // 8. Configurar routing de audio
+            updateAudioRouting();
+
+            // 8.5. 🔒 INICIAR TRANSCRIPCIÓN DE VOZ EN TIEMPO REAL
+            //      initVoiceRecognition() ya creó el destino en initAudioEngine(),
+            //      aquí arrancamos el bucle MediaRecorder → API → texto en pantalla.
+            startVoiceRecognition();
     
     // 9. Esperar un momento para que el reconocimiento de voz se inicialice
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -4840,58 +4862,6 @@ async function toggleAudioScanner() {
         scheduleBackgroundAIContext(true);
     }, 150);
 }
-
-function executeAudioScanDeactivation(btnMenu) {
-    state.isAudioScan = false;
-    if (btnMenu) btnMenu.classList.remove('active-state');
-    document.body.classList.remove('audio-scan-active');
-    
-    // Detener reconocimiento de voz
-    stopLocalSpeech();
-    
-    // Detener audio
-    stopSweepAudio();
-    setMicDuck(false);
-    
-    // Limpiar timers
-    clearTimeout(_ttsWatchdog);
-    clearTimeout(backgroundAITimer);
-    clearTimeout(speechTimer);
-    
-    // Limpiar estado
-    window._aiContext = { nombre: null, fecha_muerte: null, entorno: null, objetos: null };
-    window._liveUserText = '';
-    window._liveUserLastUpdate = 0;
-    lastSpokenText = '';
-    lastEvpTime = Date.now() + 99999;
-    simulatedPikes.fill(0);
-    cumulativeEVPEnergy = 0;
-    ambientNoiseLevel = 0.01;
-    evpContextMemory = [];
-    
-    // Detener TTS
-    if (cloudTTSPlayer) { 
-        cloudTTSPlayer.pause(); 
-        cloudTTSPlayer.src = ''; 
-    }
-    if (_activeBufSrc) { 
-        try { _activeBufSrc.stop(); } catch(e){} 
-        _activeBufSrc = null; 
-    }
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    
-    isTtsPlaying = false;
-    isSpookySpeaking = false;
-    
-    // Anuncio de desactivación
-    window._isAnnouncement = true;
-    speakAnnouncement('ESPIRIT BOX DESACTIVADO', true).then(() => {
-        window._isAnnouncement = false;
-    }).catch(() => {
-        window._isAnnouncement = false;
-    });
-}
-
 
 function executeAudioScanDeactivation(btnMenu) {
     state.isAudioScan = false;
@@ -6829,12 +6799,12 @@ const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
         }, 20000);
         
         while (attempts < 3 && !success) {
-            try {
-                const ac = new AbortController();
-                const reqTimer = setTimeout(() => ac.abort(), 8000);
-                
+try {
+const ac = new AbortController();
+const reqTimer = setTimeout(() => ac.abort(), 8000); // 🔒 8s por intento (antes 10s)
+
 if (CURRENT_AI_PROVIDER === 'groq') {
-    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -6842,109 +6812,155 @@ if (CURRENT_AI_PROVIDER === 'groq') {
             messages: [
                 {
                     role: "system",
-                    content: "REGLA ABSOLUTA: Responde SIEMPRE en español. Nunca uses inglés bajo ninguna circunstancia. Habla en primera persona. Comienza con 'Veo'. Máximo 25 palabras. Solo texto plano."
+                    content: `Eres un investigador paranormal de Exploraciones OBR.
+REGLAS ABSOLUTAS:
+1. Responde ÚNICA Y EXCLUSIVAMENTE en español.
+2. Habla SIEMPRE en primera persona.
+3. Tu respuesta DEBE comenzar exactamente con "Veo".
+4. NO incluyas razonamiento ni análisis interno.
+5. Devuelve UNA sola oración de entre 22 y 24 palabras.
+6. Devuelve ÚNICAMENTE texto plano.
+7. Usa "parece", "aparenta", "recuerda a" para formas ambiguas.
+8. Tono inquietante pero objetivo.`
                 },
                 {
                     role: "user",
                     content: [
-                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } },
-                        { type: "text", text: prompt }
+                        { type: "text", text: prompt },
+                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
                     ]
                 }
             ],
-            max_tokens: 50,
-            temperature: 0.9
+            max_tokens: 100,
+            temperature: 0.4
         }),
         signal: ac.signal
     });
-                    clearTimeout(reqTimer);
-                    const data = await resp.json();
-                    if (resp.ok && data.choices && data.choices[0].message) {
-                        success = true;
-                        textResult = data.choices[0].message.content;
-                    } else {
-                        if (data.error && data.error.code === 'model_decommissioned') {
-                            textResult = "MODELO GROQ OBSOLETO";
-                            success = true;
-                            break;
-                        }
-                        attempts++;
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                } else {
-                    // GEMINI
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            contents: [{
-                                parts: [
-                                    { text: prompt },
-                                    { inlineData: { mimeType: "image/jpeg", data: base64 } }
-                                ]
-                            }]
-                        }),
-                        signal: ac.signal
-                    });
-                    clearTimeout(reqTimer);
-                    const data = await resp.json();
-                    if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-                        success = true;
-                        textResult = data.candidates[0].content.parts[0].text;
-                    } else {
-                        attempts++;
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                }
-            } catch (err) {
-                attempts++;
-                await new Promise(r => setTimeout(r, 1000));
-            }
-        }
+    clearTimeout(reqTimer);
+
+    if (resp.ok) {
+        const data = await resp.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            success = true;
+            textResult = data.choices[0].message.content;
+        } else { attempts++; await new Promise(r => setTimeout(r, 800)); }
+    } else {
+        const errBody = await resp.text().catch(() => '');
+        _warn('[IA VISION] Groq HTTP ' + resp.status + ': ' + errBody.substring(0, 200));
+        attempts++;
+        await new Promise(r => setTimeout(r, 800));
+    }
+
+} else if (CURRENT_AI_PROVIDER === 'gemini') {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{
+                parts: [
+                    { text: prompt },
+                    { inlineData: { mimeType: "image/jpeg", data: base64 } }
+                ]
+            }]
+        }),
+        signal: ac.signal
+    });
+    clearTimeout(reqTimer);
+
+    if (resp.ok) {
+        const data = await resp.json();
+        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+            success = true;
+            textResult = data.candidates[0].content.parts[0].text;
+        } else { attempts++; await new Promise(r => setTimeout(r, 800)); }
+    } else {
+        const errBody = await resp.text().catch(() => '');
+        _warn('[IA VISION] Gemini HTTP ' + resp.status + ': ' + errBody.substring(0, 200));
+        attempts++;
+        await new Promise(r => setTimeout(r, 800));
+    }
+
+} else {
+    _warn('[IA VISION] Provider no configurado: ' + CURRENT_AI_PROVIDER);
+    break;
+}
+
+} catch (err) {
+    clearTimeout(reqTimer);
+    _warn('[IA VISION] Error intento ' + (attempts + 1) + ':', err.message);
+    attempts++;
+    await new Promise(r => setTimeout(r, 800));
+}
+}
         
         clearTimeout(_aiTimeout);
 
 // === LIMPIEZA AGRESIVA DE RESPUESTAS ===
-let text = textResult;
+                // === LIMPIEZA AGRESIVA DE RESPUESTAS v2 ===
+                let text = textResult || '';
 
-// 1. Eliminar etiquetas <think> y todo su contenido
-text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                // 1. Eliminar etiquetas de razonamiento (todos los formatos conocidos)
+                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+                text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+                text = text.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '');
+                text = text.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '');
+                text = text.replace(/<\|[^|]*\|>/g, ''); // Qwen special tokens
 
-// 2. Eliminar cualquier cosa que parezca proceso de pensamiento o metadatos
-text = text.replace(/el usuario quiere que[\s\S]*?(?=\n|$)/gi, '').trim();
-text = text.replace(/the user wants[\s\S]*?(?=\n|$)/gi, '').trim();
-text = text.replace(/rol:[\s\S]*?(?=\n|$)/gi, '').trim();
-text = text.replace(/punto de vista:[\s\S]*?(?=\n|$)/gi, '').trim();
-text = text.replace(/acción:[\s\S]*?(?=\n|$)/gi, '').trim();
-text = text.replace(/<[^>]+>/g, '').trim();
+                // 2. Eliminar párrafos de razonamiento sin etiqueta (inglés y español)
+                text = text.replace(/(?:the user (?:wants|asks|is asking|needs|requests)[\s\S]*?)(?=\n\n|$)/gi, '');
+                text = text.replace(/(?:let me (?:analyze|look|examine|think|consider)[\s\S]*?)(?=\n\n|$)/gi, '');
+                text = text.replace(/(?:i need to[\s\S]*?)(?=\n\n|$)/gi, '');
+                text = text.replace(/(?:i('| a)?m (?:going to|about to|looking at)[\s\S]*?)(?=\n\n|$)/gi, '');
+                text = text.replace(/(?:el usuario (?:quiere|pide|necesita|solicita)[\s\S]*?)(?=\n\n|$)/gi, '');
+                text = text.replace(/(?:déjame (?:analizar|observar|examinar|pensar)[\s\S]*?)(?=\n\n|$)/gi, '');
+                text = text.replace(/(?:rol|punto de vista|acción|contexto|instrucción)\s*:\s*[\s\S]*?(?=\n|$)/gi, '');
 
-// 3. Eliminar caracteres de markdown
-text = text.replace(/[*_#`]/g, '').trim();
+                // 3. Eliminar etiquetas HTML/XML residuales y markdown
+                text = text.replace(/<[^>]+>/g, '');
+                text = text.replace(/[*_#`\[\](){}]/g, '');
+                text = text.replace(/```[\s\S]*?```/g, '');
 
-// 4. 🔒 CRÍTICO: Eliminar puntos suspensivos excesivos (causan pausas en TTS)
-text = text.replace(/\.{3,}/g, '.').trim(); // "..." → "."
-text = text.replace(/\.{2,}/g, '.').trim(); // ".." → "."
+                // 4. Normalizar puntuación
+                text = text.replace(/\.{2,}/g, '.');
+                text = text.replace(/,{2,}/g, ',');
+                text = text.replace(/\n{2,}/g, ' ');
+                text = text.replace(/\n/g, ' ');
+                text = text.replace(/\s{2,}/g, ' ');
+                text = text.trim();
 
-// 5. Eliminar comas duplicadas (también causan pausas)
-text = text.replace(/,{2,}/g, ',').trim();
+                // 5. ESTRATEGIA "VEO": buscar la última aparición de "Veo" (el prompt lo exige)
+                //    Si el modelo emitió razonamiento antes, lo descartamos todo.
+                const veoIdx = text.lastIndexOf('Veo ');
+                const veoIdxLower = text.lastIndexOf('veo ');
+                const bestVeoIdx = Math.max(veoIdx, veoIdxLower);
+                if (bestVeoIdx > 0) {
+                    text = text.substring(bestVeoIdx);
+                } else if (bestVeoIdx === -1) {
+                    // No contiene "Veo" → intentar extraer la última oración válida
+                    const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 10);
+                    text = sentences.length > 0 ? sentences[sentences.length - 1] : text;
+                }
 
-// 6. Eliminar saltos de línea múltiples
-text = text.replace(/\n{2,}/g, ' ').trim();
+                // 6. DETECCIÓN DE INGLÉS: si la respuesta parece inglés, descartar
+                const englishMarkers = /\b(the|is|are|was|were|this|that|with|from|have|has|can|will|would|could|should|there|here|what|when|where|which|who|how|why|because|about|into|over|after|before|between|through|during|without|within|along|across|behind|beyond|except|inside|outside|above|below|upon|around|among|throughout|against|toward|towards|image|photo|picture|scene|shows|appears|seems|looks|contains|features|displays|depicts|illustrates|represents|captures|reveals)\b/gi;
+                const spanishMarkers = /\b(veo|una|unos|unas|el|la|los|las|es|está|hay|parece|parecen|sombra|figura|forma|luz|oscuridad|pasillo|puerta|ventana|pared|habitación|cuarto|reflejo|contorno|silueta|presencia|algo|nada|aquí|cerca|lejos|fondo|esquina|techo|suelo|piso)\b/gi;
+                const enCount = (text.match(englishMarkers) || []).length;
+                const esCount = (text.match(spanishMarkers) || []).length;
+                if (enCount > esCount && enCount >= 3) {
+                    _warn('[IA] Respuesta en inglés detectada, usando fallback');
+                    text = "señal interferida";
+                }
 
-// 7. Extraer SOLO la primera línea válida
-const lines = text.split('\n').filter(line => line.trim().length > 2);
-text = lines[0] || text;
+                // 7. Limitar a ~24 palabras
+                const words = text.split(/\s+/).filter(w => w.length > 0);
+                if (words.length > 24) {
+                    text = words.slice(0, 24).join(' ') + '.';
+                }
 
-// 8. Limitar a ~20 palabras
-const words = text.split(/\s+/);
-if (words.length > 20) {
-    text = words.slice(0, 20).join(' ') + ".";
-}
-
-// 9. Validación final
-if (text.length < 3 || text.toLowerCase().includes('error') || text.toLowerCase().includes('analizando') || text.toLowerCase().includes('usuario') || text.toLowerCase().includes('user')) {
-    text = "señal interferida";
-}
+                // 8. Validación final
+                if (text.length < 3 || /^(error|analizando|usuario|user|sorry|apologize|cannot|unable)/i.test(text)) {
+                    text = "señal interferida";
+                }
 
 stopScanningEffect();
 
@@ -7427,17 +7443,15 @@ async function validateGroqKey() {
         const data = await respModels.json();
         const availableIds = data.data.map(m => m.id);
 
-        // 2. ESTRATEGIA A: Lista blanca priorizada (Incluye nuevos Qwen y Llama)
         // Usamos .find() con .includes() para que funcione aunque Groq agregue prefijos como "groq/"
-        const PREFERRED_VISION_MODELS = [
-            'qwen-2.5-vl-72b', // Nuevo modelo de visión Qwen en Groq
-            'qwen2.5-vl',
-            'qwen3.6-27b',     // Variante específica que mencionaste
-            'llama-3.2-90b-vision-preview', 
-            'llama-3.2-11b-vision-preview', 
-            'llama-3.2-90b-vision',
-            'llama-3.2-11b-vision'
-        ];
+                  const PREFERRED_VISION_MODELS = [
+                'llama-3.2-90b-vision-preview',
+                'llama-3.2-11b-vision-preview',
+                'llama-3.2-90b-vision',
+                'llama-3.2-11b-vision',
+                'qwen-2.5-vl-72b',
+                'qwen2.5-vl'
+            ];
         
         let candidateModels = [];
         for (const preferred of PREFERRED_VISION_MODELS) {
@@ -7624,10 +7638,13 @@ method: 'POST',
 headers: { 'Authorization': `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
 body: JSON.stringify({
 model: cfg.model,
-messages: [{ role: "user", content: promptBase64 ?
+messages: [
+{ role: "system", content: "Responde ÚNICAMENTE en español. Sin razonamiento, sin explicaciones, sin etiquetas. Solo texto plano." },
+{ role: "user", content: promptBase64 ?
 [{ type: "text", text: promptText }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${promptBase64}` } }] :
 promptText
-}],
+}
+],
 max_tokens: maxTokens, temperature: temperature
 }), signal: ac.signal
 });
@@ -7847,31 +7864,27 @@ function updateSettingsIndicator() {
 async function refreshTTSCredits() {
     showToast('🔄 Reiniciando contadores de créditos...', false);
     try {
-        // 🔒 1) REINICIO LOCAL: valores limpios
+        // 🔒 REINICIO LOCAL: valores limpios, SIN consultas a API
         elevenlabsCreditsTotal = 10000;
         elevenlabsCreditsUsed = 0;
         elevenlabsCreditsRemaining = 10000;
         voicerssRemaining = 350;
         voicerssUsed = 0;
 
-        // 2) Limpiar la caché persistida (para que al recargar siga limpio)
+        // Limpiar la caché persistida
         localStorage.setItem('obr_tts_used', '0');
         localStorage.setItem('obr_vrss_remaining', '350');
         localStorage.setItem('obr_vrss_used', '0');
         localStorage.setItem('obr_vrss_last_reset', new Date().toDateString());
 
-        // 3) El panel se actualiza YA: 0 usados · 10000/10000 · 350/350
-        updateTTSStatusUI();
-
-        // 4) Intentar consultar datos reales de ElevenLabs (si la clave es válida, sobrescribe)
-        await fetchElevenLabsCredits();
+        // Actualizar panel
         updateTTSStatusUI();
 
         showToast(`✅ CRÉDITOS: EL ${elevenlabsCreditsRemaining}/${elevenlabsCreditsTotal} · VRSS ${voicerssRemaining}/350`, false);
     } catch (err) {
         _warn('[TTS] Error al refrescar créditos:', err);
-        updateTTSStatusUI(); // muestra los valores reiniciados aunque la API falle
-        showToast('✅ CONTADORES REINICIADOS (API sin respuesta)', false);
+        updateTTSStatusUI();
+        showToast('✅ CONTADORES REINICIADOS', false);
     }
 }
 
