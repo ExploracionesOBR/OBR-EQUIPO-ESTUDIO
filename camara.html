@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <title>CAMARA OBR PRO v7.7</title>
+    <title>CAMARA OBR PRO v10</title>
     
 <!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
 <link rel="icon" type="image/png" href="obr-logo.png?v=1">
@@ -1108,7 +1108,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.55</p>
+    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.10</p>
     
     <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
     <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">LISTO PARA INICIAR</div>
@@ -1360,7 +1360,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '55'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '10'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -4221,7 +4221,8 @@ let mapMirrorCanvas = null;
 let mapMirrorCtx = null;
 let lastMapCapture = 0;
 let mapMirrorGood = false; // 🔒 nunca se publica un espejo negro
-const MAP_CAPTURE_INTERVAL = _deviceCores <= 4 ? 3000 : 2000;  // 🔒 Menos frecuente en gama baja
+// 🔒 Más lento en gama baja para liberar CPU
+const MAP_CAPTURE_INTERVAL = _deviceCores <= 4 ? 5000 : 2000; 
 
 function initMapMirror() {
     mapMirrorCanvas = document.getElementById('map-mirror-canvas');
@@ -5509,8 +5510,8 @@ c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
 c.restore(); c.filter = 'none'; c.globalAlpha = 1;
 }
 
-// ── 1) Buffers optimizados para 4GB RAM (25% menos memoria) ──
-const BH = 48;  
+// ── 1) Buffers optimizados: 25% menos memoria en gama baja ──
+const BH = _deviceCores <= 4 ? 48 : 64;  
 const BW = Math.max(24, Math.min(84, Math.round(BH * width / height)));
     if (lfxMaskC.width !== BW || lfxMaskC.height !== BH) {
         [lfxMaskC, lfxReliefC, lfxTintC, lfxRimC].forEach(cv => { cv.width = BW; cv.height = BH; });
@@ -5565,7 +5566,7 @@ const BW = Math.max(24, Math.min(84, Math.round(BH * width / height)));
     // ── 4) Análisis de la máscara con FILTRO DE BRILLO ──
 if (maskToUse) {
     const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
-    const vd = lfxReliefX.getImageData(0, 0, BW, BH).data; // Video data para detectar brillo
+    const vd = lfxReliefX.getImageData(0, 0, BW, BH).data; // 🔒 ESTA LÍNEA ES OBLIGATORIA
     let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
     const totalPixels = BW * BH;
     
@@ -5575,8 +5576,8 @@ if (maskToUse) {
         
         // 🔒 FILTRO DE BRILLO: Ignorar píxeles muy brillantes (luces, flashes)
         const brightness = (vd[idx] * 0.299 + vd[idx+1] * 0.587 + vd[idx+2] * 0.114);
-        const isTooBright = brightness > 220; // Umbral alto para luces
-        const isFlash = alpha > 200 && brightness > 180; // Detección de flash
+        const isTooBright = brightness > 220; 
+        const isFlash = alpha > 200 && brightness > 180; 
         
         if (alpha > 110 && !isTooBright && !isFlash) {
             acc++;
@@ -5600,9 +5601,9 @@ LFX.topY += (topY/BH - LFX.topY) * 0.2;
 LFX.personH += ((botY-topY)/BH - LFX.personH) * 0.2;
 LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX) * 0.2;
 LFX.footY += (botY/BH - LFX.footY) * 0.2;
-            LFX.footY += (botY/BH - LFX.footY)*0.3;
-            LFX.hasFeet = footN >= 8 && botY < BH - 3;
-        } else { LFX.coverage += (coverage - LFX.coverage)*0.3; LFX.hasFeet = false; }
+            LFX.footY += (botY/BH - LFX.footY)*0.2;
+            LFX.hasFeet = footN >= 8 && botY < BH - 2;
+        } else { LFX.coverage += (coverage - LFX.coverage)*0.2; LFX.hasFeet = false; }
         LFX.hasPerson = hasPerson;
     }
     LFX.perturb += ((LFX.hasPerson ? 1 : 0) - LFX.perturb)*0.08;
@@ -6659,6 +6660,9 @@ function updateSettingsIndicator() {
 function telemetryLoop() {
 const now = performance.now();
 const elapsed = now - lastTime;
+// 🔒 THROTTLE DE DOM: Evita actualizar textos más de 2 veces por segundo
+if (now - (window._lastDOMUpdate || 0) < 500) return;
+window._lastDOMUpdate = now;
 // ==========================================================
 // 1. CÁLCULO DE ESTADO (Se ejecuta SIEMPRE, es muy ligero)
 // ==========================================================
@@ -6696,7 +6700,6 @@ applyQualityScale();
 if (now - (window._lastDOMUpdate || 0) < 500) {
 return; // Salimos temprano, ahorramos el trabajo pesado del DOM
 }
-window._lastDOMUpdate = now;
 // ==========================================================
 // 3. ACTUALIZACIÓN DEL DOM (Solo se ejecuta cada 500ms)
 // ==========================================================
