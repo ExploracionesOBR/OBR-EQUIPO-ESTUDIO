@@ -1392,6 +1392,24 @@ const DEFAULT_ELEVENLABS_KEY = 'sk_5bf6f7227060b118d99db7dd8691bd071120f303ef31b
 const DEFAULT_VOICERSS_KEY = '776fa230d3574c4097aa44e4e3c3949c';
 
 
+// 🔒 CANVAS REUTILIZABLE PARA OPTIMIZACIÓN DE MEMORIA
+let _optimizedCanvas = null;
+let _optimizedCtx = null;
+function getOptimizedCanvas(w, h) {
+    if (!_optimizedCanvas || _optimizedCanvas.width !== w || _optimizedCanvas.height !== h) {
+        if (_optimizedCanvas) {
+            _optimizedCanvas.width = w;
+            _optimizedCanvas.height = h;
+        } else {
+            _optimizedCanvas = document.createElement('canvas');
+            _optimizedCanvas.width = w;
+            _optimizedCanvas.height = h;
+            _optimizedCtx = _optimizedCanvas.getContext('2d', { willReadFrequently: false });
+        }
+    }
+    return _optimizedCanvas;
+}
+
 
 
 // ============ ESTADO GLOBAL ============
@@ -2063,27 +2081,31 @@ function float32ToWav16k(float32Array, sampleRate) {
 
 function startVoiceRecognition() {
     if (!audioCtx) return;
-    
     if (scriptProcessorNode) {
         scriptProcessorNode.disconnect();
         scriptProcessorNode = null;
     }
-    
     audioAccumulator = [];
     isTranscribing = false;
     
-    // Capturar audio crudo directamente del nodo de ganancia del micrófono
-    scriptProcessorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+    // 🔒 CRÍTICO PARA MÓVILES: Reducir de 4096 a 2048. 
+    // iOS/Android descartan eventos de audio con buffers grandes para ahorrar batería.
+    scriptProcessorNode = audioCtx.createScriptProcessor(2048, 1, 1);
     let lastProcessTime = Date.now();
     
     scriptProcessorNode.onaudioprocess = (e) => {
         if (!state.isAudioScan) return;
         
+        // 🔒 CRÍTICO PARA MÓVILES: Forzar reanudación si el navegador lo suspendió
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+
         const inputData = e.inputBuffer.getChannelData(0);
         audioAccumulator.push(new Float32Array(inputData));
-        
         const now = Date.now();
-        // Procesar cada 2.5 segundos para obtener un chunk de ~40KB (ideal para Groq)
+        
+        // Procesar cada 2.5 segundos
         if (now - lastProcessTime > 2500) {
             lastProcessTime = now;
             
@@ -2138,14 +2160,20 @@ async function sendToGroqTranscription(wavBlob) {
         formData.append('response_format', 'text');
         formData.append('temperature', '0');
         formData.append('prompt', 'Transcribe únicamente voz humana en español. Si no hay voz clara, devuelve texto vacío.');
-        
         console.log(`[VOICE REC] 📤 Enviando a Groq: audio.wav, tamaño=${wavBlob.size} bytes`);
+        
+        // 🔒 CRÍTICO PARA MÓVILES: Timeout de 15 segundos. 
+        // Las redes móviles a veces cuelgan las peticiones, dejando isTranscribing=true para siempre.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         
         const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
         
         const rawText = await resp.text();
         console.log(`[VOICE REC] 🟢 Groq RAW Response: "${rawText.substring(0, 150)}"`);
@@ -2155,7 +2183,7 @@ async function sendToGroqTranscription(wavBlob) {
             isTranscribing = false;
             return;
         }
-        
+       
         const transcript = rawText.trim();
         if (!transcript) {
             isTranscribing = false;
@@ -3531,7 +3559,12 @@ const lidarCtx = el.lidarCanvas.getContext('2d', {
 // 🎯 FRAME SKIPPER INTELIGENTE PARA IA (Evita lag en móvil)
 // ==========================================================
 const AI_FRAME_SKIP = {
-  counter: 0, targetSkip: 2, minSkip: 1, maxSkip: 5, lastProcessTime: 0, minIntervalMs: (_deviceCores <= 4 ? 120 : 66),
+    counter: 0,
+    targetSkip: _deviceCores <= 4 ? 3 : 2,  // 🔒 Saltar más frames en 4GB RAM
+    minSkip: 2,
+    maxSkip: 6,
+    lastProcessTime: 0, 
+    minIntervalMs: (_deviceCores <= 4 ? 120 : 66),
   shouldProcess() {
     this.counter++;
     const now = performance.now();
@@ -4188,7 +4221,7 @@ let mapMirrorCanvas = null;
 let mapMirrorCtx = null;
 let lastMapCapture = 0;
 let mapMirrorGood = false; // 🔒 nunca se publica un espejo negro
-const MAP_CAPTURE_INTERVAL = 2000; // Capturar mapa cada 1 segundo (rendimiento)
+const MAP_CAPTURE_INTERVAL = _deviceCores <= 4 ? 3000 : 2000;  // 🔒 Menos frecuente en gama baja
 
 function initMapMirror() {
     mapMirrorCanvas = document.getElementById('map-mirror-canvas');
@@ -4413,6 +4446,11 @@ showToast('📴 MODO OFFLINE — Funciones IA desactivadas', true);
 document.body.classList.add('obr-offline');
 }
     unlockAudioContext();
+    // 🔒 DETECCIÓN Y ACTIVACIÓN DE MODO OPTIMIZADO (4GB RAM)
+if (_deviceCores <= 4) {
+    qualityScale = 0.95;  // Ligeramente reducido para ganar FPS
+    showToast('🔋 MODO OPTIMIZADO ACTIVADO', false);
+}
     document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
     document.getElementById('cam-error-panel').style.display = 'none';
     requestWakeLock();
@@ -4987,14 +5025,17 @@ async function toggleAudioScanner() {
     cumulativeEVPEnergy = 0;
     ambientNoiseLevel = 0.01;
     
-    // 7. Asegurar que el AudioContext esté corriendo
-    await _ensureContextRunning();
-    
-                // 8. Configurar routing de audio
-            updateAudioRouting();
-
-// 🔒 FORZAR GROQ/GEMINI PARA TRANSCRIPCIÓN (Sin Web Speech API del navegador)
-startVoiceRecognition();
+            // 7. Asegurar que el AudioContext esté corriendo (doble verificación para móviles)
+        await _ensureContextRunning();
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume().catch(() => {});
+        }
+        
+        // 8. Configurar routing de audio
+        updateAudioRouting();
+        
+        // 🔒 FORZAR GROQ/GEMINI PARA TRANSCRIPCIÓN
+        startVoiceRecognition();
 
     // 9. Esperar un momento para que el reconocimiento de voz se inicialice
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -5145,7 +5186,10 @@ cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
         evpFS = Math.round(14 * screenScale * 1.08);
     }
     
-    const visualBins = isPortrait ? 32 : (w < 600 ? 48 : 80);
+    // 🔒 REDUCIR BINS EN VISUALIZADOR PARA 4GB RAM
+const visualBins = _deviceCores <= 4 
+    ? (isPortrait ? 24 : 40)  
+    : (isPortrait ? 32 : 80);
     const step = Math.max(1, Math.floor(bufferLength / visualBins));
     const sliceW = displayWidth / visualBins;
     const nowAnim = performance.now();
@@ -5465,9 +5509,9 @@ c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
 c.restore(); c.filter = 'none'; c.globalAlpha = 1;
 }
 
-    // ── 1) Buffers con aspect EXACTO de pantalla → NUNCA se aplasta al rotar ──
-    const BH = 64;  // 🔒 reducido de 128 a 64
-    const BW = Math.max(32, Math.min(112, Math.round(BH * width / height)));
+// ── 1) Buffers optimizados para 4GB RAM (25% menos memoria) ──
+const BH = 48;  
+const BW = Math.max(24, Math.min(84, Math.round(BH * width / height)));
     if (lfxMaskC.width !== BW || lfxMaskC.height !== BH) {
         [lfxMaskC, lfxReliefC, lfxTintC, lfxRimC].forEach(cv => { cv.width = BW; cv.height = BH; });
         lfxLum = null; lfxLumPrev = null;
@@ -5518,17 +5562,25 @@ c.restore(); c.filter = 'none'; c.globalAlpha = 1;
         const tmp = lfxLumPrev; lfxLumPrev = lfxLum; lfxLum = tmp;
     }
 
-    // ── 4) Análisis de la máscara (cobertura, pies, centro) ──
-    if (maskToUse) {
+    // ── 4) Análisis de la máscara con FILTRO DE BRILLO ──
+if (maskToUse) {
     const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
+    const vd = lfxReliefX.getImageData(0, 0, BW, BH).data; // Video data para detectar brillo
     let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
     const totalPixels = BW * BH;
     
-    // 🔒 BUCLE 1D: ~25% más rápido en móviles que el bucle anidado x/y
     for (let i = 0; i < totalPixels; i++) {
-        if (md[i * 4 + 3] > 110) { // Canal Alpha
+        const alpha = md[i * 4 + 3];
+        const idx = i * 4;
+        
+        // 🔒 FILTRO DE BRILLO: Ignorar píxeles muy brillantes (luces, flashes)
+        const brightness = (vd[idx] * 0.299 + vd[idx+1] * 0.587 + vd[idx+2] * 0.114);
+        const isTooBright = brightness > 220; // Umbral alto para luces
+        const isFlash = alpha > 200 && brightness > 180; // Detección de flash
+        
+        if (alpha > 110 && !isTooBright && !isFlash) {
             acc++;
-            const y = (i / BW) | 0; // División entera rápida
+            const y = (i / BW) | 0;
             const x = i % BW;
             if (topY < 0) topY = y;
             botY = y;
@@ -5541,11 +5593,13 @@ c.restore(); c.filter = 'none'; c.globalAlpha = 1;
             for (let y = Math.max(topY, botY-6); y <= botY; y++) for (let x = 0; x < BW; x++) {
                 if (md[(y*BW+x)*4+3] > 110) { footN++; footSX += x; }
             }
-            LFX.coverage += (coverage - LFX.coverage)*0.3;
-            LFX.cx += (sx/acc/BW - LFX.cx)*0.3;
-            LFX.topY += (topY/BH - LFX.topY)*0.3;
-            LFX.personH += ((botY-topY)/BH - LFX.personH)*0.3;
-            LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX)*0.3;
+            // 🔒 SUAVIZADO MÁS AGRESIVO PARA EVITAR PARPADEOS POR EL FILTRO DE BRILLO
+LFX.coverage += (coverage - LFX.coverage) * 0.2;  
+LFX.cx += (sx/acc/BW - LFX.cx) * 0.2;
+LFX.topY += (topY/BH - LFX.topY) * 0.2;
+LFX.personH += ((botY-topY)/BH - LFX.personH) * 0.2;
+LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX) * 0.2;
+LFX.footY += (botY/BH - LFX.footY) * 0.2;
             LFX.footY += (botY/BH - LFX.footY)*0.3;
             LFX.hasFeet = footN >= 8 && botY < BH - 3;
         } else { LFX.coverage += (coverage - LFX.coverage)*0.3; LFX.hasFeet = false; }
@@ -5562,10 +5616,15 @@ c.restore(); c.filter = 'none'; c.globalAlpha = 1;
         lfxTintX.drawImage(lfxReliefC, 0, 0);
         lfxTintX.globalCompositeOperation = 'source-over';
 
-        lfxRimX.clearRect(0, 0, BW, BH);
-        for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-            if (ox || oy) lfxRimX.drawImage(lfxMaskC, ox, oy, BW, BH);
-        }
+       lfxRimX.clearRect(0, 0, BW, BH);
+// 🔒 REDUCIR DILATACIÓN: De 3x3 a solo vecinos inmediatos (línea más fina)
+for (let ox = -1; ox <= 1; ox++) {
+    for (let oy = -1; oy <= 1; oy++) {
+        if (ox === 0 && oy === 0) continue; // Skip center
+        if (Math.abs(ox) + Math.abs(oy) > 1) continue; // Solo 4 vecinos (cruz), no diagonales
+        lfxRimX.drawImage(lfxMaskC, ox, oy, BW, BH);
+    }
+}
         lfxRimX.globalCompositeOperation = 'source-in';
         lfxRimX.fillStyle = 'rgba(255,170,50,1)'; lfxRimX.fillRect(0, 0, BW, BH);
         lfxRimX.globalCompositeOperation = 'destination-out';
@@ -6499,6 +6558,10 @@ composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop);
   else requestAnimationFrame(renderLoop);
+  // 🔒 FORZAR GC CADA 60 FRAMES EN GAMA BAJA
+if (frameCount % 60 === 0 && _deviceCores <= 4) {
+    if (window.gc) window.gc();
+}
 }
 
 //AQUI FUNALIZA  renderLoop
