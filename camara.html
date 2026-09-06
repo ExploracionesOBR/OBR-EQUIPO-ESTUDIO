@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <title>CAMARA OBR PRO v10</title>
+    <title>CAMARA OBR PRO</title>
     
 <!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
-<link rel="icon" type="image/png" href="obr-logo.png?v=1">
-<link rel="apple-touch-icon" href="obr-logo.png?v=1">
+<link rel="icon" type="image/png" href="obr-logo.png">
+<link rel="apple-touch-icon" href="obr-logo.png">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1108,7 +1108,8 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
   <div id="main-startup-ui" class="flex flex-col items-center justify-center w-full h-full overflow-y-auto custom-scrollbar py-6 relative">
     <img src="obr-logo.png" class="w-24 h-24 object-contain mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
     <h1 class="text-3xl text-red-600 font-bold mb-1 tracking-widest font-orbitron">OBR CAM</h1>
-    <p class="text-xs font-mono text-gray-500 mb-8">En busca de lo Paranormal v1.10</p>
+    <p class="text-xs font-mono text-gray-500 mb-2">En busca de lo Paranormal</p>
+<p id="app-version-label" class="text-[10px] font-mono text-gray-400 opacity-40 mb-8">Version: --</p>
     
     <div class="w-64 h-1 bg-gray-800 rounded overflow-hidden" id="progress-container"><div id="progress-bar"></div></div>
     <div id="progress-text" class="mt-2 text-xs font-mono text-red-500">LISTO PARA INICIAR</div>
@@ -1360,7 +1361,351 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '10'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '15'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+// ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
+(function applyGlobalVersion() {
+  // 1. Título de la pestaña / app
+  document.title = 'CAMARA OBR PRO v' + ASSET_VERSION;
+  // 2. Pantalla de carga
+  const vLabel = document.getElementById('app-version-label');
+  if (vLabel) vLabel.textContent = 'Version: ' + ASSET_VERSION;
+  console.log('[VERSIÓN] App v' + ASSET_VERSION);
+})();
+
+// ===== FASE 1: DETECCIÓN DE RED PARA CARGA ADAPTATIVA =====
+const OBR_NETWORK = {
+  type: 'unknown',
+  effectiveType: '4g',
+  downlink: 10,
+  saveData: false,
+  
+  init() {
+    if ('connection' in navigator) {
+      const conn = navigator.connection;
+      this.type = conn.type || 'unknown';
+      this.effectiveType = conn.effectiveType || '4g';
+      this.downlink = conn.downlink || 10;
+      this.saveData = conn.saveData || false;
+      
+      console.log('[NET] Tipo:', this.type, '| Efectivo:', this.effectiveType, '| Downlink:', this.downlink + 'Mbps', '| Ahorro:', this.saveData);
+      
+      // ===== FASE 2: THROTTLING DE EVENTOS DE RED =====
+let networkChangeDebounce = null;
+
+conn.addEventListener('change', () => {
+  // Limpiar debounce anterior
+  if (networkChangeDebounce) {
+    clearTimeout(networkChangeDebounce);
+  }
+
+  // Esperar 1 segundo antes de reaccionar (evita cambios rápidos)
+  networkChangeDebounce = setTimeout(() => {
+    // 🔒 CORREGIDO: usar OBR_NETWORK en lugar de this
+    OBR_NETWORK.effectiveType = conn.effectiveType;
+    OBR_NETWORK.downlink = conn.downlink;
+    OBR_NETWORK.saveData = conn.saveData;
+
+    console.log('[NET] Conexión cambió a:', OBR_NETWORK.effectiveType, '| Downlink:', OBR_NETWORK.downlink + 'Mbps');
+
+    // Ajustar calidad dinámicamente
+    if (OBR_NETWORK.isSlowConnection()) {
+      showToast('📶 Conexión lenta detectada - Optimizando...', false);
+      OBR_NETWORK.applyLowBandwidthMode();
+
+      // Notificar al sistema de calidad
+      if (typeof OBR_QUALITY !== 'undefined') {
+        OBR_QUALITY.tier = 'low';
+        console.log('[NET] Forzando tier LOW por conexión lenta');
+      }
+    } else if (OBR_NETWORK.isMediumConnection() && OBR_QUALITY && OBR_QUALITY.tier === 'low') {
+      // Recuperar calidad si la conexión mejora
+      OBR_QUALITY.init(); // Recalcular tier
+      showToast('📶 Conexión mejorada - Restaurando calidad...', false);
+    }
+  }, 1000);
+});
+    }
+  },
+  
+  isSlowConnection() {
+    return this.effectiveType === '2g' || 
+           this.effectiveType === 'slow-2g' || 
+           this.downlink < 1.5 ||
+           this.saveData;
+  },
+  
+  isMediumConnection() {
+    return this.effectiveType === '3g' || 
+           (this.downlink >= 1.5 && this.downlink < 5);
+  },
+  
+  applyLowBandwidthMode() {
+    // Reducir calidad de video
+    if (typeof state !== 'undefined' && state.cameraReady) {
+      // Forzar 720p en conexiones lentas
+      console.log('[NET] Aplicando modo bajo ancho de banda');
+    }
+  }
+};
+
+// Inicializar detección de red
+OBR_NETWORK.init();
+
+
+// ===== FASE 1: SISTEMA DE CALIDAD ADAPTATIVA SEGÚN DISPOSITIVO =====
+const OBR_QUALITY = {
+  deviceScore: 0,
+  tier: 'medium', // low, medium, high
+  
+  settings: {
+low: {
+videoResolution: { width: 1920, height: 1080 }, // 🔒 SIEMPRE 1080p (NO bajar a 720p)
+targetFPS: 60,                                  // 🔒 SIEMPRE 60fps
+aiFrameSkip: 5,
+lidarFPS: 15,
+slsEnabled: false,
+mapUpdateInterval: 5000,
+telemetryUpdateInterval: 2000,
+imageQuality: 0.85, // 🔒 Subido para mejor análisis IA
+aiImageWidth: 640   // 🔒 Mayor detalle para pareidolia
+},
+    medium: {
+      videoResolution: { width: 1920, height: 1080 },
+      targetFPS: 60, // 🔒 SIEMPRE 60fps (coherencia con tu regla)
+      aiFrameSkip: 3,
+      lidarFPS: 20,
+      slsEnabled: true,
+      mapUpdateInterval: 3000,
+      telemetryUpdateInterval: 1000,
+      imageQuality: 0.7,
+      aiImageWidth: 640
+    },
+    high: {
+      videoResolution: { width: 1920, height: 1080 },
+      targetFPS: 60,
+      aiFrameSkip: 2,
+      lidarFPS: 30,
+      slsEnabled: true,
+      mapUpdateInterval: 2000,
+      telemetryUpdateInterval: 500,
+      imageQuality: 0.85,
+      aiImageWidth: 800
+    }
+  },
+  
+  init() {
+    this.deviceScore = this.calculateDeviceScore();
+    this.tier = this.getTier();
+    
+    console.log('[QUALITY] Score:', this.deviceScore, '| Tier:', this.tier);
+    console.log('[QUALITY] Settings:', this.getCurrent());
+    
+    // Ajustar si la conexión es lenta
+    if (OBR_NETWORK.isSlowConnection() && this.tier !== 'low') {
+      console.log('[QUALITY] Forzando tier LOW por conexión lenta');
+      this.tier = 'low';
+    }
+  },
+  
+  calculateDeviceScore() {
+    const cores = navigator.hardwareConcurrency || 2;
+    const memory = navigator.deviceMemory || 2;
+    const gpu = this.detectGPU();
+    
+    let score = 0;
+    
+    // CPU (0-3 puntos)
+    score += cores >= 8 ? 3 : cores >= 6 ? 2.5 : cores >= 4 ? 2 : 1;
+    
+    // RAM (0-3 puntos)
+    score += memory >= 8 ? 3 : memory >= 6 ? 2.5 : memory >= 4 ? 2 : 1;
+    
+    // GPU (0-2 puntos)
+    score += gpu === 'high' ? 2 : gpu === 'medium' ? 1 : 0;
+    
+    // Conexión (0-2 puntos)
+    if (OBR_NETWORK.effectiveType === '4g') score += 2;
+    else if (OBR_NETWORK.effectiveType === '3g') score += 1;
+    
+    return Math.min(10, score);
+  },
+  
+  detectGPU() {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) return 'low';
+      
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      if (debugInfo) {
+        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+        const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+        
+        // Detectar GPUs de gama alta
+        if (/nvidia|radeon|geforce|quadro/i.test(renderer)) return 'high';
+        if (/adreno 6|mali-g7|mali-g6|apple gpu/i.test(renderer)) return 'high';
+        if (/adreno 5|mali-g5|intel iris/i.test(renderer)) return 'medium';
+      }
+      
+      return 'medium';
+    } catch(e) {
+      return 'low';
+    }
+  },
+  
+  getTier() {
+    if (this.deviceScore >= 8) return 'high';
+    if (this.deviceScore >= 5) return 'medium';
+    return 'low';
+  },
+  
+  getCurrent() {
+    return this.settings[this.tier];
+  },
+  
+  get(key) {
+    return this.getCurrent()[key];
+  }
+};
+
+// Inicializar sistema de calidad
+OBR_QUALITY.init();
+
+// ===== FASE 2: TAREAS DIFERIDAS CON REQUEST IDLE CALLBACK =====
+const OBR_IDLE_TASKS = {
+  queue: [],
+  running: false,
+  
+  schedule(task, priority = 'normal') {
+    this.queue.push({ task, priority, timestamp: Date.now() });
+    if (!this.running) this.processNext();
+  },
+  
+  processNext() {
+    if (this.queue.length === 0) {
+      this.running = false;
+      return;
+    }
+    
+    this.running = true;
+    const nextTask = this.queue.shift();
+    
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback((deadline) => {
+        if (deadline.timeRemaining() > 5 || deadline.didTimeout) {
+          try {
+            nextTask.task();
+          } catch(e) {
+            console.warn('[IDLE] Tarea falló:', e);
+          }
+        } else {
+          // No hay tiempo: reencolar y ceder con pausa (evita giro en vacío)
+          this.queue.unshift(nextTask);
+          setTimeout(() => this.processNext(), 250);
+          return;
+        }
+        this.processNext();
+      }, { timeout: 2000 });
+    } else {
+      // Fallback: setTimeout
+      setTimeout(() => {
+        try {
+          nextTask.task();
+        } catch(e) {
+          console.warn('[IDLE] Tarea falló:', e);
+        }
+        this.processNext();
+      }, 100);
+    }
+  }
+};
+
+// Ejemplo de uso: precargar recursos no críticos
+OBR_IDLE_TASKS.schedule(() => {
+  console.log('[IDLE] Precargando recursos secundarios...');
+  // Aquí puedes añadir precarga de imágenes, fuentes, etc.
+}, 'low');
+
+// ===== FASE 3: PREFETCH INTELIGENTE DE VIDEOS (solo WiFi/red confiable + idle) =====
+function scheduleVideoPrefetch() {
+  if (typeof OBR_NET !== 'undefined' && OBR_NET.offline) return;
+  if (!('caches' in window)) return;
+  const conn = navigator.connection;
+  const isWifi = conn && conn.type === 'wifi';
+  const isTrustworthy = conn && conn.effectiveType === '4g' && conn.downlink >= 10 && !conn.saveData;
+  if (!isWifi && !isTrustworthy) {
+    console.log('[PREFETCH] Omitido: sin WiFi ni red confiable (ahorrando datos móviles)');
+    return;
+  }
+  const vids = [
+    './Horizontal_intro.mp4', './Horizontal_outro.mp4', './Horizontal_banner.mp4',
+    './Vertical_intro.mp4', './Vertical_outro.mp4', './Vertical_banner.mp4'
+  ];
+  vids.forEach(v => {
+    OBR_IDLE_TASKS.schedule(async () => {
+      try {
+        const keys = await caches.keys();
+        const target = keys.find(k => k.includes('runtime')) || keys.find(k => k.includes('obr-cam'));
+        if (!target) return;
+        const cache = await caches.open(target);
+        const already = await cache.match(v);
+        if (already) return; // ya está, no gastar datos
+        const resp = await fetch(v);
+        if (resp.ok) {
+          await cache.put(v, resp);
+          console.log('[PREFETCH] ✅ Cacheado:', v);
+        }
+      } catch(e) { /* silencio: no es crítico */ }
+    }, 'low');
+  });
+}
+
+// Arrancar prefetch 20s después del arranque (cuando la app ya está fluida)
+setTimeout(scheduleVideoPrefetch, 20000);
+
+// ===== GENERADOR DE MANIFEST DINÁMICO (ANTES FALTABA) =====
+(async function generateManifest() {
+try {
+const iconDataURL = (size) => new Promise((resolve, reject) => {
+const img = new Image();
+img.onload = () => {
+const c = document.createElement('canvas');
+c.width = size; c.height = size;
+const x = c.getContext('2d');
+const s = Math.min(img.width, img.height);
+const sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+x.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+resolve(c.toDataURL('image/png'));
+};
+img.onerror = reject;
+img.src = 'obr-logo.png';
+});
+const [icon192, icon512] = await Promise.all([iconDataURL(192), iconDataURL(512)]);
+const manifest = {
+name: 'CAMARA OBR PRO v' + ASSET_VERSION,
+short_name: 'OBR CAM',
+description: 'En busca de lo Paranormal',
+start_url: location.href.split('#')[0],
+scope: new URL('./', location.href).href,
+display: 'standalone',
+orientation: 'any',
+background_color: '#000000',
+theme_color: '#000000',
+icons: [
+{ src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any' },
+{ src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any' },
+{ src: icon512, sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+]
+};
+const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+const link = document.createElement('link');
+link.rel = 'manifest';
+link.href = URL.createObjectURL(blob);
+document.head.appendChild(link);
+console.log('[MANIFEST] Generado dinámicamente');
+} catch(e) { console.warn('[MANIFEST] No se pudo generar:', e); }
+})();
+
 
 // ==========================================================
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
@@ -1568,10 +1913,11 @@ function preventAutoReload() {
     _log("Desactivando temporizador de recarga durante configuración");
 }
 
-// Agrega estos eventos a los modales
-document.getElementById('api-config-modal').addEventListener('show', preventAutoReload);
-document.getElementById('settings-modal').addEventListener('show', preventAutoReload);
-document.getElementById('connect-modal').addEventListener('show', preventAutoReload);
+// 🔒 CORREGIDO: El evento 'show' no existe en DOM nativo.
+// Usamos focusin para detectar interacción dentro de los modales.
+document.getElementById('api-config-modal').addEventListener('focusin', preventAutoReload);
+document.getElementById('settings-modal').addEventListener('focusin', preventAutoReload);
+document.getElementById('connect-modal').addEventListener('focusin', preventAutoReload);
 
 
     // Variables globales faltantes
@@ -1658,206 +2004,250 @@ function setTTSMode(mode) {
     window.closeChatView = closeChatView;
 
  if ('serviceWorker' in navigator) {
-  const swCode = `
-const CACHE_NAME = 'obr-cam-v' + (typeof ASSET_VERSION !== 'undefined' ? ASSET_VERSION : '10') + '-offline-robust';
-const VERSION = CACHE_NAME; // Para logging
+const swCode = `
+const CACHE_NAME = 'obr-cam-v${ASSET_VERSION}-progressive';
+const RUNTIME_CACHE = 'obr-cam-runtime-v11';
 
-const URLS = [
-'./',
-'./index.html',
-'./obr-logo.png',
-'./obr-banner.png',
-'./Horizontal_intro.mp4',
-'./Horizontal_outro.mp4',
-'./Horizontal_banner.mp4',
-'./Vertical_intro.mp4',
-'./Vertical_outro.mp4',
-'./Vertical_banner.mp4',
-'./barrido.mp3',
-'./respuesta.mp3',
-// 🔒 MISMAS URLs y versiones que pide el <head> (tal cual)
-'https://cdn.tailwindcss.com',
-'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0',
-'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3',
-'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
-'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js',
-'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.binarypb',
-'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation_solution_simd_wasm_bin.wasm',
-'https://cdn.agora.io/sdk/release/AgoraRTC_N.js',
-'https://cdn.agora.io/sdk/release/AgoraRTM.js',
-'https://unpkg.com/leaflet/dist/leaflet.js',
-'https://unpkg.com/leaflet/dist/leaflet.css',
-'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap'
+// 🔒 FASE 1: Solo recursos CRÍTICOS al inicio (carga rápida en datos móviles)
+const CRITICAL_URLS = [
+  './',
+  './index.html',
+  './obr-logo.png',
+  './obr-banner.png'
 ];
 
-_log('[SW] Versión:', VERSION);
+// 🔒 Recursos IMPORTANTES se cachean en idle (después de arrancar)
+const IMPORTANT_URLS = [
+  './barrido.mp3',
+  './respuesta.mp3'
+];
 
-// INSTALACIÓN: Precachear todos los recursos
+// 🔒 Videos se cachean bajo demanda (solo cuando se usan)
+const VIDEO_URLS = [
+  './Horizontal_intro.mp4',
+  './Horizontal_outro.mp4',
+  './Horizontal_banner.mp4',
+  './Vertical_intro.mp4',
+  './Vertical_outro.mp4',
+  './Vertical_banner.mp4'
+];
+
+// 🔒 CDNs se cachean en RUNTIME (cuando se solicitan por primera vez)
+const CDN_PATTERNS = [
+  'cdn.tailwindcss.com',
+  'cdnjs.cloudflare.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'cdn.jsdelivr.net',
+  'unpkg.com',
+  'cdn.agora.io',
+  'tfhub.dev'
+];
+
+// 🔒 NUNCA cachear (APIs necesitan datos frescos)
+const SKIP_CACHE = [
+  'api.groq.com',
+  'generativelanguage.googleapis.com',
+  'api.elevenlabs.io',
+  'api.voicerss.org',
+  'tile.openstreetmap.org'
+];
+
+console.log('[SW] Versión:', CACHE_NAME);
+
 self.addEventListener('install', e => {
-e.waitUntil(
-caches.open(CACHE_NAME).then(cache =>
-Promise.allSettled(URLS.map(u => cache.add(u).catch(err => _warn('[SW] No cacheable:', u)))
-).then(() => self.skipWaiting())
-);
-});
-
-// ACTIVACIÓN: Limpiar cachés viejas
-self.addEventListener('activate', e => {
-  _log('[SW] Activando...', VERSION);
+  console.log('[SW] Instalando - Solo recursos críticos');
   e.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => {
-          _log('[SW] Eliminando caché vieja:', k);
-          return caches.delete(k);
-        })
-      );
-    }).then(() => {
-      _log('[SW] Tomando control de clientes...');
-      return self.clients.claim();
-    })
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        // Solo cachear críticos (rápido en datos móviles)
+        return Promise.allSettled(
+          CRITICAL_URLS.map(url => 
+            cache.add(url).catch(err => console.warn('[SW] No cacheable:', url))
+          )
+        );
+      })
+      .then(() => {
+        console.log('[SW] Críticos cacheados, activando...');
+        return self.skipWaiting();
+      })
   );
 });
 
-// MENSAJES: Forzar actualización
-self.addEventListener('message', (e) => {
+self.addEventListener('activate', e => {
+  console.log('[SW] Activando y limpiando cachés viejas');
+  e.waitUntil(
+    caches.keys()
+      .then(keys => {
+        return Promise.all(
+          keys.filter(k => k !== CACHE_NAME && k !== RUNTIME_CACHE)
+            .map(k => {
+              console.log('[SW] Eliminando:', k);
+              return caches.delete(k);
+            })
+        );
+      })
+      .then(() => {
+        console.log('[SW] Tomando control');
+        return self.clients.claim();
+      })
+      .then(() => {
+        // 🔒 Cachear recursos importantes en background (no bloquea)
+        return caches.open(CACHE_NAME).then(cache => {
+          IMPORTANT_URLS.forEach(url => {
+            cache.add(url).catch(() => {});
+          });
+        });
+      })
+  );
+});
+
+self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') {
-    _log('[SW] Recibido SKIP_WAITING, actualizando...');
     self.skipWaiting();
   }
 });
 
-// FETCH: Estrategia Cache First, luego Network
 self.addEventListener('fetch', e => {
-  // Ignorar métodos que no sean GET
   if (e.request.method !== 'GET') return;
   
   const url = e.request.url;
   
-  // Lista de CDNs permitidos
-  const allowedCDNs = [
-    'cdn.tailwindcss.com',
-    'cdnjs.cloudflare.com',
-    'fonts.googleapis.com',
-    'fonts.gstatic.com',
-    'cdn.jsdelivr.net',
-    'unpkg.com',
-    'cdn.agora.io',
-    'tfhub.dev'
-  ];
-  
-  const isLocal = url.startsWith(self.location.origin);
-  const isCDN = allowedCDNs.some(cdn => url.includes(cdn));
-  
-  // Ignorar APIs externas (Gemini/Groq/ElevenLabs/VoiceRSS) para no cachear errores
-  if (!isLocal && !isCDN) {
-    // _log('[SW] Ignorando API externa:', url);
+  // 🔒 NO cachear APIs externas ni probes de versión (?nc=)
+  if (SKIP_CACHE.some(pattern => url.includes(pattern)) || url.includes('nc=')) {
     return;
   }
   
+  const isLocal = url.startsWith(self.location.origin);
+  const isCDN = CDN_PATTERNS.some(cdn => url.includes(cdn));
+  const isVideo = VIDEO_URLS.some(v => url.includes(v.replace('./', '')));
+  
+  // Solo procesar recursos locales o CDNs permitidas
+  if (!isLocal && !isCDN) return;
+  
   e.respondWith(
     caches.match(e.request).then(cached => {
-      // 1. Si está en caché, devolver inmediatamente (OFFLINE FIRST)
       if (cached) {
-        // _log('[SW] Sirviendo desde caché:', url);
-        
-        // Actualizar en segundo plano (stale-while-revalidate)
+        // Stale-while-revalidate: devolver cacheado, actualizar en background
         fetch(e.request).then(netResp => {
           if (netResp && netResp.status === 200) {
-            caches.open(CACHE_NAME).then(cache => {
+            const cacheName = isCDN ? RUNTIME_CACHE : CACHE_NAME;
+            caches.open(cacheName).then(cache => {
               cache.put(e.request, netResp.clone());
             });
           }
-        }).catch(() => {
-          // Silenciar errores de red en segundo plano
-        });
-        
+        }).catch(() => {});
         return cached;
       }
       
-      // 2. Si no está en caché, ir a red
+      // No está en caché: ir a red
       return fetch(e.request).then(netResp => {
-        // Si la respuesta es válida, guardar en caché
         if (netResp && netResp.status === 200) {
-          const clone = netResp.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(e.request, clone);
-          });
+          const cacheName = isCDN ? RUNTIME_CACHE : CACHE_NAME;
+          
+          // Cachear si es local o CDN permitida
+          if (isLocal || isCDN) {
+            const clone = netResp.clone();
+            caches.open(cacheName).then(cache => {
+              cache.put(e.request, clone);
+            });
+          }
         }
         return netResp;
       }).catch(err => {
-        _warn('[SW] Fetch falló:', url, err);
-        
-        // 3. Si falla la red y es navegación, devolver HTML cacheado
-        if (e.request.mode === 'navigate' || e.request.url.endsWith('/')) {
+        // Fallback offline
+        if (e.request.mode === 'navigate' || url.endsWith('/')) {
           return caches.match('./').then(html => {
-            if (html) return html;
-            return new Response('Offline - No hay HTML cacheado', {
+            return html || new Response('Offline - OBR CAM PRO', {
               status: 503,
               headers: {'Content-Type': 'text/html'}
             });
           });
         }
-        
-        // 4. Para otros recursos, devolver error Offline
         return new Response('Offline', {
           status: 503,
-          statusText: 'Service Worker Offline',
           headers: {'Content-Type': 'text/plain'}
         });
       });
     })
   );
 });
-  `;
+`;
+
+try {
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  const url = URL.createObjectURL(blob);
   
-  try {
-    const blob = new Blob([swCode], {type:'application/javascript'});
-    const url = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(url).then(registration => {
+    console.log('[APP] SW registrado:', registration.scope);
     
-    navigator.serviceWorker.register(url, {scope:'/'}).then(registration => {
-      _log('[APP] SW registrado:', registration.scope);
-      
-      // Forzar actualización si hay un SW esperando
-      if (registration.waiting) {
-        _log('[APP] Hay SW waiting, activando...');
-        registration.waiting.postMessage({type: 'SKIP_WAITING'});
-      }
-      
-      // Escuchar actualizaciones
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        _log('[APP] Nueva versión del SW encontrada');
-        
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            _log('[APP] Nueva versión lista. Recargando...');
-            if (confirm('Nueva versión disponible. ¿Recargar?')) {
-              if (newWorker.waiting) {
-                newWorker.waiting.postMessage({type: 'SKIP_WAITING'});
-              }
-              window.location.reload();
-            }
+    if (registration.waiting) {
+      registration.waiting.postMessage({type: 'SKIP_WAITING'});
+    }
+    
+    registration.addEventListener('updatefound', () => {
+      const newWorker = registration.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          console.log('[APP] Nueva versión del SW disponible');
+          if (newWorker.waiting) {
+            newWorker.waiting.postMessage({type: 'SKIP_WAITING'});
           }
-        });
+          // Recargar solo si el usuario no está grabando
+          if (!isRecordingActive) {
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        }
       });
-      
-    }).catch(err => {
-      _warn('[APP] Error registrando SW:', err);
     });
-    
-  } catch(e) {
-    _warn('[APP] Error creando blob del SW:', e);
-  }
+  }).catch(err => {
+    console.warn('[APP] Error registrando SW:', err);
+  });
+} catch(e) {
+  console.warn('[APP] Error creando blob del SW:', e);
 }
+}
+
 
     let sharedMicMode = true;
     let isLocalMicForced = false;
 
     let audioStream = null;
-    let audioCtx = null;
-    let evpAudioCtx = null;
+    // ===== FASE 2: AUDIO CONTEXT SINGLETON =====
+let audioCtx = null;
+let evpAudioCtx = null;
+
+function getAudioContext() {
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      console.error('[AUDIO] AudioContext no soportado');
+      return null;
+    }
+    
+    try {
+      audioCtx = new AudioContextClass({ latencyHint: 'interactive' });
+      evpAudioCtx = audioCtx;
+      
+      // Auto-resume en interacción del usuario
+      const resumeAudio = () => {
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+      };
+      
+      document.addEventListener('click', resumeAudio, { once: true });
+      document.addEventListener('touchstart', resumeAudio, { once: true });
+      
+      console.log('[AUDIO] Contexto creado:', audioCtx.sampleRate + 'Hz');
+    } catch(e) {
+      console.error('[AUDIO] Error creando contexto:', e);
+      return null;
+    }
+  }
+  
+  return audioCtx;
+}
     let micSource = null;
     let micGainNode = null;
     let audioAnalyser = null;
@@ -1940,7 +2330,7 @@ function getSupportedMimeType() {
 }
 
 function initVoiceRecognition() {
-    if (!audioCtx) return;
+    if (!getAudioContext()) return;
     
     // Crear un destino separado SOLO para el micrófono (no incluye audio de la app)
     voiceRecDestination = audioCtx.createMediaStreamDestination();
@@ -1969,44 +2359,88 @@ let isTranscribing = false; // 🔒 Bandera para evitar llamadas simultáneas a 
 
 function isGhostTranscript(rawText, audioBlob) {
     if (!rawText) return true;
-
     const original = String(rawText).trim();
     const txt = normalizarTexto(original)
         .toLowerCase()
-        .replace(/[.,;:!?¿¡"'“”]/g, '')
+        .replace(/[.,;:!?¿¡"'""''()[\]{}\-—…\/\\@#$%^&*_+=~`|<>]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-
+    
     if (!txt) return true;
-
     const words = txt.split(/\s+/).filter(Boolean);
-
-    // Frases típicas que Whisper/Gemini inventan con silencio o ruido.
+    
+    // 🔒 AMPLIADO: Alucinaciones típicas de Whisper con silencio/ruido
     const exactGhosts = new Set([
-    'gracias', 'muchas gracias', 'thank you', 'thanks', 'vamos', 'vamonos', 'vámonos', 'vale', 'ok', 'okay', 'amen', 'amén', 'hola', 'subtitulos', 'subtítulos', 'subtitulo', 'subtítulo', 'musica', 'música', 'silencio', 
-    'siguiente', 'como te llamas', 'hola como te llamas', 'buenos dias', 'buenas tardes', 'buenas noches', 'esto es una prueba'
-]);
-
+        'gracias', 'muchas gracias', 'thank you', 'thanks', 'vamos', 'vamonos', 'vámonos', 
+        'vale', 'ok', 'okay', 'amen', 'amén', 'hola', 'subtitulos', 'subtítulos', 
+        'subtitulo', 'subtítulo', 'musica', 'música', 'silencio', 'siguiente', 
+        'como te llamas', 'hola como te llamas', 'buenos dias', 'buenas tardes', 
+        'buenas noches', 'esto es una prueba',
+        // 🔒 NUEVOS patrones de alucinaciones
+        'adiós', 'hasta luego', 'nos vemos', 'chao', 'chau',
+        'por favor', 'de nada', 'con gusto', 'bienvenido', 'bienvenidos',
+        'yo soy', 'tu eres', 'el es', 'ella es',
+        'la la la', 'na na na', 'mmm', 'ehhh', 'ahhh',
+        'uno dos tres', 'probando', 'prueba', 'prueba de sonido',
+        'transcripción', 'subtítulos por', 'subtítulos hechos por',
+        'aplausos', 'risas', 'música de fondo', 'sonido ambiente',
+        'the end', 'fin', 'final', 'continuara', 'continuará',
+        'grabado por', 'editado por', 'producido por',
+        'sí', 'si', 'no', 'tal vez', 'quizás', 'quizas',
+        'bien', 'muy bien', 'perfecto', 'excelente', 'genial',
+        'si si si', 'no no no', 'ya ya', 'dale dale'
+    ]);
+    
     if (exactGhosts.has(txt)) {
-        console.warn('[VOICE REC] Transcripción fantasma descartada:', original, 'size=', audioBlob ? audioBlob.size : 0);
+        console.warn('[VOICE REC] Transcripción fantasma descartada:', original);
         return true;
     }
-
-    // Patrones comunes de subtítulos o ruido.
+    // 🔒 ANTI PROMPT-ECHO: Whisper "lee" el prompt cuando no hay voz clara
+const echoFrags = ['transcrib', 'voz humana', 'cadena vac', 'no inventes', 'no devuelvas', 'instrucci', 'ruido de fondo', 'silencio o', 'español. solo', 'subtitulos'];
+if (echoFrags.some(p => txt.includes(p))) {
+  console.warn('[VOICE REC] Prompt echo descartado:', original);
+  return true;
+}
+// 🔒 Fragmentos cortos típicos de eco/ruido
+if (['ops', 'op5', 'ups', 'uh', 'eh', 'aja', 'ajá', 'mmm', 'mmmh'].includes(txt)) {
+  console.warn('[VOICE REC] Fragmento eco descartado:', original);
+  return true;
+}
+    
+    // Patrones de subtítulos o ruido
     if (/^\[.*\]$/.test(txt)) return true;
     if (/^\(.*\)$/.test(txt)) return true;
     if (/^\.{1,}$/.test(txt)) return true;
     if (/^…+$/.test(txt)) return true;
-
-    // Si es una sola palabra muy corta y el blob también es pequeño, probablemente es ruido.
-    if (words.length === 1 && txt.length <= 3 && audioBlob && audioBlob.size < 18000) {
-        console.warn('[VOICE REC] Fragmento corto descartado:', original, 'size=', audioBlob.size);
+    
+    // 🔒 NUEVO: Detectar repeticiones (típica alucinación)
+    if (words.length >= 3) {
+        const uniqueWords = new Set(words);
+        if (uniqueWords.size <= 2 && words.length >= 4) {
+            // Solo 1-2 palabras únicas repetidas muchas veces
+            console.warn('[VOICE REC] Repetición descartada:', original);
+            return true;
+        }
+    }
+    
+    // 🔒 NUEVO: Frases muy cortas con audio pequeño = ruido
+    if (words.length === 1 && txt.length <= 4 && audioBlob && audioBlob.size < 25000) {
+        console.warn('[VOICE REC] Fragmento corto descartado:', original);
         return true;
     }
-
+    
+    // 🔒 NUEVO: Frases genéricas sin contexto
+    const genericPhrases = [
+        'si', 'no', 'ok', 'vale', 'claro', 'bien', 'ahi vamos',
+        'ya esta', 'listo', 'perfecto', 'genial', 'siguiente'
+    ];
+    if (genericPhrases.includes(txt)) {
+        console.warn('[VOICE REC] Frase genérica descartada:', original);
+        return true;
+    }
+    
     return false;
 }
-
 
 // 🔒 CALCULADORA DE RMS PARA DETECTAR SILENCIO Y NO GASTAR TOKENS EN VANO
 async function getAudioRMS(audioBlob) {
@@ -2078,9 +2512,23 @@ function float32ToWav16k(float32Array, sampleRate) {
 }
 
 
+// 🔒 CALCULADORA DE RMS PARA DETECTAR SILENCIO
+function calculateAudioRMS(float32Array) {
+    let sum = 0;
+    let nonZeroCount = 0;
+    for (let i = 0; i < float32Array.length; i++) {
+        const val = float32Array[i];
+        if (Math.abs(val) > 0.0001) nonZeroCount++;
+        sum += val * val;
+    }
+    // Si menos del 5% son muestras reales, es silencio
+    if (nonZeroCount < float32Array.length * 0.05) return 0;
+    return Math.sqrt(sum / float32Array.length);
+}
+
 
 function startVoiceRecognition() {
-    if (!audioCtx) return;
+    if (!getAudioContext()) return;
     if (scriptProcessorNode) {
         scriptProcessorNode.disconnect();
         scriptProcessorNode = null;
@@ -2088,32 +2536,26 @@ function startVoiceRecognition() {
     audioAccumulator = [];
     isTranscribing = false;
     
-    // 🔒 CRÍTICO PARA MÓVILES: Reducir de 4096 a 2048. 
-    // iOS/Android descartan eventos de audio con buffers grandes para ahorrar batería.
     scriptProcessorNode = audioCtx.createScriptProcessor(2048, 1, 1);
     let lastProcessTime = Date.now();
     
     scriptProcessorNode.onaudioprocess = (e) => {
         if (!state.isAudioScan) return;
-        
-        // 🔒 CRÍTICO PARA MÓVILES: Forzar reanudación si el navegador lo suspendió
-        if (audioCtx.state === 'suspended') {
+        if (getAudioContext() && audioCtx.state === 'suspended') {
             audioCtx.resume().catch(() => {});
         }
-
         const inputData = e.inputBuffer.getChannelData(0);
         audioAccumulator.push(new Float32Array(inputData));
         const now = Date.now();
         
-        // Procesar cada 2.5 segundos
-        if (now - lastProcessTime > 2500) {
+        // 🔒 FASE 3: intervalo de transcripción según conexión (2.5s rápida / 4s lenta)
+const PROC_INTERVAL = (typeof OBR_NETWORK !== 'undefined' && OBR_NETWORK.isSlowConnection()) ? 4000 : 2500;
+if (now - lastProcessTime > PROC_INTERVAL) {
             lastProcessTime = now;
-            
             let totalLength = 0;
             for (let i = 0; i < audioAccumulator.length; i++) {
                 totalLength += audioAccumulator[i].length;
             }
-            
             const merged = new Float32Array(totalLength);
             let offset = 0;
             for (let i = 0; i < audioAccumulator.length; i++) {
@@ -2121,22 +2563,31 @@ function startVoiceRecognition() {
                 offset += audioAccumulator[i].length;
             }
             
-            // Convertir a WAV 16kHz perfecto
-            const wavBlob = float32ToWav16k(merged, audioCtx.sampleRate);
-            audioAccumulator = []; // Limpiar para el siguiente bloque
+            // 🔒 CRÍTICO: Detectar silencio ANTES de enviar a la API
+            const rms = calculateAudioRMS(merged);
+            const SILENCE_THRESHOLD = 0.008; // Umbral de silencio (ajustable)
             
+            if (rms < SILENCE_THRESHOLD) {
+                // Silencio detectado - NO enviar a la API
+                audioAccumulator = [];
+                return;
+            }
+            
+            const wavBlob = float32ToWav16k(merged, audioCtx.sampleRate);
+            audioAccumulator = [];
             if (isTranscribing) return;
             isTranscribing = true;
-            
             sendToGroqTranscription(wavBlob);
         }
     };
     
-    // Conectar al grafo de audio (necesario conectar a destination para que onaudioprocess se dispare en algunos navegadores)
     micGainNode.connect(scriptProcessorNode);
-    scriptProcessorNode.connect(audioCtx.destination);
-    
-    console.log('[VOICE REC] Reconocimiento iniciado (Modo Raw PCM a WAV)');
+    // 🔒 Sink silenciado: mantiene vivo el nodo SIN rutea el mic a la bocina
+const _obrMuteGain = audioCtx.createGain();
+_obrMuteGain.gain.value = 0;
+scriptProcessorNode.connect(_obrMuteGain);
+_obrMuteGain.connect(audioCtx.destination);
+    console.log('[VOICE REC] Reconocimiento iniciado con detección de silencio');
 }
 
 function stopVoiceRecognition() {
@@ -2159,11 +2610,11 @@ async function sendToGroqTranscription(wavBlob) {
         formData.append('language', 'es');
         formData.append('response_format', 'text');
         formData.append('temperature', '0');
-        formData.append('prompt', 'Transcribe únicamente voz humana en español. Si no hay voz clara, devuelve texto vacío.');
+        // 🔒 PROMPT ANTI-ALUCINACIONES: ancla a Whisper al contexto real
+        formData.append('prompt', 'Exploraciones OBR. Español.');
+        
         console.log(`[VOICE REC] 📤 Enviando a Groq: audio.wav, tamaño=${wavBlob.size} bytes`);
         
-        // 🔒 CRÍTICO PARA MÓVILES: Timeout de 15 segundos. 
-        // Las redes móviles a veces cuelgan las peticiones, dejando isTranscribing=true para siempre.
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
         
@@ -2183,15 +2634,14 @@ async function sendToGroqTranscription(wavBlob) {
             isTranscribing = false;
             return;
         }
-       
+        
         const transcript = rawText.trim();
         if (!transcript) {
             isTranscribing = false;
             return;
         }
         
-        // --- PROCESAMIENTO DEL TRANSCRIPTO (Lógica existente) ---
-        if (isGhostTranscript(transcript, null)) {
+        if (isGhostTranscript(transcript, wavBlob)) {
             isTranscribing = false;
             return;
         }
@@ -2206,8 +2656,7 @@ async function sendToGroqTranscription(wavBlob) {
             return;
         }
         
-        // 🔒 Mostrar texto SIN tildes ni puntuación en pantalla
-window._liveUserText = normalizarTexto(transcript).toUpperCase();
+        window._liveUserText = normalizarTexto(transcript).toUpperCase();
         window._liveUserLastUpdate = Date.now();
         
         const isSystemSpeaking = isTtsPlaying || isSpookySpeaking || window._isAnnouncement;
@@ -2228,14 +2677,12 @@ window._liveUserText = normalizarTexto(transcript).toUpperCase();
                 });
                 cleanTxt = transcriptWords.join(' ');
             }
-            
             if (cleanTxt.length > 2 && !isFeedback(cleanTxt)) {
                 window._pendingUserCommand = cleanTxt;
             }
         } else {
             procesarComandoEVP(txt);
         }
-        
     } catch (e) {
         console.error('[VOICE REC] Error transcribiendo:', e);
     } finally {
@@ -2365,7 +2812,7 @@ async function transcribeWithSingleAPI(cfg, audioBlob, mimeType) {
             formData.append('language', 'es');
             formData.append('response_format', 'text');
             formData.append('temperature', '0');
-            formData.append('prompt', 'Transcribe SOLO si hay voz humana clara en español. Si es silencio, ruido de fondo o no hay voz, devuelve EXACTAMENTE una cadena vacía. No inventes palabras ni frases como "siguiente".');
+            formData.append('prompt', 'Exploraciones OBR. Español.');
 
             console.log(`[VOICE REC] 📤 Enviando a Groq: ${fileName}, tamaño=${finalBlob.size} bytes`);
 
@@ -2521,7 +2968,7 @@ async function fetchBackgroundAIContext() {
     snapC.height = 240;
     const ctxC = snapC.getContext('2d');
     if (!fillAiSnapshot(ctxC, 320, 240)) return;
-    const base64 = snapC.toDataURL('image/jpeg', 0.6).split(',')[1];
+    const base64 = snapC.toDataURL('image/jpeg', 0.85).split(',')[1]; // 🔒 Alta calidad para IA
 
     const prompt = `Analiza esta imagen de una investigación paranormal. Extrae: nombre, fecha de fallecimiento, entorno físico y objetos peculiares. Devuelve ÚNICAMENTE un objeto JSON válido sin markdown, sin etiquetas <think>, sin texto adicional. Formato: {"nombre": "...", "fecha_muerte": "...", "entorno": "...", "objetos": "..."}`;
 
@@ -2596,7 +3043,9 @@ async function fetchBackgroundAIContext() {
                     scheduleBackgroundAIContext(false);
                 });
             } else {
-                const delay = 90000 + Math.random() * 90000; 
+                // 🔒 FASE 3: en conexión lenta, espaciar el contexto IA (ahorra datos móviles)
+const base = (typeof OBR_NETWORK !== 'undefined' && OBR_NETWORK.isSlowConnection()) ? 240000 : 90000;
+const delay = base + Math.random() * base; 
                 backgroundAITimer = setTimeout(() => {
                     fetchBackgroundAIContext().then(() => {
                         scheduleBackgroundAIContext(false);
@@ -2940,16 +3389,13 @@ function stopLocalSpeech() {
 
 
     async function initAudioEngine() {
-        if (audioEngineInitialized && audioCtx) {
+  if (audioEngineInitialized && getAudioContext()) {
             if (audioCtx.state === 'suspended' && !document.hidden) audioCtx.resume().catch(() => {});
             return;
         }
 
         const AC = window.AudioContext || window.webkitAudioContext;
-        if (!audioCtx) {
-            audioCtx = new AC({ latencyHint: 'playback' }); 
-            evpAudioCtx = audioCtx;
-        }
+        if (!getAudioContext()) return;
 
         audioCtx.onstatechange = () => {
             if (audioCtx.state === 'suspended' && state.isAudioScan && !document.hidden) {
@@ -3559,23 +4005,19 @@ const lidarCtx = el.lidarCanvas.getContext('2d', {
 // 🎯 FRAME SKIPPER INTELIGENTE PARA IA (Evita lag en móvil)
 // ==========================================================
 const AI_FRAME_SKIP = {
-    counter: 0,
-    targetSkip: _deviceCores <= 4 ? 3 : 2,  // 🔒 Saltar más frames en 4GB RAM
-    minSkip: 2,
-    maxSkip: 6,
-    lastProcessTime: 0, 
-    minIntervalMs: (_deviceCores <= 4 ? 120 : 66),
-  shouldProcess() {
-    this.counter++;
-    const now = performance.now();
-    if (now - this.lastProcessTime < this.minIntervalMs) return false;
-    if (this.counter >= this.targetSkip) { this.counter = 0; this.lastProcessTime = now; return true; }
-    return false;
-  },
-  adjustForPerformance(fps) {
-    if (fps < 20) this.targetSkip = Math.min(this.maxSkip, this.targetSkip + 1);
-    else if (fps > 50) this.targetSkip = Math.max(this.minSkip, this.targetSkip - 1);
-  }
+frameCount: 0,
+targetSkip: OBR_QUALITY.get('aiFrameSkip'),
+minSkip: 2,
+maxSkip: 6,
+shouldProcess() {
+this.frameCount++;
+return this.frameCount % this.targetSkip === 0;
+},
+// 🔒 RESTAURADO: el render loop lo llama en la línea 6970
+adjustForPerformance(fps) {
+if (fps < 20) this.targetSkip = Math.min(this.maxSkip, this.targetSkip + 1);
+else if (fps > 50) this.targetSkip = Math.max(this.minSkip, this.targetSkip - 1);
+}
 };
 
 // 🔒 Cede 1 frame pintado al UI antes de cada inferencia pesada (mata el micro-freeze percibido)
@@ -3799,8 +4241,39 @@ function checkOrientation() {
 }
 
 // Registrar listeners
-window.addEventListener('resize', checkOrientation);
-window.addEventListener('orientationchange', checkOrientation);
+// ===== FASE 1: GESTIÓN DE EVENT LISTENERS CON CLEANUP =====
+const OBR_EVENT_MANAGER = {
+  listeners: new Map(),
+  
+  add(target, event, handler, options) {
+    target.addEventListener(event, handler, options);
+    const key = `${event}_${handler.name || Math.random()}`;
+    this.listeners.set(key, { target, event, handler, options });
+  },
+  
+  remove(target, event, handler) {
+    target.removeEventListener(event, handler);
+    const key = `${event}_${handler.name}`;
+    this.listeners.delete(key);
+  },
+  
+  cleanup() {
+    this.listeners.forEach(({ target, event, handler, options }, key) => {
+      target.removeEventListener(event, handler, options);
+    });
+    this.listeners.clear();
+    console.log('[EVENTS] Todos los listeners limpiados');
+  }
+};
+
+// Usar el gestor en lugar de addEventListener directo
+OBR_EVENT_MANAGER.add(window, 'resize', checkOrientation);
+OBR_EVENT_MANAGER.add(window, 'orientationchange', checkOrientation);
+
+// Limpiar al cerrar la app
+window.addEventListener('beforeunload', () => {
+  OBR_EVENT_MANAGER.cleanup();
+});
 
 //  CRÍTICO: Ejecutar checkOrientation después de que todo esté cargado
 if (document.readyState === 'loading') {
@@ -3849,8 +4322,8 @@ function handleOrientationChange() {
     }, 300);
 }
 
-window.addEventListener('resize', handleOrientationChange);
-window.addEventListener('orientationchange', handleOrientationChange);
+OBR_EVENT_MANAGER.add(window, 'resize', handleOrientationChange);
+OBR_EVENT_MANAGER.add(window, 'orientationchange', handleOrientationChange);
 
     window.addEventListener('beforeunload', () => { 
         if (videoStream) videoStream.getTracks().forEach(track => track.stop()); 
@@ -4441,8 +4914,8 @@ setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
 // 🔒 Detectar offline inmediatamente
 const isOffline = !navigator.onLine || OBR_NET.offline;
 if (isOffline) {
-_log('[APP] Modo OFFLINE detectado');
-showToast('📴 MODO OFFLINE — Funciones IA desactivadas', true);
+  _log('[APP] Modo OFFLINE detectado');
+  showToast('📴 Modo offline — IA desactivada', false);  // ✅ No es error, es estado
 // Aplicar modo offline silenciosamente
 document.body.classList.add('obr-offline');
 }
@@ -4480,6 +4953,10 @@ setInterval(() => {
     updateProgress(20, "SOLICITANDO ACCESO A SENSOR ÓPTICO...");
     clearTimeout(loadingTimer);
  // 🔒 SIEMPRE 1080p 60fps. Sin 4K (mata móviles), sin 720p.
+// 🔒 FASE 1: Usar resolución adaptativa según dispositivo
+const qualitySettings = OBR_QUALITY.getCurrent();
+const targetResolution = qualitySettings.videoResolution;
+
 const constraintSets = [
   { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
   { audio: false, video: { facingMode: 'environment', width: { exact: 1920 }, height: { exact: 1080 }, frameRate: { ideal: 60, max: 60 } } },
@@ -4560,7 +5037,7 @@ _isHighEndDevice
         setTimeout(() => {
             document.getElementById('loading').style.display = 'none'; 
             resize(); 
-            window.addEventListener('resize', resize);
+            OBR_EVENT_MANAGER.add(window, 'resize', resize);
             initDOMCache();
                 // 🔒 CRÍTICO: Si estamos grabando, componer el frame completo en el canvas de grabación
     if (isRecordingActive && recCtx4K && recCanvas4K) {
@@ -4634,6 +5111,29 @@ cfg: { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmo
 
 
 
+// ===== FASE 2: OFFSCREEN CANVAS PARA POSE DETECTION =====
+let offscreenAnalysisCanvas = null;
+let offscreenAnalysisCtx = null;
+
+function getOffscreenAnalysisCanvas(width, height) {
+  if (!offscreenAnalysisCanvas || offscreenAnalysisCanvas.width !== width || offscreenAnalysisCanvas.height !== height) {
+    if ('OffscreenCanvas' in window) {
+      offscreenAnalysisCanvas = new OffscreenCanvas(width, height);
+      offscreenAnalysisCtx = offscreenAnalysisCanvas.getContext('2d');
+      console.log('[CANVAS] OffscreenCanvas creado:', width + 'x' + height);
+    } else {
+      // Fallback: canvas normal
+      offscreenAnalysisCanvas = document.createElement('canvas');
+      offscreenAnalysisCanvas.width = width;
+      offscreenAnalysisCanvas.height = height;
+      offscreenAnalysisCtx = offscreenAnalysisCanvas.getContext('2d');
+    }
+  }
+  return { canvas: offscreenAnalysisCanvas, ctx: offscreenAnalysisCtx };
+}
+
+
+
 async function detectionLoop() {
     if (!state.isSLS && !state.isLidar && !state.isPareidolia) {
         if (targetPoses.length) { targetPoses = []; smoothedPoses = []; }
@@ -4655,7 +5155,13 @@ const now = performance.now();
             if (!imageDrawnThisFrame) {
                 const vRatio = el.video.videoHeight / el.video.videoWidth;
                 analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
-                analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+                const { ctx: offCtx } = getOffscreenAnalysisCanvas(analysisCanvas.width, analysisCanvas.height);
+offCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+
+// Copiar al canvas principal solo si es necesario para visualización
+if (analysisCanvas !== offscreenAnalysisCanvas) {
+  analysisCtx.drawImage(offscreenAnalysisCanvas, 0, 0);
+}
                 imageDrawnThisFrame = true;
             }
         };
@@ -4716,11 +5222,8 @@ targetPoses = []; currentPose = null; smoothedPoses = [];
 }    
 
     function _ensureAudioContext() {
-        if (audioCtx) { evpAudioCtx = audioCtx; return audioCtx; }
-        if (!evpAudioCtx) { const AC = window.AudioContext || window.webkitAudioContext; evpAudioCtx = new AC({ latencyHint: 'interactive' }); audioCtx = evpAudioCtx; }
-        if (evpAudioCtx.state === 'suspended') evpAudioCtx.resume().catch(() => {});
-        return evpAudioCtx;
-    }
+  return getAudioContext();
+}
 
     async function _ensureContextRunning() {
         const ctx = audioCtx || evpAudioCtx; if (!ctx) return; let tries = 0;
@@ -5028,7 +5531,7 @@ async function toggleAudioScanner() {
     
             // 7. Asegurar que el AudioContext esté corriendo (doble verificación para móviles)
         await _ensureContextRunning();
-        if (audioCtx.state === 'suspended') {
+        if (getAudioContext() && audioCtx.state === 'suspended') {
             await audioCtx.resume().catch(() => {});
         }
         
@@ -5306,15 +5809,19 @@ const visualBins = _deviceCores <= 4
 // ===== TEXTO DEL USUARIO (LIVE) - AZUL/CYAN =====
 if (window._liveUserText && Date.now() - window._liveUserLastUpdate < 5000) {
     const isPortrait = h > w;
-    const userTextFS = isPortrait ? 18 : 20;
+    let userTextFS = isPortrait ? 18 : 20;
     
-    // 🔒 LIMITAR PALABRAS SEGÚN ORIENTACIÓN
+    // 🔒 LIMITAR PALABRAS SEGÚN ORIENTACIÓN (HORIZONTAL: aprovecha el espacio vacío)
     let displayText = window._liveUserText;
     const palabras = displayText.split(/\s+/).filter(p => p.length > 0);
-    const maxPalabras = isPortrait ? 3 : 4;  // Vertical: 3, Horizontal: 4
-    
+    const maxPalabras = isPortrait ? 3 : 12; // 🔒 Antes 4 → ahora 12 en horizontal
     if (palabras.length > maxPalabras) {
         displayText = palabras.slice(0, maxPalabras).join(' ') + '...';
+    }
+    
+    // 🔒 HORIZONTAL: si la frase es larga, reducir fuente dinámicamente para que no se salga
+    if (!isPortrait && displayText.length > 40) {
+        userTextFS = Math.max(14, 20 - Math.floor((displayText.length - 40) / 3));
     }
     
     c.save();
@@ -5322,15 +5829,15 @@ if (window._liveUserText && Date.now() - window._liveUserLastUpdate < 5000) {
     c.textBaseline = 'middle';
     c.font = `bold ${userTextFS}px 'Share Tech Mono', monospace`;
     
-    // 🔒 POSICIÓN RELATIVA AL GRÁFICO
+    // 🔒 POSICIÓN: ambas orientaciones pegadas arriba de la onda
     let userTextY;
     if (isPortrait) {
         userTextY = bottomY - waveHeight - 15;
     } else {
-        userTextY = bottomY - waveHeight - 10;
+        // 🔒 HORIZONTAL: bajado del 45% → justo sobre la gráfica de onda
+        userTextY = bottomY - waveHeight - (25 * screenScale);
     }
-    
-    const userTextX = w / 2;
+    const userTextX = w / 2; // ⚠️ CRÍTICO: Esta línea debe existir para que no falle
     
     c.shadowColor = 'rgba(0,0,0,0.95)';
     c.shadowBlur = 8;
@@ -5389,11 +5896,13 @@ if (lastSpokenText) {
         }
         
 // 🔒 POSICIÓN: Centro del texto EVP - AJUSTABLE con evpOffset
-const evpOffset = isPortrait ? 35 : 55;  // ← Vertical: 35, Horizontal: 55 (más abajo)
+const evpOffset = isPortrait ? 35 : 55;
 const evpCenterY = bottomY - waveHeight + evpOffset;
 const evpY = evpCenterY - (reqH / 2);
-    }
-    c.restore();
+// 🔒 DIBUJAR EL TEXTO EVP EN PANTALLA
+c.drawImage(tCanv, (w - reqW) / 2, evpY);
+}
+c.restore();
 }
 
     // Lógica de trigger EVP (sin cambios)
@@ -5511,8 +6020,11 @@ c.restore(); c.filter = 'none'; c.globalAlpha = 1;
 }
 
 // ── 1) Buffers optimizados: 25% menos memoria en gama baja ──
-const BH = _deviceCores <= 4 ? 48 : 64;  
-const BW = Math.max(24, Math.min(84, Math.round(BH * width / height)));
+const BH = _deviceCores <= 4 ? 48 : 64;
+// 🔒 FIX ORIENTACIÓN (aplastado en horizontal): la proporción del buffer DEBE
+// coincidir con la de la pantalla. El tope anterior (84) deformaba el ratio en
+// landscape y estiraba la silueta ~36%. 192 cubre hasta pantallas 3:1.
+const BW = Math.max(24, Math.min(192, Math.round(BH * width / height)));
     if (lfxMaskC.width !== BW || lfxMaskC.height !== BH) {
         [lfxMaskC, lfxReliefC, lfxTintC, lfxRimC].forEach(cv => { cv.width = BW; cv.height = BH; });
         lfxLum = null; lfxLumPrev = null;
@@ -5601,7 +6113,6 @@ LFX.topY += (topY/BH - LFX.topY) * 0.2;
 LFX.personH += ((botY-topY)/BH - LFX.personH) * 0.2;
 LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX) * 0.2;
 LFX.footY += (botY/BH - LFX.footY) * 0.2;
-            LFX.footY += (botY/BH - LFX.footY)*0.2;
             LFX.hasFeet = footN >= 8 && botY < BH - 2;
         } else { LFX.coverage += (coverage - LFX.coverage)*0.2; LFX.hasFeet = false; }
         LFX.hasPerson = hasPerson;
@@ -5762,7 +6273,6 @@ for (let ox = -1; ox <= 1; ox++) {
     c.strokeStyle = 'rgba(255,220,150,0.5)'; c.beginPath(); c.moveTo(curX, gy0); c.lineTo(curX, gy0+gh); c.stroke();
     c.restore();
 }
-
 
     function initScanlines(w, h) {
          if(scanlineCanvas && scanlineCanvas.width === w) return;
@@ -6561,7 +7071,8 @@ composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
   else requestAnimationFrame(renderLoop);
   // 🔒 FORZAR GC CADA 60 FRAMES EN GAMA BAJA
 if (frameCount % 60 === 0 && _deviceCores <= 4) {
-    if (window.gc) window.gc();
+    // 🔒 window.gc solo existe con --js-flags="--expose-gc" (desarrollo).
+// En producción es código muerto. Se elimina para evitar confusión.
 }
 }
 
@@ -6721,29 +7232,43 @@ if (DOM_CACHE.micStat) { DOM_CACHE.micStat.innerText = "MIC: OFFLINE"; DOM_CACHE
 if (window.updateAudioScanVisibility) updateAudioScanVisibility();
 const vW = el.video.videoWidth || 0, vH = el.video.videoHeight || 0;
 if (DOM_CACHE.res) DOM_CACHE.res.innerText = `${vW}x${vH}`;
-if (DOM_CACHE.fps) DOM_CACHE.fps.innerText = `${currentFps} FPS`;
-if (DOM_CACHE.sig) DOM_CACHE.sig.className = `signal-bars signal-level-${signal}`;
-let telemetryColor = "text-gray-400";
-if (hasStudio) {
-telemetryColor = signal >= 3 ? "text-green-400" : "text-yellow-400";
+// ===== FASE 2: BATCH DOM UPDATES (reduce reflows) =====
+const pendingDOMUpdates = [];
+
+if (currentFps !== lastTelemetryValues.fps || Math.abs(window.motionLevel - lastTelemetryValues.motionLevel) > 0.1) {
+  if (DOM_CACHE.fps) pendingDOMUpdates.push(() => DOM_CACHE.fps.innerText = `${currentFps} FPS`);
+  if (DOM_CACHE.res) pendingDOMUpdates.push(() => DOM_CACHE.res.innerText = `${vW}x${vH}`);
 }
-const hasChanges = (
-Math.abs(currentFps - lastTelemetryValues.fps) > 5 ||
-Math.abs(window.motionLevel - lastTelemetryValues.motionLevel) > 0.01 ||
-Math.abs(cumulativeEVPEnergy - lastTelemetryValues.audioEnergy) > 5
-);
+
+if (Math.abs(cumulativeEVPEnergy - lastTelemetryValues.audioEnergy) > 5) {
+  if (DOM_CACHE.audioEnergy) pendingDOMUpdates.push(() => DOM_CACHE.audioEnergy.innerText = `${Math.round(cumulativeEVPEnergy)}%`);
+}
+
 if (hasChanges) {
-showTelemetry();
-lastTelemetryValues = { fps: currentFps, motionLevel: window.motionLevel, audioEnergy: cumulativeEVPEnergy };
+  showTelemetry();
+  lastTelemetryValues = { fps: currentFps, motionLevel: window.motionLevel, audioEnergy: cumulativeEVPEnergy };
 }
+
 if (DOM_CACHE.statTxt) {
-DOM_CACHE.statTxt.className = `${telemetryColor} font-bold font-mono`;
-DOM_CACHE.statTxt.innerText = hasStudio ? "ONLINE (AGORA)" : "PREVIEW";
+  pendingDOMUpdates.push(() => {
+    DOM_CACHE.statTxt.className = `${telemetryColor} font-bold font-mono`;
+    DOM_CACHE.statTxt.innerText = hasStudio ? "ONLINE (AGORA)" : "PREVIEW";
+  });
 }
+
 if (DOM_CACHE.statDot) {
-DOM_CACHE.statDot.className = hasStudio
-? `w-2 h-2 rounded-full ${signal >= 3 ? 'bg-green-500' : 'bg-yellow-500'} shadow-[0_0_10px_lime]`
-: "w-2 h-2 rounded-full bg-gray-600";
+  pendingDOMUpdates.push(() => {
+    DOM_CACHE.statDot.className = hasStudio
+      ? `w-2 h-2 rounded-full ${signal >= 3 ? 'bg-green-500' : 'bg-yellow-500'} shadow-[0_0_10px_lime]`
+      : "w-2 h-2 rounded-full bg-gray-600";
+  });
+}
+
+// Ejecutar todas las actualizaciones en un solo frame
+if (pendingDOMUpdates.length > 0) {
+  requestAnimationFrame(() => {
+    pendingDOMUpdates.forEach(fn => fn());
+  });
 }
 if (DOM_CACHE.tally) {
 DOM_CACHE.tally.className = hasStudio ? "online" : "preview";
@@ -6946,6 +7471,44 @@ else document.body.classList.remove('lidar-fx-active');
     function stopScanningEffect() { clearInterval(scanInterval); const overlay = document.getElementById('ai-scan-overlay'); overlay.style.display = 'none'; scanBoxPool.forEach(box => box.style.display = 'none'); canvasScanBoxes = []; }
 
 
+// ===== FASE 1: COMPRESIÓN ADAPTATIVA DE IMÁGENES PARA IA =====
+function compressImageForAI(sourceCanvas, maxWidth = 640, quality = 0.7) {
+  // Ajustar calidad según conexión
+  if (OBR_NETWORK.isSlowConnection()) {
+    maxWidth = 480;
+    quality = 0.5;
+  } else if (OBR_NETWORK.isMediumConnection()) {
+    maxWidth = 560;
+    quality = 0.6;
+  }
+  
+  const ratio = sourceCanvas.height / sourceCanvas.width;
+  const newHeight = Math.round(maxWidth * ratio);
+  
+  // Crear canvas temporal más pequeño
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = maxWidth;
+  tempCanvas.height = newHeight;
+  
+  const ctx = tempCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'medium';
+  
+  // Dibujar escalado
+  ctx.drawImage(sourceCanvas, 0, 0, maxWidth, newHeight);
+  
+  // Comprimir a JPEG
+  const dataURL = tempCanvas.toDataURL('image/jpeg', quality);
+  
+  // Limpiar canvas temporal
+  tempCanvas.width = 0;
+  tempCanvas.height = 0;
+  
+  console.log('[AI IMG] Comprimido:', sourceCanvas.width + 'x' + sourceCanvas.height, '→', maxWidth + 'x' + newHeight, '| Calidad:', quality);
+  
+  return dataURL;
+}
+
 // 🔒 Dibuja la fuente (video crudo o canvas GL procesado) en el snapshot, en COVER (sin aplastar)
 function fillAiSnapshot(destCtx, dw, dh) {
   const src = (OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
@@ -6978,25 +7541,20 @@ function getSafeGeminiVisionModel() {
 
 
     async function triggerPareidolia() {
-    const video = el.video;
-    if (!AI_API_KEY) return;
-    if (isAIProcessing || isTtsPlaying) return;
-    
-    const now = Date.now();
-    if (now - lastPareidoliaCall < 12000) return;
-    lastPareidoliaCall = now;
-    
-    isAIProcessing = true;
-    currentAiText = "";
-    currentAiImage = null;
-    currentAiImgEl = null;
-    window._aiImageCache = null;
-    startScanningEffect();
-    
-    let pendingAiImgEl = null;
-    let pendingAiImageSrc = null;
-    
-    if (!fillAiSnapshot(aiSnapCtx, 320, 320)) return; // 🔒 frame ya nítido/procesado y sin deformar
+const video = el.video;
+if (!AI_API_KEY) return;
+if (isAIProcessing || isTtsPlaying) return;
+const now = Date.now();
+if (now - lastPareidoliaCall < 12000) return;
+lastPareidoliaCall = now;
+startScanningEffect();
+let pendingAiImgEl = null;
+let pendingAiImageSrc = null;
+if (!fillAiSnapshot(aiSnapCtx, 320, 320)) {
+isAIProcessing = false;
+stopScanningEffect();
+return;
+}
     aiSnapCanvas.toBlob((blob) => {
         if (blob) {
             const url = URL.createObjectURL(blob);
@@ -7008,7 +7566,7 @@ function getSafeGeminiVisionModel() {
         }
     }, 'image/jpeg', 0.8);
     
-    const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+    const base64 = aiSnapCanvas.toDataURL('image/jpeg', 0.85).split(',')[1]; // 🔒 Alta calidad para IA
     
 
 // PROMPTS PROGRESIVOS DE SENSIBILIDAD PARANORMAL (FORZADO EN ESPAÑOL)
@@ -7276,212 +7834,7 @@ if (!hasElevenLabs && !hasVoiceRSS) {
         checkAndDeactivateAudioScan();
     }
 
-    async function validateAndSaveKey() {
-    const input = document.getElementById('api-key-internal');
-    const btn = document.getElementById('btn-validate-api');
-    const status = document.getElementById('api-status-msg');
-    const k = input.value.trim();
     
-    if(!k) { 
-        status.innerText = "❌ CAMPO VACIO"; 
-        status.style.color = "red"; 
-        return; 
-    }
-    
-    // 🔒 CRÍTICO: Detener el reinicio forzado de 20s para que no interrumpa la validación
-    clearTimeout(loadingTimer);
-    
-    input.disabled = true; 
-    btn.disabled = true; 
-    
-    // 🔒 OFFLINE: Detectar si no hay conexión antes de intentar validar
-    if (!navigator.onLine) {
-        status.innerText = "📴 SIN CONEXIÓN — VALIDACIÓN OMITIDA";
-        status.style.color = "#ffaa00";
-        input.disabled = false;
-        btn.disabled = false;
-        return;
-    }
-    
-    for(const step of ["CONECTANDO...", "IDENTIFICANDO...", "VERIFICANDO..."]) { 
-        status.innerText = step; 
-        status.style.color = "#ffaa00";
-        await new Promise(r => setTimeout(r, 400)); 
-    }
-    
-    let provider = k.startsWith('gsk_') ? 'groq' : k.startsWith('sk_') ? 'elevenlabs' : 'gemini'; 
-    let workingModel = null;
-
-    if (provider === 'elevenlabs') {
-        try {
-            const ac = new AbortController();
-            const timeout = setTimeout(() => ac.abort(), 5000); // 🔒 Timeout 5s
-            const r = await fetch('https://api.elevenlabs.io/v1/user', { 
-                headers: { 'xi-api-key': k },
-                signal: ac.signal 
-            }); 
-            clearTimeout(timeout);
-            
-            if (r.ok) { 
-                workingModel = 'eleven_multilingual_v2'; 
-                localStorage.setItem('obr_el_key', k); 
-                status.innerText = '✅ ELEVENLABS OK'; 
-                status.style.color = '#00ff41'; 
-            } else { 
-                status.innerText = '❌ ELEVENLABS: KEY INVÁLIDA'; 
-                status.style.color = 'red'; 
-            } 
-        } catch(e) { 
-            const isTimeout = e.name === 'AbortError';
-            status.innerText = isTimeout ? '⚠️ ELEVENLABS: TIMEOUT (5s)' : '❌ ELEVENLABS: ERROR RED'; 
-            status.style.color = 'red'; 
-        } 
-        input.disabled = false; 
-        btn.disabled = false; 
-        return;
-    }
-
-    if (provider === 'groq') {
-        try {
-const ac = new AbortController();
-const t = setTimeout(() => ac.abort(), 3000); // 🔒 Timeout 3s para offline
-const response = await fetch(`https://api.groq.com/openai/v1/models`, { 
-    method: 'GET', 
-    headers: { 'Authorization': `Bearer ${k}` },
-    signal: ac.signal 
-});
-clearTimeout(t);
-if (!response.ok) throw new Error("Key inválida");
-const data = await response.json();
-            
-            // 🔒 CRÍTICO: Filtrar STRICTAMENTE solo modelos que tengan 'vision' en el nombre
-            let visionModels = data.data.filter(m => m.id.includes('vision'));
-            
-            // Ordenar alfabéticamente inverso para priorizar los más nuevos/potentes (ej. 90b antes que 11b)
-            visionModels.sort((a, b) => b.id.localeCompare(a.id));
-            
-            if (visionModels.length === 0) {
-                throw new Error("No se encontraron modelos de visión en tu cuenta");
-            }
-
-            status.innerText = "⏳ PROBANDO VELOCIDAD DE RESPUESTA...";
-            let bestModel = null;
-            let fastestTime = Infinity;
-
-            // Probar los 3 modelos más nuevos simultáneamente con "hola"
-            const candidates = visionModels.slice(0, 3);
-            const tests = candidates.map(async (m) => {
-                const start = performance.now();
-                try {
-                    const ac = new AbortController();
-                    const timeout = setTimeout(() => ac.abort(), 6000);
-                    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${k}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model: m.id, messages: [{ role: "user", content: "hola" }], max_tokens: 5 }),
-                        signal: ac.signal
-                    });
-                    clearTimeout(timeout);
-                    if (resp.ok) return { model: m.id, time: performance.now() - start };
-                } catch (e) { return null; }
-                return null;
-            });
-
-            const results = await Promise.all(tests);
-            const validResults = results.filter(r => r !== null);
-            
-            if (validResults.length > 0) {
-                validResults.sort((a, b) => a.time - b.time);
-                bestModel = validResults[0].model;
-                fastestTime = validResults[0].time;
-            } else {
-                // Fallback seguro: si la prueba de chat falla, usamos el primero de la lista de visión
-                bestModel = visionModels[0].id;
-            }
-
-            if (bestModel) {
-                workingModel = bestModel;
-                status.innerText = `✅ GROQ OK (${bestModel} — ${Math.round(fastestTime === Infinity ? 0 : fastestTime)}ms)`;
-                status.style.color = "#00ff41";
-            } else {
-                throw new Error("Fallo en prueba de chat");
-            }
-        } catch(e) {
-            const isTimeout = e.name === 'AbortError';
-            status.innerText = isTimeout ? `⚠️ GROQ: TIMEOUT` : `❌ GROQ: ${e.message}`;
-            status.style.color = 'red';
-            input.disabled = false;
-            btn.disabled = false;
-            return;
-        }
-    } else {
-        // GEMINI
-        status.innerText = "⏳ PROBANDO VELOCIDAD DE MODELOS GEMINI...";
-        const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]; 
-        let bestModel = null;
-        let fastestTime = Infinity;
-
-        for (const model of modelsToTry) { 
-            try { 
-                const start = performance.now();
-                const ac = new AbortController();
-                const timeout = setTimeout(() => ac.abort(), 6000); // 🔒 Timeout 6s por modelo
-                
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`, { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "hola" }] }] }),
-                    signal: ac.signal
-                }); 
-                clearTimeout(timeout);
-                
-                const timeTaken = performance.now() - start;
-                if(response.ok) { 
-                    if (timeTaken < fastestTime) {
-                        fastestTime = timeTaken;
-                        bestModel = model;
-                    }
-                } 
-            } catch(e) {
-                // 🔒 Silencioso: continuar con el siguiente modelo
-                _warn(`[API] Modelo ${model} falló:`, e.message);
-            } 
-        }
-
-        if (bestModel) {
-            workingModel = bestModel;
-            status.innerText = `✅ GEMINI OK (${bestModel} — ${Math.round(fastestTime)}ms)`;
-            status.style.color = "#00ff41";
-        } else {
-            status.innerText = "❌ GEMINI: NINGÚN MODELO RESPONDIÓ";
-            status.style.color = "red";
-        }
-    }
-
-    if(workingModel) { 
-        status.innerText = `✅ ACTIVA (${provider.toUpperCase()} - ${workingModel.split('-')[0]})`; 
-        status.style.color = "#00ff41"; 
-        
-        // Actualizar variables globales que YA usa tu PWA en triggerPareidolia y fetchBackgroundAIContext
-        AI_API_KEY = k; 
-        CURRENT_AI_MODEL = workingModel; 
-        CURRENT_AI_PROVIDER = provider; 
-        
-        state.apiKey = k; 
-        state.aiModel = workingModel; 
-        state.aiProvider = provider; 
-        
-        localStorage.setItem('obr_ai_key', k); 
-        localStorage.setItem('obr_ai_model', workingModel); 
-        localStorage.setItem('obr_ai_provider', provider); 
-    } else { 
-        status.innerText = "❌ ERROR: LLAVE INVÁLIDA O RED"; 
-        status.style.color = "red"; 
-    }
-    
-    input.disabled = false; 
-    btn.disabled = false;
-}
 
 
     // ==========================================================
@@ -7791,65 +8144,136 @@ return { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL };
 }
 
 // Función unificada de llamada a IA con fallback automático
+// 🔒 RECUPERACIÓN DE MODELO GROQ: busca uno vision disponible si el actual fue retirado
+async function refreshGroqVisionModel() {
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/models', { 
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` } 
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const ids = (data.data || []).map(m => m.id);
+    
+    // Prioridades: modelos vision conocidos → cualquier modelo con "vision" o "-vl"
+    const prefs = [
+      'llama-3.2-90b-vision', 'llama-3.2-11b-vision', 
+      'qwen2.5-vl', 'qwen-2.5-vl', 'llama-4', 'scout', 
+      'pixtral', 'gemma', 'vision', '-vl'
+    ];
+    
+    for (const p of prefs) {
+      const match = ids.find(id => id.toLowerCase().includes(p.toLowerCase()));
+      if (match) {
+        GROQ_MODEL = match;
+        CURRENT_AI_MODEL = match;
+        localStorage.setItem('obr_groq_model', match);
+        localStorage.setItem('obr_ai_model', match);
+        console.log('[AI] ✅ Modelo Groq renovado:', match);
+        return match;
+      }
+    }
+    console.warn('[AI] No se encontró modelo vision disponible en Groq');
+  } catch (e) { 
+    _warn('[AI] refreshGroqVisionModel falló:', e.message); 
+  }
+  return null;
+}
+
+// Función unificada de llamada a IA con fallback automático
 async function callAIWithFallback(promptBase64, promptText, maxTokens = 150, temperature = 0.3) {
-const primary = getActiveAIConfig();
-if (!primary) throw new Error("No hay APIs configuradas");
-const secondary = (AI_MODE === 'auto') ?
-(primary.provider === 'gemini' && GROQ_API_KEY ? { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL } :
-primary.provider === 'groq' && GEMINI_API_KEY ? { provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL } : null)
-: null;
-for (const cfg of [primary, secondary].filter(Boolean)) {
-try {
-const result = await callSingleAI(cfg, promptBase64, promptText, maxTokens, temperature);
-if (result !== null) {
-lastApiUsed = cfg.provider;
-return result;
-}
-} catch(e) { _warn(`[AI] ${cfg.provider} falló:`, e.message); }
-}
-throw new Error("Todas las APIs fallaron");
+  const primary = getActiveAIConfig();
+  if (!primary) throw new Error("No hay APIs configuradas");
+  const secondary = (AI_MODE === 'auto') ?
+    (primary.provider === 'gemini' && GROQ_API_KEY ? { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL } :
+     primary.provider === 'groq' && GEMINI_API_KEY ? { provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL } : null)
+    : null;
+  
+  for (const cfg of [primary, secondary].filter(Boolean)) {
+    try {
+      const result = await callSingleAI(cfg, promptBase64, promptText, maxTokens, temperature);
+      if (result !== null) {
+        lastApiUsed = cfg.provider;
+        return result;
+      }
+    } catch(e) { 
+      _warn(`[AI] ${cfg.provider} falló:`, e.message);
+      
+      // 🔒 RECUPERACIÓN: si Groq dice que el modelo no existe/fue retirado, renovar y reintentar
+      if (cfg.provider === 'groq' && /404|decommissioned|not found|does not exist|no model|model_has_been|was deleted/i.test(e.message)) {
+        const newModel = await refreshGroqVisionModel();
+        if (newModel) {
+          try {
+            const retry = await callSingleAI(
+              { provider: 'groq', key: GROQ_API_KEY, model: newModel }, 
+              promptBase64, promptText, maxTokens, temperature
+            );
+            if (retry !== null) { 
+              lastApiUsed = 'groq'; 
+              return retry; 
+            }
+          } catch (e2) { 
+            _warn('[AI] Groq retry falló:', e2.message); 
+          }
+        }
+      }
+    }
+  }
+  throw new Error("Todas las APIs fallaron");
 }
 
 async function callSingleAI(cfg, promptBase64, promptText, maxTokens, temperature) {
-const ac = new AbortController();
-const t = setTimeout(() => ac.abort(), 12000);
-try {
-let resp, data;
-if (cfg.provider === 'groq') {
-resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-method: 'POST',
-headers: { 'Authorization': `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
-body: JSON.stringify({
-model: cfg.model,
-messages: [
-{ role: "system", content: "Responde ÚNICAMENTE en español. Sin razonamiento, sin explicaciones, sin etiquetas. Solo texto plano." },
-{ role: "user", content: promptBase64 ?
-[{ type: "text", text: promptText }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${promptBase64}` } }] :
-promptText
-}
-],
-max_tokens: maxTokens, temperature: temperature
-}), signal: ac.signal
-});
-clearTimeout(t);
-if (!resp.ok) return null;
-data = await resp.json();
-return data.choices?.[0]?.message?.content || null;
-} else {
-// Gemini
-const body = promptBase64 ?
-{ contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: "image/jpeg", data: promptBase64 } }] }] } :
-{ contents: [{ parts: [{ text: promptText }] }] };
-resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
-method: 'POST', headers: {'Content-Type': 'application/json'},
-body: JSON.stringify(body), signal: ac.signal
-});
-clearTimeout(t);
-if (!resp.ok) return null;
-data = await resp.json();
-return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
-}
-} catch(e) { clearTimeout(t); throw e; }
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 12000);
+  try {
+    let resp, data;
+    if (cfg.provider === 'groq') {
+      resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: cfg.model,
+          messages: [
+            { role: "system", content: "Responde ÚNICAMENTE en español. Sin razonamiento, sin explicaciones, sin etiquetas. Solo texto plano." },
+            { role: "user", content: promptBase64 ?
+              [{ type: "text", text: promptText }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${promptBase64}` } }] :
+              promptText
+            }
+          ],
+          max_tokens: maxTokens, temperature: temperature
+        }), signal: ac.signal
+      });
+      clearTimeout(t);
+      
+      if (!resp.ok) {
+        const raw = await resp.text();
+        throw new Error(`Groq HTTP ${resp.status} :: ${raw.substring(0, 140)}`);
+      }
+      
+      data = await resp.json();
+      return data.choices?.[0]?.message?.content || null;
+    } else {
+      // Gemini
+      const body = promptBase64 ?
+        { contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: "image/jpeg", data: promptBase64 } }] }] } :
+        { contents: [{ parts: [{ text: promptText }] }] };
+      resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.key}`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body), signal: ac.signal
+      });
+      clearTimeout(t);
+      
+      if (!resp.ok) {
+        const raw = await resp.text();
+        throw new Error(`Gemini HTTP ${resp.status} :: ${raw.substring(0, 140)}`);
+      }
+      
+      data = await resp.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    }
+  } catch(e) { 
+    clearTimeout(t); 
+    throw e; 
+  }
 }
 
     function saveSettings() { 
@@ -8083,7 +8507,6 @@ async function refreshTTSCredits() {
     window.togglePareidolia = togglePareidolia;
     window.toggleAudioScanner = toggleAudioScanner;
     window.toggleCleanUI = toggleCleanUI;
-    window.validateAndSaveKey = validateAndSaveKey;
     window.openConnect = openConnect;
     window.connectToStudio = connectToStudio;
     window.startHybridTransmission = connectToStudio;
@@ -8284,7 +8707,8 @@ if (mediaRecorder && mediaRecorder._canvasStream) {
 mediaRecorder._canvasStream.getTracks().forEach(track => track.stop());
 mediaRecorder._canvasStream = null;
 }
-if (window.gc) window.gc();
+// 🔒 window.gc solo existe con --js-flags="--expose-gc" (desarrollo).
+// En producción es código muerto. Se elimina para evitar confusión.
 }
 
 // 🎙️ Mezcla dedicada para grabación: voz interna REDUCIDA + micro completo
@@ -8383,13 +8807,16 @@ showToast(`❌ REC IMPOSIBLE ${RW}×${RH}: ${err && (err.message || err.name) ||
 
 const attempt = (i) => {
 const cfg = cfgs[i];
-const bits = Math.max(8_000_000, Math.round(20_000_000 * (RW * RH) / (3840 * 2160) * (cfg.fps / 30)));
+// 🔒 FASE 3: bitrate según tier del dispositivo (misma resolución 1080p60 siempre)
+// 12Mbps en 1080p60 sigue siendo visualmente sin pérdida; evita calor y caídas de frames
+const tierBits = { high: 20_000_000, medium: 16_000_000, low: 12_000_000 }[OBR_QUALITY.tier] || 16_000_000;
+const bits = Math.max(8_000_000, Math.round(tierBits * (RW * RH) / (3840 * 2160) * (cfg.fps / 30)));
 recordedChunks = [];
 try {
 mediaRecorder = new MediaRecorder(combinedStream, {
 mimeType: cfg.mime || undefined,
 videoBitsPerSecond: bits,
-audioBitsPerSecond: 192_000
+audioBitsPerSecond: 128000
 });
 } catch (e) {
 console.error('[REC] ctor falló:', cfg.mime || 'default', e);
@@ -8635,24 +9062,15 @@ function initGLEngine() {
         const master = document.getElementById('master-canvas');
         master.parentNode.insertBefore(canvas, master);
         // 🔒 FORZAR ALTO RENDIMIENTO: Usa la GPU potente del móvil
-const gl = canvas.getContext('webgl', { 
-    alpha: true, 
-    premultipliedAlpha: false,
-    powerPreference: "high-performance", // 🔒 CLAVE: Fuerza el uso de la GPU completa
-    antialias: false, // 🔒 Desactivar antialiasing ahorra mucha GPU en móviles
-    preserveDrawingBuffer: true // 🔒 NECESARIO para poder capturar/foto del canvas
-});
+let gl = canvas.getContext('webgl', {
+  alpha: true, premultipliedAlpha: false,
+  powerPreference: "high-performance",
+  antialias: false, preserveDrawingBuffer: true
+}) || canvas.getContext('experimental-webgl');
 if (!gl) {
-    console.error("WebGL no soportado o bloqueado");
-}
-        if (!gl) {
-_warn('[GL] WebGL2 no disponible, usando WebGL1');
-gl = canvas.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: true });
-}
-if (!gl) {
-_error('[GL] WebGL no disponible');
-showToast('⚠️ WebGL NO DISPONIBLE — MODO 2D', true);
-return;
+  _error('[GL] WebGL no disponible');
+  showToast('⚠️ WebGL NO DISPONIBLE — MODO 2D', true);
+  return false;
 }
         if (!gl) return false;
         const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); return sh; };
@@ -8775,23 +9193,30 @@ window.addEventListener('offline', () => { OBR_NET.online = false; applyOfflineM
 window.addEventListener('online', () => { probeConnectivity().then(ok => { OBR_NET.online = ok; applyOfflineMode(true); }); });
 setInterval(() => { if (!OBR_NET.forced) probeConnectivity().then(ok => { if (ok !== OBR_NET.online) { OBR_NET.online = ok; applyOfflineMode(true); } }); }, 60000);
 // 🔒 AUTO-UPDATE: detecta versión nueva del servidor y purga caché/SW viejos
+// ==========================================================
+// 3. VERIFICACIÓN DE VERSIÓN Y MODO OFFLINE SILENCIOSO
+// ==========================================================
 (function checkAppVersion() {
-if (!navigator.onLine) return;
-fetch('./index.html?nc=' + Date.now(), { cache: 'no-store' })
-.then(r => r.ok ? r.text() : '')
-.then(html => {
-const m = html.match(/ASSET_VERSION\s*=\s*['"](\d+)['"]/);
-if (m && String(ASSET_VERSION) !== m[1]) {
-caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => {
-if ('serviceWorker' in navigator) {
-navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))).then(() => location.reload());
-} else location.reload();
-});
-}
-})
-.catch(() => {});
+    if (!navigator.onLine) return;
+    fetch('./index.html?nc=' + Date.now(), { cache: 'no-store' })
+    .then(r => r.ok ? r.text() : '')
+    .then(html => {
+        const m = html.match(/ASSET_VERSION\s*=\s*['"](\d+)['"]/);
+        if (m && String(ASSET_VERSION) !== m[1]) {
+            caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => {
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))).then(() => location.reload());
+                } else {
+                    location.reload();
+                }
+            });
+        }
+    })
+    .catch(() => {}); // ✅ Silencioso: si falla, no rompe la app
 })();
-applyOfflineMode(true); // auto‑detección silenciosa al entrar
+
+// ✅ APLICAR MODO OFFLINE DE FORMA SILENCIOSA (true = sin toasts de error)
+applyOfflineMode(true); 
 
 </script>
 </body>
