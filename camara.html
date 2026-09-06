@@ -961,6 +961,35 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 /* Si quieres conservar la animación del zoom software, borra solo "transition" de la regla original de #zoom-container y deja esta línea sin transition */
 #master-canvas, #obr-gl-video { object-fit: fill !important; }
 
+
+/* ===== ✈️ SWITCH MODO AVIÓN (ONLINE gris / OFFLINE verde) ===== */
+#offline-container { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+#offline-container input { display: none; }
+.air-track {
+  width: 64px; height: 36px; border-radius: 999px;
+  background: #c9c9ce; position: relative;
+  transition: background .3s ease;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.25);
+}
+.air-knob {
+  position: absolute; top: 2px; left: 2px; width: 32px; height: 32px;
+  border-radius: 50%; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: left .3s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+.air-knob svg { width: 20px; height: 20px; }
+.ico-on { display: none; }
+/* Estado OFFLINE (checked) = imagen 2 */
+#offline-container input:checked + .air-track {
+  background: #2ecc5e;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.15), 0 0 12px rgba(46,204,94,.45);
+}
+#offline-container input:checked + .air-track .air-knob { left: 30px; }
+#offline-container input:checked + .air-track .ico-off { display: none; }
+#offline-container input:checked + .air-track .ico-on { display: block; }
+
+
     </style>
 </head>
 <body>
@@ -1119,15 +1148,38 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="openChatView()">💬 CHAT DEL DIRECTO</button>
     <label id="offline-container" title="Modo OFFLINE (oculta IA y ahorra batería)">
 <input type="checkbox" id="offline-switch-input" onchange="toggleOfflineMode(this.checked)">
-<span class="off-track"><span class="off-knob"></span></span>
-<span class="off-txt">ONLINE</span>
+<span class="air-track">
+<span class="air-knob">
+<svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true">
+<path transform="rotate(90 12 12)" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="#1f2937"/>
+<line x1="4" y1="4" x2="20" y2="20" stroke="#1f2937" stroke-width="2.2" stroke-linecap="round"/>
+</svg>
+<svg class="ico-on" viewBox="0 0 24 24" aria-hidden="true">
+<path transform="rotate(90 12 12)" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="#1f2937"/>
+</svg>
+</span>
+</span>
 </label>
 
-    <!-- BOTÓN FLOTANTE DE CONFIGURACIÓN (Abajo a la derecha) -->
-    <button onclick="document.getElementById('api-config-modal').classList.add('active')" class="absolute bottom-6 right-6 w-14 h-14 bg-black/60 border border-cyan-600 text-cyan-400 rounded-full flex items-center justify-center text-2xl hover:bg-cyan-900/40 hover:scale-110 transition-all shadow-[0_0_15px_rgba(0,255,255,0.2)] load-btn" title="Configurar APIs y Chat">
-      🔐
-    </button>
-  </div>
+<!-- BOTÓN FLOTANTE DE CONFIGURACIÓN (Abajo a la derecha) -->
+<button onclick="document.getElementById('api-config-modal').classList.add('active')" class="absolute bottom-6 right-6 w-14 h-14 bg-transparent rounded-lg flex items-center justify-center hover:bg-cyan-900/20 hover:scale-110 transition-all load-btn" title="Configurar APIs y Chat">
+<svg viewBox="0 0 64 64" style="width:36px;height:36px;filter:drop-shadow(0 0 8px rgba(0,180,255,0.8));" aria-hidden="true">
+<defs>
+<linearGradient id="obrLockGrad" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#4fc3f7"/>
+<stop offset="1" stop-color="#0288d1"/>
+</linearGradient>
+</defs>
+<path d="M22 30 V21 a10 10 0 0 1 20 0 V30" fill="none" stroke="#4fc3f7" stroke-width="5" stroke-linecap="round"/>
+<rect x="15" y="29" width="34" height="26" rx="5" fill="url(#obrLockGrad)"/>
+<circle cx="32" cy="40" r="4.5" fill="#083049"/>
+<rect x="30" y="42" width="4" height="8" rx="2" fill="#083049"/>
+<rect x="2" y="8" width="27" height="13" rx="6.5" fill="#ffffff"/>
+<circle cx="10" cy="14.5" r="2.2" fill="#29b6f6"/>
+<circle cx="16" cy="14.5" r="2.2" fill="#29b6f6"/>
+<circle cx="22" cy="14.5" r="2.2" fill="#29b6f6"/>
+</svg>
+</button>
 
   <!-- MODAL DE CONFIGURACIÓN DE APIs (Oculto por defecto, usa la clase .modal-bg existente) -->
   <div id="api-config-modal" class="modal-bg">
@@ -1361,7 +1413,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '15'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '23'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 (function applyGlobalVersion() {
   // 1. Título de la pestaña / app
@@ -4447,8 +4499,8 @@ const UI_HIDE_OPTIONS = [
     { key: 'hide-telemetry', label: 'TELEMETRÍA', icon: '📊', desc: 'FPS, resolución y señal' },
     { key: 'hide-settings-gear', label: 'BOTÓN CONFIGURACIONES', icon: '⚙️', desc: 'Engranaje invisible (sigue funcional)' },
     { key: 'hide-map', label: 'MAPA', icon: '🗺️', desc: 'Mini mapa GPS' },
-    { key: 'hide-hud-text', label: 'HUD TEXTO', icon: '📝', desc: 'Solo deja el logo OBR visible' }
-];
+    { key: 'hide-hud-text', label: 'HUD TEXTO', icon: '📝', desc: 'Solo deja el logo OBR visible' },
+{ key: 'hide-user-transcript', label: 'TRANSCRIPCIÓN USUARIO', icon: '🗣️', desc: 'Oculta tu texto en vivo' }];
 
 function loadUIHideSettings() {
     _log("[UI HIDE] Cargando configuraciones guardadas de ocultamiento...");
@@ -5807,7 +5859,7 @@ const visualBins = _deviceCores <= 4
     c.lineWidth = Math.max(1, screenScale * 1.5); 
     c.stroke();
 // ===== TEXTO DEL USUARIO (LIVE) - AZUL/CYAN =====
-if (window._liveUserText && Date.now() - window._liveUserLastUpdate < 5000) {
+if (window._liveUserText && Date.now() - window._liveUserLastUpdate < 5000 && !document.body.classList.contains('hide-user-transcript')) {
     const isPortrait = h > w;
     let userTextFS = isPortrait ? 18 : 20;
     
@@ -9176,10 +9228,14 @@ try { if (agoraClient) { agoraClient.leave(); agoraClient = null; } } catch (e) 
 try { if (rtmClient) { rtmClient.logout(); rtmClient = null; } } catch (e) {}
 if (!silent) showToast('📴 MODO OFFLINE — IA VISION y AUDIO SCAN desactivados', true);
 clearTimeout(_hideOfflineSwitchTimer);
-_hideOfflineSwitchTimer = setTimeout(() => { if (cont) cont.classList.add('hidden'); }, 600);
+// 🔒 Nuevo switch avión: el estado verde queda visible (ya no se oculta)
+const offTxt = document.querySelector('#offline-container .off-txt');
+if (offTxt) offTxt.textContent = 'OFFLINE';
 } else {
 clearTimeout(_hideOfflineSwitchTimer);
 if (cont) cont.classList.remove('hidden');
+const offTxtOn = document.querySelector('#offline-container .off-txt');
+if (offTxtOn) offTxtOn.textContent = 'ONLINE';
 if (!silent) showToast('🌐 CONEXIÓN RESTABLECIDA', false);
 }
 if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
