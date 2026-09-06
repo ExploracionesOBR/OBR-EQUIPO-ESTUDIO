@@ -989,6 +989,25 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 #offline-container input:checked + .air-track .ico-off { display: none; }
 #offline-container input:checked + .air-track .ico-on { display: block; }
 
+/* ===== 📱 BOTÓN BARRAS DEL SISTEMA (gemelo del switch avión) ===== */
+.immersive-btn {
+  position: absolute; top: 12px; left: 12px; z-index: 60; /* 🔒 espejo del switch avión (arriba-izq) */
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 36px; border-radius: 999px;
+  background: #c9c9ce; color: #1f2937; border: none; cursor: pointer;
+  transition: background .3s ease, color .3s ease;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.25);
+}
+.immersive-btn svg { width: 20px; height: 20px; }
+.immersive-btn .fs-compress { display: none; }
+/* Estado "barras visibles" = verde, igual lenguaje visual que el avión */
+body.obr-no-immersive .immersive-btn {
+  background: #2ecc5e; color: #fff;
+  box-shadow: 0 0 12px rgba(46,204,94,.45);
+}
+body.obr-no-immersive .immersive-btn .fs-expand { display: none; }
+body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
+
 
     </style>
 </head>
@@ -1145,6 +1164,12 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
     
     <button id="main-cam-btn" class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">▶ INICIAR CÁMARA</button>
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
+    <button id="immersive-toggle-btn" onclick="toggleImmersiveMode()" class="immersive-btn" title="Mostrar/ocultar barra de estado y navegación">
+<svg viewBox="0 0 24 24" aria-hidden="true">
+<path class="fs-expand" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path class="fs-compress" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</button>    
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="openChatView()">💬 CHAT DEL DIRECTO</button>
     <label id="offline-container" title="Modo OFFLINE (oculta IA y ahorra batería)">
 <input type="checkbox" id="offline-switch-input" onchange="toggleOfflineMode(this.checked)">
@@ -1413,7 +1438,7 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '23'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '17'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 (function applyGlobalVersion() {
   // 1. Título de la pestaña / app
@@ -9245,6 +9270,48 @@ OBR_NET.forced = !!checked;
 applyOfflineMode(false);
 }
 window.toggleOfflineMode = toggleOfflineMode;
+
+// ===== 📱 MODO INMERSIVO — toggle visual de pantalla completa =====
+const OBR_IMMERSIVE = { enabled: true };
+
+// 🔒 CANDADO: ninguna llamada interna (init, orientación, etc.) podrá
+// re-activar fullscreen si el usuario lo desactivó. Sin esto, el botón
+// "pelearía" con el código existente que fuerza pantalla completa.
+(function patchFullscreen() {
+  const orig = Element.prototype.requestFullscreen;
+  if (orig) {
+    Element.prototype.requestFullscreen = function (...args) {
+      if (!OBR_IMMERSIVE.enabled) return Promise.resolve();
+      try { return orig.apply(this, args); } catch (e) { return Promise.reject(e); }
+    };
+  }
+  const webkit = Element.prototype.webkitRequestFullscreen;
+  if (webkit) {
+    Element.prototype.webkitRequestFullscreen = function (...args) {
+      if (!OBR_IMMERSIVE.enabled) return;
+      return webkit.apply(this, args);
+    };
+  }
+})();
+
+function toggleImmersiveMode() {
+  OBR_IMMERSIVE.enabled = !OBR_IMMERSIVE.enabled;
+  document.body.classList.toggle('obr-no-immersive', !OBR_IMMERSIVE.enabled);
+  if (OBR_IMMERSIVE.enabled) {
+    const p = document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : null;
+    if (p && p.catch) p.catch(() => {});
+    showToast('📺 PANTALLA COMPLETA ACTIVADA', false);
+  } else {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const p = document.exitFullscreen ? document.exitFullscreen() : null;
+      if (p && p.catch) p.catch(() => {});
+    }
+    showToast('📱 BARRAS DEL SISTEMA VISIBLES', false);
+  }
+  console.log('[UI] Modo inmersivo:', OBR_IMMERSIVE.enabled ? 'ON' : 'OFF');
+}
+window.toggleImmersiveMode = toggleImmersiveMode;
+
 window.addEventListener('offline', () => { OBR_NET.online = false; applyOfflineMode(true); });
 window.addEventListener('online', () => { probeConnectivity().then(ok => { OBR_NET.online = ok; applyOfflineMode(true); }); });
 setInterval(() => { if (!OBR_NET.forced) probeConnectivity().then(ok => { if (ok !== OBR_NET.online) { OBR_NET.online = ok; applyOfflineMode(true); } }); }, 60000);
