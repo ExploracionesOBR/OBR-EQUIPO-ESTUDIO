@@ -1425,7 +1425,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '18'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '20'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 (function applyGlobalVersion() {
   // 1. Título de la pestaña / app
@@ -3458,7 +3458,6 @@ function stopLocalSpeech() {
             return;
         }
 
-        const AC = window.AudioContext || window.webkitAudioContext;
         if (!getAudioContext()) return;
 
         audioCtx.onstatechange = () => {
@@ -6074,9 +6073,10 @@ if (hasSrc) {
 const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
 const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
 c.save(); c.globalAlpha = 0.5;
-c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)';
+if (isHighEnd) c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)'; // 🔒 solo gama alta
 c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
 c.restore(); c.filter = 'none'; c.globalAlpha = 1;
+if (!isHighEnd) { c.fillStyle = 'rgba(4,6,10,0.25)'; c.fillRect(0, 0, width, height); } // 🔒 atenuado barato
 }
 
 // ── 1) Buffers optimizados: 25% menos memoria en gama baja ──
@@ -6204,14 +6204,14 @@ for (let ox = -1; ox <= 1; ox++) {
         lfxRimX.globalCompositeOperation = 'source-over';
 
         c.save();
-        c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+        c.imageSmoothingEnabled = true; c.imageSmoothingQuality = isHighEnd ? 'high' : 'low'; // 🔒 'low' en gama baja: es un glow, no se nota
         c.globalCompositeOperation = 'screen';
         c.globalAlpha = 0.92; c.drawImage(lfxTintC, 0, 0, width, height);
         c.globalCompositeOperation = 'lighter';
         if (isHighEnd) { c.shadowColor = 'rgba(255,140,20,0.8)'; c.shadowBlur = 10; }
         c.globalAlpha = 0.8; c.drawImage(lfxRimC, 0, 0, width, height);
-        c.shadowBlur = 0;
-        c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height);
+c.shadowBlur = 0;
+if (isHighEnd) { c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height); } // 🔒 2ª pasada solo gama alta
         c.restore(); c.globalAlpha = 1;
 
         // Anillos (cian)
@@ -8631,12 +8631,15 @@ function applyPortraitStyles() {
     }
 }
 
-// Aplicar al cargar y en cada cambio
+// 🔒 FLUIDEZ: coalesce los eventos de resize en 1 solo frame (adiós jitter al rotar)
+let _apsRaf = 0;
+function applyPortraitStylesThrottled() {
+  if (_apsRaf) return;
+  _apsRaf = requestAnimationFrame(() => { _apsRaf = 0; applyPortraitStyles(); });
+}
 window.addEventListener('load', applyPortraitStyles);
-window.addEventListener('resize', applyPortraitStyles);
-window.addEventListener('orientationchange', () => {
-    setTimeout(applyPortraitStyles, 300);
-});
+window.addEventListener('resize', applyPortraitStylesThrottled);
+window.addEventListener('orientationchange', () => { setTimeout(applyPortraitStylesThrottled, 300); });
 
 // Forzar detección inicial
 setTimeout(applyPortraitStyles, 100);
