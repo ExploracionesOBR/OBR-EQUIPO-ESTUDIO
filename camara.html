@@ -409,7 +409,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 }
 
 /* En horizontal: grid de 2 columnas para UI hide */
-@media (orientation: landscape) and (min-width: 769px) {
+@media (orientation: landscape) and /* [F1] media roto neutralizado: el #menu-left que sigue queda global y cubre horizontal/PC */ {
     #ui-hide-grid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
@@ -485,31 +485,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
 }
 #menu-left .menu-label { display: none !important; }
 
-/* === MENÚ DERECHO: MÁS AL MARGEN === */
-/* === FILTROS: PARTE INFERIOR CENTRADA === */
-#menu-left {
-    position: fixed !important;
-    top: auto !important;
-    bottom: 15px !important;
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%) !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 8px !important;
-    z-index: 100 !important;
-    height: auto !important;
-    width: auto !important;
-    justify-content: center !important;
-    padding: 8px 12px !important;
-    background: transparent !important;
-}
-#menu-left .menu-btn {
-    width: 42px !important;
-    height: 42px !important;
-    font-size: 0.95rem !important;
-}
-#menu-left .menu-label { display: none !important; }
+/* [LIMPIEZA] bloque duplicado de #menu-left eliminado (la copia de arriba ya cubre vertical) */
 
 /* === MENÚ DERECHO: MÁS AL MARGEN === */
 #menu-right {
@@ -1009,6 +985,17 @@ body.obr-no-immersive .immersive-btn .fs-expand { display: none; }
 body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 
 
+/* ===== 🔒 OCULTAR SIEMPRE LOS NOMBRES DE FILTROS ===== */
+/* Aplica en PC, tablet y celular */
+#menu-left .menu-label,
+#menu-right .menu-label {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
     </style>
 </head>
 <body>
@@ -1438,7 +1425,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '17'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '18'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 (function applyGlobalVersion() {
   // 1. Título de la pestaña / app
@@ -4528,66 +4515,62 @@ const UI_HIDE_OPTIONS = [
 { key: 'hide-user-transcript', label: 'TRANSCRIPCIÓN USUARIO', icon: '🗣️', desc: 'Oculta tu texto en vivo' }];
 
 function loadUIHideSettings() {
-    _log("[UI HIDE] Cargando configuraciones guardadas de ocultamiento...");
-    UI_HIDE_OPTIONS.forEach(opt => {
-        const saved = localStorage.getItem('obr_' + opt.key);
-        if (saved === 'true') {
-            document.body.classList.add(opt.key);
-            _log(`[UI HIDE] Aplicado al iniciar: ${opt.key}`);
-        }
-    });
+  UI_HIDE_OPTIONS.forEach(opt => {
+    try {
+      const v = localStorage.getItem('obr_' + opt.key);
+      if (v === '1') document.body.classList.add(opt.key);
+    } catch(e) { /* silencio */ }
+  });
+  console.log('[UI-HIDE] Preferencias cargadas desde localStorage');
 }
 
 function toggleUIHideOption(key) {
-    // 1. Alternar la clase en el body
-    const isActive = document.body.classList.toggle(key);
-    
-    // 2. Depuración en consola para verificar que funciona
-    _log(`[UI HIDE] ${key} ahora está:`, isActive ? 'ACTIVO (oculto)' : 'INACTIVO (visible)');
-    _log('[UI HIDE] Clases actuales del body:', document.body.className);
-    
-    // 3. Guardar en localStorage
-    localStorage.setItem('obr_' + key, isActive ? 'true' : 'false');
-if (key === 'hide-map' && !isActive) lastMapCapture = 0; // 🔒 re-captura al volver a mostrar
-    
-    // 4. Actualizar el estilo visual del botón en el modal
-    updateUIHideButtons();
+  const body = document.body;
+  const isActive = body.classList.toggle(key);
+  try {
+    localStorage.setItem('obr_' + key, isActive ? '1' : '0');
+  } catch(e) { console.warn('[UI-HIDE] localStorage falló:', e); }
+  console.log('[UI-HIDE]', key, '→', isActive ? 'OCULTO' : 'VISIBLE');
+  try { updateUIHideButtons(); }
+  catch(err) { console.error('[UI-HIDE] updateUIHideButtons falló:', err); }
 }
 
 function updateUIHideButtons() {
-    UI_HIDE_OPTIONS.forEach(opt => {
-        const btn = document.getElementById('ui-hide-' + opt.key);
-        if (!btn) return;
-        const isActive = document.body.classList.contains(opt.key);
-        if (isActive) {
-            btn.classList.add('border-purple-500', 'text-purple-400', 'bg-purple-900/20');
-            btn.classList.remove('border-gray-700', 'text-gray-500');
-        } else {
-            btn.classList.remove('border-purple-500', 'text-purple-400', 'bg-purple-900/20');
-            btn.classList.add('border-gray-700', 'text-gray-500');
-        }
-    });
+  UI_HIDE_OPTIONS.forEach(opt => {
+    const btn = document.getElementById('ui-hide-' + opt.key);
+    if (!btn) return; // 🔒 blindaje: opción sin botón no debe tumbar openSettings
+    const isActive = document.body.classList.contains(opt.key);
+    if (isActive) {
+      btn.className = 'flex items-center gap-2 p-2 rounded border border-purple-500 bg-purple-900/30 text-purple-300 text-[10px] font-mono transition-all hover:border-purple-400 text-left';
+    } else {
+      btn.className = 'flex items-center gap-2 p-2 rounded border border-gray-700 text-gray-500 text-[10px] font-mono transition-all hover:border-purple-500 text-left';
+    }
+  });
 }
 
 function generateUIHideGrid() {
-    const grid = document.getElementById('ui-hide-grid');
-    if (!grid || grid.children.length > 0) return; // Ya generado
-    
-    UI_HIDE_OPTIONS.forEach(opt => {
-        const btn = document.createElement('button');
-        btn.id = 'ui-hide-' + opt.key;
-        btn.className = 'flex items-center gap-2 p-2 rounded border border-gray-700 text-gray-500 text-[10px] font-mono transition-all hover:border-purple-500';
-        btn.innerHTML = `
-            <span class="text-base">${opt.icon}</span>
-            <div class="flex-1 text-left">
-                <div class="font-bold uppercase tracking-wider">${opt.label}</div>
-                <div class="text-[8px] text-gray-600 mt-0.5">${opt.desc}</div>
-            </div>
-        `;
-        btn.onclick = () => toggleUIHideOption(opt.key);
-        grid.appendChild(btn);
-    });
-    updateUIHideButtons();
+  const grid = document.getElementById('ui-hide-grid');
+  if (!grid) {
+    console.error('[UI-HIDE] ❌ #ui-hide-grid no existe');
+    return;
+  }
+  grid.innerHTML = ''; // limpia antes de regenerar
+  UI_HIDE_OPTIONS.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.id = 'ui-hide-' + opt.key;
+    btn.type = 'button';
+    btn.className = 'flex items-center gap-2 p-2 rounded border border-gray-700 text-gray-500 text-[10px] font-mono transition-all hover:border-purple-500 text-left';
+    btn.innerHTML = `<span class="text-base flex-shrink-0">${opt.icon}</span><div class="flex-1 text-left min-w-0"><div class="font-bold uppercase tracking-wider truncate">${opt.label}</div><div class="text-[8px] text-gray-600 mt-0.5 truncate">${opt.desc}</div></div>`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      try { toggleUIHideOption(opt.key); }
+      catch(err) { console.error('[UI-HIDE] toggle falló en', opt.key, err); }
+    };
+    grid.appendChild(btn);
+  });
+  console.log('[UI-HIDE] ✅ Grid generado con', UI_HIDE_OPTIONS.length, 'opciones');
+  try { updateUIHideButtons(); }
+  catch(err) { console.error('[UI-HIDE] updateUIHideButtons falló:', err); }
 }
 // === FIN DE FUNCIONES UI ===
 
@@ -8260,10 +8243,11 @@ async function refreshGroqVisionModel() {
 async function callAIWithFallback(promptBase64, promptText, maxTokens = 150, temperature = 0.3) {
   const primary = getActiveAIConfig();
   if (!primary) throw new Error("No hay APIs configuradas");
-  const secondary = (AI_MODE === 'auto') ?
-    (primary.provider === 'gemini' && GROQ_API_KEY ? { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL } :
-     primary.provider === 'groq' && GEMINI_API_KEY ? { provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL } : null)
-    : null;
+  const secondary = (AI_MODE === 'auto')
+  ? (primary.provider === 'gemini' && GROQ_API_KEY ? { provider: 'groq', key: GROQ_API_KEY, model: GROQ_MODEL }
+     : primary.provider === 'groq' && GEMINI_API_KEY ? { provider: 'gemini', key: GEMINI_API_KEY, model: GEMINI_MODEL }
+     : null)
+  : null;
   
   for (const cfg of [primary, secondary].filter(Boolean)) {
     try {
@@ -8371,12 +8355,43 @@ if (sharpSlider) {
     }
 
 
-function openSettings() { 
-    updateTTSStatusUI(); 
-    initTTSModeUI(); 
-    loadTTSFilterPanel(); 
-    generateUIHideGrid(); // <-- Esta línea genera los botones granulares
-    document.getElementById('settings-modal').classList.add('active'); 
+function openSettings() {
+// 🔒 BLINDAJE: cada paso en su propio try/catch.
+// Si una sub-función truena, el modal ABRE IGUAL y la consola dice cuál fue.
+try { if (typeof updateTTSStatusUI === 'function') updateTTSStatusUI(); }
+catch(e) { console.error('[SETTINGS] falló updateTTSStatusUI:', e); }
+try { if (typeof initTTSModeUI === 'function') initTTSModeUI(); }
+catch(e) { console.error('[SETTINGS] falló initTTSModeUI:', e); }
+try { if (typeof loadTTSFilterPanel === 'function') loadTTSFilterPanel(); }
+catch(e) { console.error('[SETTINGS] falló loadTTSFilterPanel:', e); }
+try { if (typeof generateUIHideGrid === 'function') generateUIHideGrid(); }
+catch(e) { console.error('[SETTINGS] falló generateUIHideGrid:', e); }
+try { if (typeof updateUIHideButtons === 'function') updateUIHideButtons(); }
+catch(e) { console.error('[SETTINGS] falló updateUIHideButtons:', e); }
+const modal = document.getElementById('settings-modal');
+if (modal) {
+// 🔒 RESCATE 1: si el modal está atrapado en un contenedor oculto (ej. #loading),
+// lo colgamos directo del <body> para que nada lo pueda ocultar.
+let n = modal.parentElement, atrapado = false;
+while (n && n !== document.body) {
+const s = getComputedStyle(n);
+if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') { atrapado = true; break; }
+n = n.parentElement;
+}
+if (atrapado) {
+document.body.appendChild(modal);
+console.warn('[SETTINGS] ⚠️ Causa era contenedor oculto → modal re-colgado al <body>');
+}
+// 🔒 RESCATE 2: id duplicado (si existe un gemelo, lo reportamos)
+const gems = document.querySelectorAll('#settings-modal').length;
+if (gems > 1) console.error('[SETTINGS] ⚠️ Hay ' + gems + ' elementos con id settings-modal (duplicado)');
+modal.classList.add('active');
+const d = getComputedStyle(modal).display;
+console.log('[SETTINGS] ✅ modal abierto | display computado:', d);
+if (d === 'none') console.error('[SETTINGS] ⚠️ Tiene .active pero display:none → CSS .modal-bg.active muerto o pisado');
+} else {
+console.error('[SETTINGS] ❌ #settings-modal NO EXISTE en el HTML');
+}
 }
     
 let menuTimeout;
@@ -8523,7 +8538,7 @@ window.addEventListener('pointercancel', () => clearTimeout(pressTimer));
         }, 150);
     };
 
-    // Actualizar color del botón de ajustes según estado
+        // Actualizar color del botón de ajustes según estado
 function updateSettingsIndicator() {
     const gearIcon = document.getElementById('settings-gear-icon');
     const settingsBtn = document.getElementById('settings-indicator-btn');
@@ -8544,6 +8559,7 @@ function updateSettingsIndicator() {
         settingsBtn.style.borderColor = 'rgba(128, 128, 128, 0.5)';
     }
 }
+
 
 async function refreshTTSCredits() {
     showToast('🔄 Reiniciando contadores de créditos...', false);
