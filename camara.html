@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '18'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '23'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -4490,8 +4490,10 @@ OBR_EVENT_MANAGER.add(window, 'orientationchange', handleOrientationChange);
     let isRestartingCamera = false;
 
     async function restartCamera() {
-        if (isRestartingCamera || document.hidden) return; 
-        isRestartingCamera = true;
+    if (isRestartingCamera || document.hidden) return;
+    // 🔒 DEMO: no reiniciar cámara real (no existe)
+    if (DEMO_MODE) return;
+    isRestartingCamera = true;
         
         const safetyUnlock = setTimeout(() => { isRestartingCamera = false; }, 8000);
         
@@ -5206,200 +5208,227 @@ setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
     }, 2500);
 }
 
-
-    async function initApp() {
-// 🔒 Detectar offline inmediatamente
-const isOffline = !navigator.onLine || OBR_NET.offline;
-if (isOffline) {
-  _log('[APP] Modo OFFLINE detectado');
-  showToast('📴 Modo offline — IA desactivada', false);  // ✅ No es error, es estado
-// Aplicar modo offline silenciosamente
-document.body.classList.add('obr-offline');
-}
-    unlockAudioContext();
-    // 🔒 DETECCIÓN Y ACTIVACIÓN DE MODO OPTIMIZADO (4GB RAM)
-if (_deviceCores <= 4) {
-    qualityScale = 0.95;  // Ligeramente reducido para ganar FPS
+async function initApp() {
+  // 🔒 Detectar offline inmediatamente
+  const isOffline = !navigator.onLine || OBR_NET.offline;
+  if (isOffline) {
+    _log('[APP] Modo OFFLINE detectado');
+    showToast('📴 Modo offline — IA desactivada', false);
+    document.body.classList.add('obr-offline');
+  }
+  
+  unlockAudioContext();
+  
+  // 🔒 DETECCIÓN Y ACTIVACIÓN DE MODO OPTIMIZADO (4GB RAM)
+  if (_deviceCores <= 4) {
+    qualityScale = 0.95;
     showToast('🔋 MODO OPTIMIZADO ACTIVADO', false);
-}
-    document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
-    // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
-if (DEMO_MODE && window._demoVideo && !window._demoFailed) {
-  try {
-    window._demoVideo.currentTime = 0;
-    await window._demoVideo.play().catch(()=>{});
-    window._demoVideo.muted = false;
-    console.log('[DEMO] ▶️ clip iniciado dentro de la app');
-    // 🎬 DEMO: MIC LOCAL ON directo (sin pedir permisos, sin getUserMedia)
-    setTimeout(() => {
-      try {
-        // 🔒 Fuerza el estado sin pasar por toggleLocalMic (evita pedir micrófono real)
-        isLocalMicForced = true;
-        
-        // Sincroniza la UI del switch
-        const switchEl = document.getElementById('btn-toggle-mic-switch');
-        if (switchEl) {
-          switchEl.style.transform = 'translateX(20px)';
-          switchEl.classList.replace('bg-gray-400', 'bg-green-500');
-        }
-        const micIcon = document.getElementById('btn-toggle-mic');
-        if (micIcon) micIcon.className = 'fas fa-microphone text-green-500 cursor-pointer transition-colors hover:text-white';
-        
-        // Actualiza el indicador de estado
-        if (DOM_CACHE.micStat) {
-          DOM_CACHE.micStat.innerText = "MIC LOCAL (DEMO)";
-          DOM_CACHE.micStat.className = "text-green-500 font-bold";
-        }
-        
-        // Muestra el botón de AUDIO SCAN
-        if (typeof updateAudioScanVisibility === 'function') updateAudioScanVisibility();
-        if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
-        
-        console.log('[DEMO] 🎙️ MIC LOCAL: true | wrapper:', (document.getElementById('wrapper-audio-scan')|| {style:{}}).style.display);
-      } catch(e){ console.warn('[DEMO] mic auto:', e); }
-    }, 400);
-  } catch(e){}
-}
-    document.getElementById('cam-error-panel').style.display = 'none';
-    requestWakeLock();
-    
-    // Guardar URL del chat si se modificó en el modal antes de iniciar
-    const newChatUrl = document.getElementById('chat-url-input')?.value.trim();
-    if (newChatUrl) {
-        CHAT_OVERLAY_URL = newChatUrl;
-        localStorage.setItem('obr_chat_url', newChatUrl);
-    }
+  }
+  
+  document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
+  document.getElementById('cam-error-panel').style.display = 'none';
+  requestWakeLock();
+  
+  // Guardar URL del chat si se modificó en el modal antes de iniciar
+  const newChatUrl = document.getElementById('chat-url-input')?.value.trim();
+  if (newChatUrl) {
+    CHAT_OVERLAY_URL = newChatUrl;
+    localStorage.setItem('obr_chat_url', newChatUrl);
+  }
 
-    // 🗺️ PASO 1: Iniciar mapa INMEDIATAMENTE (antes de la cámara para que no se trabe)
-    updateProgress(10, "INICIALIZANDO SISTEMAS OBR...");
-initMiniMap();
-initMapMirror();
-// 🔒 html2canvas es CARO en móvil: cada 6s y a escala 1 (ver Bloque 4)
-setInterval(() => {
+  // 🗺️ PASO 1: Iniciar mapa INMEDIATAMENTE (antes de la cámara para que no se trabe)
+  updateProgress(10, "INICIALIZANDO SISTEMAS OBR...");
+  initMiniMap();
+  initMapMirror();
+  
+  setInterval(() => {
     if (document.hidden) return;
-    if ('requestIdleCallback' in window) requestIdleCallback(() => captureMapToMirror(), { timeout: 1500 });
-    else captureMapToMirror();
-}, 6000);
-    
-    // Esperar un momento para que el navegador procese la solicitud de GPS
-    await new Promise(r => setTimeout(r, 300));
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => captureMapToMirror(), { timeout: 1500 });
+    } else {
+      captureMapToMirror();
+    }
+  }, 6000);
+  
+  await new Promise(r => setTimeout(r, 300));
+  updateProgress(20, "SOLICITANDO ACCESO A SENSOR ÓPTICO...");
+  clearTimeout(loadingTimer);
+  
+  const qualitySettings = OBR_QUALITY.getCurrent();
+  const targetResolution = qualitySettings.videoResolution;
 
-    updateProgress(20, "SOLICITANDO ACCESO A SENSOR ÓPTICO...");
-    clearTimeout(loadingTimer);
- // 🔒 SIEMPRE 1080p 60fps. Sin 4K (mata móviles), sin 720p.
-// 🔒 FASE 1: Usar resolución adaptativa según dispositivo
-const qualitySettings = OBR_QUALITY.getCurrent();
-const targetResolution = qualitySettings.videoResolution;
-
-const constraintSets = [
-  { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
-  { audio: false, video: { facingMode: 'environment', width: { exact: 1920 }, height: { exact: 1080 }, frameRate: { ideal: 60, max: 60 } } },
-  { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } } }
-];
+  const constraintSets = [
+    { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
+    { audio: false, video: { facingMode: 'environment', width: { exact: 1920 }, height: { exact: 1080 }, frameRate: { ideal: 60, max: 60 } } },
+    { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } } }
+  ];
     
-let stream = null; let lastError = null;
-if (DEMO_MODE) {
-  // 🎬 DEMO: clip en vez de cámara (NO tocar srcObject: el video ya reproduce el archivo)
-  updateProgress(30, "CARGANDO CLIP DEMO...");
-  await initDemoVideo();
-  if (!window._demoFailed) {
-    localStorage.setItem("camPermission", "granted");
-    refreshLiveFilterCache();
-    initGLEngine();
-    stream = videoStream; // puede ser null en iOS: el clip sigue visible y funcional
-    window._demoActive = true;
+  let stream = null; 
+  let lastError = null;
+  
+  if (DEMO_MODE) {
+    updateProgress(30, "CARGANDO CLIP DEMO...");
+    await initDemoVideo();
+    if (!window._demoFailed) {
+      localStorage.setItem("camPermission", "granted");
+      refreshLiveFilterCache();
+      initGLEngine();
+      stream = videoStream;
+      window._demoActive = true;
+    }
   }
-}
-if (!DEMO_MODE || window._demoFailed) {
-  for (let i = 0; i < constraintSets.length; i++) {
+  
+  if (!DEMO_MODE || window._demoFailed) {
+    for (let i = 0; i < constraintSets.length; i++) {
+      try {
+        updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
+        stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
+        break;
+      } catch(e) {
+        lastError = e;
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
+      }
+    }
+    
+    if (!stream) {
+      const e = lastError;
+      localStorage.removeItem("camPermission");
+      _warn('[CAM] Cámara no disponible, entrando sin video:', e && e.name, e && e.message);
+      showToast(`⚠️ CÁMARA NO DISPONIBLE (${e ? e.name : 'ERROR'}) — MODO ESPECTADOR`, true);
+      videoStream = null;
+    } else {
+      localStorage.setItem("camPermission", "granted");
+      try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
+      videoStream = new MediaStream(stream.getVideoTracks());
+      el.video.srcObject = videoStream;
+      refreshLiveFilterCache();
+      el.video.play().then(() => {}).catch(()=>{});
+      initGLEngine();
+    }
+  }
+  
+  updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
+  
+  setTimeout(() => {
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => preloadLocalAssets().catch(() => {}), { timeout: 8000 });
+    } else {
+      preloadLocalAssets().catch(() => {});
+    }
+  }, 2500);
+  
+  updateProgress(72, "CALIBRANDO MOTOR SLS...");
+  updateProgress(80, "CALIBRANDO LIDAR...");
+  updateProgress(88, "CALIBRANDO PAREIDOLIA...");
+  updateProgress(94, "SINCRONIZANDO INTERFAZ...");
+    
+  setTimeout(async () => {
     try {
-      updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
-      stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
-      break;
-    } catch(e) {
-      lastError = e;
-      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
+      if(window.tf) { 
+        try { await tf.setBackend('webgl'); } 
+        catch(e) { await tf.setBackend('cpu'); } 
+      }
+      
+      if(window.poseDetection) {
+        aiDetector = await poseDetection.createDetector(
+          poseDetection.SupportedModels.MoveNet,
+          _isHighEndDevice
+            ? { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true, maxPoses: 3, scoreThreshold: 0.4 }
+            : { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: false, maxPoses: 2, scoreThreshold: 0.45 }
+        );
+      }
+      
+      if(window.SelfieSegmentation) { 
+        segmenter = new SelfieSegmentation({
+          locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
+        }); 
+        segmenter.setOptions({ modelSelection: 1 }); 
+        segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); 
+      }
+      
+      const vRatio = el.video.videoHeight / el.video.videoWidth; 
+      analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+      analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
+      initSLSWorker();
+      
+      if(segmenter) await segmenter.send({image: analysisCanvas}); 
+      if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
+    } catch(e) { 
+      _warn("Error leve en calibración IA:", e); 
     }
-  }
-  if (!stream) {
-    // 🔒 SIN BLOQUEO: la app entra en MODO ESPECTADOR aunque no haya cámara
-    const e = lastError;
-    localStorage.removeItem("camPermission");
-    _warn('[CAM] Cámara no disponible, entrando sin video:', e && e.name, e && e.message);
-    showToast(`⚠️ CÁMARA NO DISPONIBLE (${e ? e.name : 'ERROR'}) — MODO ESPECTADOR`, true);
-    videoStream = null;
-  } else {
-    localStorage.setItem("camPermission", "granted");
-    try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
-    videoStream = new MediaStream(stream.getVideoTracks());
-    el.video.srcObject = videoStream;
-    refreshLiveFilterCache();
-    el.video.play().then(() => {}).catch(()=>{});
-    initGLEngine(); // 🔒 si falla, la app sigue con el fallback 2D anterior
-  }
-}
-updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
-// 🔒 NO bloqueante: precarga en segundo plano cuando el hilo está libre (arranque más fluido)
-setTimeout(() => {
-if ('requestIdleCallback' in window) requestIdleCallback(() => preloadLocalAssets().catch(() => {}), { timeout: 8000 });
-else preloadLocalAssets().catch(() => {});
-}, 2500);
-updateProgress(72, "CALIBRANDO MOTOR SLS...");
-updateProgress(80, "CALIBRANDO LIDAR...");
-updateProgress(88, "CALIBRANDO PAREIDOLIA...");
-updateProgress(94, "SINCRONIZANDO INTERFAZ...");
-    
-    setTimeout(async () => {
+        
+    updateProgress(95, "CONFIGURANDO MOTOR DE AUDIO Y TTS...");
+    await initAudioEngine();
+    updateProgress(100, "SISTEMA LISTO");
+    updateProgress(100, "SISTEMAS EN LÍNEA - ACCEDIENDO AL ENTORNO...");
+        
+    setTimeout(async () => {  // 🔒 FIX: async agregado para permitir await del play()
+      document.getElementById('loading').style.display = 'none'; 
+      resize(); 
+      OBR_EVENT_MANAGER.add(window, 'resize', resize);
+      initDOMCache();
+      
+      // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
+      if (DEMO_MODE && window._demoVideo && !window._demoFailed) {
         try {
-            if(window.tf) { try { await tf.setBackend('webgl'); } catch(e) { await tf.setBackend('cpu'); } }
-            // 🔒 MULTIPOSE optimizado: máximo 3 poses, umbral más estricto para no procesar basura
-if(window.poseDetection) {
-// 🔒 MULTIPOSE SIEMPRE (requisito): en gama baja se desactiva el suavizado
-// interno del detector (redundante) y se ajustan poses/umbral para no congelar
-aiDetector = await poseDetection.createDetector(
-poseDetection.SupportedModels.MoveNet,
-_isHighEndDevice
-? { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true, maxPoses: 3, scoreThreshold: 0.4 }
-: { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: false, maxPoses: 2, scoreThreshold: 0.45 }
-);
-}
-            if(window.SelfieSegmentation) { 
-                segmenter = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`}); 
-                segmenter.setOptions({ modelSelection: 1 }); 
-                segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); 
+          window._demoVideo.currentTime = 0;
+          await window._demoVideo.play().catch(()=>{});
+          window._demoVideo.muted = false;
+          console.log('[DEMO] ▶️ clip iniciado dentro de la app');
+          
+          // 🎬 DEMO: MIC LOCAL ON directo (sin pedir permisos, sin getUserMedia)
+          setTimeout(() => {
+            try {
+              isLocalMicForced = true;
+              
+              const switchEl = document.getElementById('btn-toggle-mic-switch');
+              if (switchEl) {
+                switchEl.style.transform = 'translateX(20px)';
+                switchEl.classList.replace('bg-gray-400', 'bg-green-500');
+              }
+              
+              const micIcon = document.getElementById('btn-toggle-mic');
+              if (micIcon) {
+                micIcon.className = 'fas fa-microphone text-green-500 cursor-pointer transition-colors hover:text-white';
+              }
+              
+              if (DOM_CACHE && DOM_CACHE.micStat) {
+                DOM_CACHE.micStat.innerText = "MIC LOCAL (DEMO)";
+                DOM_CACHE.micStat.className = "text-green-500 font-bold";
+              }
+              
+              if (typeof updateAudioScanVisibility === 'function') updateAudioScanVisibility();
+              if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
+              
+              console.log('[DEMO] 🎙️ MIC LOCAL: true | wrapper:', (document.getElementById('wrapper-audio-scan') || {style:{}}).style.display);
+            } catch(e){ 
+              console.warn('[DEMO] mic auto:', e); 
             }
-            const vRatio = el.video.videoHeight / el.video.videoWidth; 
-            analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
-            analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
-            initSLSWorker(); // 🔒 prepara inferencia off-thread (no bloquea; fallback automático)
-            if(segmenter) await segmenter.send({image: analysisCanvas}); 
-            if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
-        } catch(e) { _warn("Error leve en calibración IA:", e); }
-        
-        updateProgress(95, "CONFIGURANDO MOTOR DE AUDIO Y TTS...");
-        await initAudioEngine(); // Iniciar audio temprano
-        updateProgress(100, "SISTEMA LISTO");
-        updateProgress(100, "SISTEMAS EN LÍNEA - ACCEDIENDO AL ENTORNO...");
-        
-        setTimeout(() => {
-            document.getElementById('loading').style.display = 'none'; 
-            resize(); 
-            OBR_EVENT_MANAGER.add(window, 'resize', resize);
-            initDOMCache();
-                // 🔒 CRÍTICO: Si estamos grabando, componer el frame completo en el canvas de grabación
-    if (isRecordingActive && recCtx4K && recCanvas4K) {
+          }, 400);
+        } catch(e){ 
+          console.warn('[DEMO] arranque clip:', e); 
+        }
+      }
+      
+      if (isRecordingActive && recCtx4K && recCanvas4K) {
         composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
-    }
-            if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop); 
-            else requestAnimationFrame(renderLoop);
-            setInterval(telemetryLoop, 2000);
-setInterval(updateClock, 1000); // 🔒 reloj fluido, independiente de la telemetría
-            requestAnimationFrame(detectionLoop);
-            initRTM();
-            initRemoteMicReceiverAgora();
-        }, 400); // Pequeña pausa dramática al 100%
-    }, 500);
+      }
+      
+      if ('requestVideoFrameCallback' in el.video) {
+        el.video.requestVideoFrameCallback(renderLoop); 
+      } else {
+        requestAnimationFrame(renderLoop);
+      }
+      
+      setInterval(telemetryLoop, 2000);
+      setInterval(updateClock, 1000);
+      requestAnimationFrame(detectionLoop);
+      initRTM();
+      initRemoteMicReceiverAgora();
+    }, 400);
+  }, 500);
 }
+
     
 // ==========================================================
 // 🧵 SLS EN WEB WORKER: la inferencia sale del hilo principal → adiós micro-tirones
