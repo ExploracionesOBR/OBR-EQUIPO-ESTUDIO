@@ -1425,8 +1425,12 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '20'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '42'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
+// 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
+// Déjalo en '' para operación NORMAL con cámara real.
+const DEMO_VIDEO_URL = 'demo.mp4';
+const DEMO_MODE = !!DEMO_VIDEO_URL; // 🎬 true cuando hay clip de demo
 (function applyGlobalVersion() {
   // 1. Título de la pestaña / app
   document.title = 'CAMARA OBR PRO v' + ASSET_VERSION;
@@ -4442,10 +4446,143 @@ OBR_EVENT_MANAGER.add(window, 'orientationchange', handleOrientationChange);
         }
     }
 
+// ===== 🎬 MODO DEMO: clip en lugar de cámara =====
+async function initDemoVideo() {
+  el.video.srcObject = null;
+  el.video.src = DEMO_VIDEO_URL;
+  el.video.loop = true;
+  el.video.muted = false; // 🔒 el audio va por WebAudio (necesario desmuteado para el tap)
+  el.video.playsInline = true;
+  el.video.volume = 1;
+  // 🔒 DEMO: sin micrófono real y sin Web Speech real (nada se captura)
+  window.SpeechRecognition = undefined;
+  window.webkitSpeechRecognition = undefined;
+  await new Promise(res => { el.video.onloadeddata = () => res(true); setTimeout(() => res(false), 6000); });
+  await el.video.play().catch(()=>{});
+  try { videoStream = el.video.captureStream ? el.video.captureStream() : (el.video.mozCaptureStream ? el.video.mozCaptureStream() : null); } catch(e){ videoStream = null; }
+  window._demoVideo = el.video;
+  try {
+    const actx = getAudioContext();
+    // 🔒 MIC SILENCIOSO: la cadena de audio funciona sin capturar nada
+    const silentDest = actx.createMediaStreamDestination();
+    audioStream = silentDest.stream;
+    isLocalMicForced = true;
+    // 🔒 AUDIO DEL CLIP: audible en el equipo + hacia la mezcla de grabación
+    if (!el.video._demoSrcNode) {
+      const srcNode = actx.createMediaElementSource(el.video);
+      const demoGain = actx.createGain(); demoGain.gain.value = 0.9;
+      srcNode.connect(demoGain);
+      demoGain.connect(actx.destination);              // se escucha en el dispositivo
+      if (mixDestination) demoGain.connect(mixDestination);
+      window._demoAudioGain = demoGain;
+      el.video._demoSrcNode = srcNode;
+    }
+    // 🔒 Conecta el clip a la mezcla de grabación cuando mixDestination exista
+    const _demoMixInt = setInterval(() => {
+      if (window._demoAudioGain && typeof mixDestination !== 'undefined' && mixDestination) {
+        try { window._demoAudioGain.connect(mixDestination); console.log('[DEMO] audio del clip → mezcla de grabación'); } catch(e){}
+        clearInterval(_demoMixInt);
+      }
+    }, 500);
+  } catch(e) { console.warn('[DEMO] fallo ruteo de audio:', e); }
+  console.log('[DEMO] Listo:', DEMO_VIDEO_URL, '| stream:', !!videoStream);
+  showToast('🎬 MODO DEMO: video+audio activos, mic simulado', false);
+}
+
+// ===== 🎬 DIRECTOR DE DEMO: transcripciones y detecciones simuladas =====
+const DEMO_SCRIPT = [
+  { t: 2000,  text: 'esta alguien con nosotros' },
+  { t: 26000, text: 'hay una presencia detrás de ti' },
+  { t: 52000, text: 'muéstrame qué detectas ahora' },
+];
+function startDemoScript() {
+  DEMO_SCRIPT.forEach(item => {
+    setTimeout(() => {
+      if (!DEMO_MODE || !state.isAudioScan) return;
+      window._liveUserText = item.text.toUpperCase();
+      window._liveUserLastUpdate = Date.now();
+      console.log('[DEMO] 🗣️ transcripción simulada:', item.text);
+      setTimeout(() => { try { procesarComandoEVP(item.text); } catch(e){ _warn('[DEMO] EVP:', e); } }, 400);
+    }, item.t);
+  });
+}
+// Pose humana sintética (17 keypoints COCO) con balanceo suave
+function demoFakePose(input) {
+  const w = input.width || input.videoWidth || 320, h = input.height || input.videoHeight || 240;
+  const t = performance.now() * 0.001;
+  const sx = Math.sin(t*0.5)*0.02, sy = Math.cos(t*0.35)*0.01;
+  const P = (x,y,n) => ({ x: (x+sx)*w, y: (y+sy)*h, score: 0.85, name: n });
+  return { score: 0.8, keypoints: [
+    P(0.50,0.20,'nose'), P(0.47,0.19,'left_eye'), P(0.53,0.19,'right_eye'),
+    P(0.45,0.20,'left_ear'), P(0.55,0.20,'right_ear'),
+    P(0.40,0.32,'left_shoulder'), P(0.60,0.32,'right_shoulder'),
+    P(0.36,0.45,'left_elbow'), P(0.64,0.45,'right_elbow'),
+    P(0.33,0.55,'left_wrist'), P(0.67,0.55,'right_wrist'),
+    P(0.44,0.55,'left_hip'), P(0.56,0.55,'right_hip'),
+    P(0.43,0.72,'left_knee'), P(0.57,0.72,'right_knee'),
+    P(0.42,0.88,'left_ankle'), P(0.58,0.88,'right_ankle')
+  ]};
+}
+// 🔒 Parchea detectores al existir: si NO detectan nada, inyectan figura humana
+if (DEMO_MODE) {
+  const _demoPatchInt = setInterval(() => {
+    try {
+      if (typeof aiDetector !== 'undefined' && aiDetector && !aiDetector._demoPatched) {
+        aiDetector._demoPatched = true;
+        const origEst = aiDetector.estimatePoses.bind(aiDetector);
+        aiDetector.estimatePoses = async (inp) => {
+          try { const r = await origEst(inp); if (r && r.length) return r; } catch(e){}
+          return [demoFakePose(inp)];
+        };
+        console.log('[DEMO] ✅ SLS parcheado (figura falsa si no hay detección)');
+      }
+      if (typeof segmenter !== 'undefined' && segmenter && !segmenter._demoPatched) {
+        segmenter._demoPatched = true;
+        const origSend = segmenter.send.bind(segmenter);
+        segmenter.send = async (inp) => {
+          const r = await origSend(inp);
+          try {
+            const m = r && r.segmentationMask;
+            if (m && m.width) {
+              if (!window._demoProbe) { window._demoProbe = document.createElement('canvas'); window._demoProbe.width = 32; window._demoProbe.height = 32; }
+              const pc = window._demoProbe.getContext('2d', { willReadFrequently: true });
+              pc.clearRect(0,0,32,32); pc.drawImage(m, 0, 0, 32, 32);
+              const d = pc.getImageData(0,0,32,32).data;
+              let sum = 0; for (let i=3;i<d.length;i+=4) sum += d[i];
+              if (sum < 32*32*255*0.02) { // máscara casi vacía → inyectar silueta
+                if (!window._demoMaskOut) window._demoMaskOut = document.createElement('canvas');
+                const oc = window._demoMaskOut; oc.width = m.width; oc.height = m.height;
+                const ox = oc.getContext('2d');
+                ox.clearRect(0,0,oc.width,oc.height); ox.drawImage(m, 0, 0);
+                const t = performance.now()*0.001;
+                const cx = oc.width*(0.5 + Math.sin(t*0.4)*0.03);
+                ox.fillStyle = 'rgba(255,255,255,0.95)';
+                ox.beginPath(); ox.ellipse(cx, oc.height*0.55, oc.width*0.16, oc.height*0.30, Math.sin(t*0.7)*0.05, 0, Math.PI*2); ox.fill();
+                ox.beginPath(); ox.arc(cx, oc.height*0.22, oc.width*0.09, 0, Math.PI*2); ox.fill();
+                ox.beginPath(); ox.ellipse(cx, oc.height*0.86, oc.width*0.11, oc.height*0.16, 0, 0, Math.PI*2); ox.fill();
+                return { segmentationMask: oc };
+              }
+            }
+          } catch(e){}
+          return r;
+        };
+        console.log('[DEMO] ✅ LiDAR parcheado (silueta falsa si no hay detección)');
+      }
+      if (aiDetector && aiDetector._demoPatched && segmenter && segmenter._demoPatched) clearInterval(_demoPatchInt);
+    } catch(e){}
+  }, 1000);
+}
+
     async function restartCameraTrackOnly() {
   if (isRestartingCamera) return;
   isRestartingCamera = true;
-  showToast("🔄 ESTABILIZANDO CÁMARA...", false);
+if (window._demoVideo) { // 🎬 En demo, "estabilizar" = reiniciar el clip
+  try { window._demoVideo.currentTime = 0; await window._demoVideo.play(); } catch(e){}
+  showToast("🎬 DEMO: clip reiniciado", false);
+  isRestartingCamera = false;
+  return;
+}
+showToast("🔄 ESTABILIZANDO CÁMARA...", false);
   
   try {
     if (videoStream) {
@@ -5022,19 +5159,31 @@ const constraintSets = [
   { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } } }
 ];
     
-    let stream = null; let lastError = null;
-    for (let i = 0; i < constraintSets.length; i++) {
-        try {
-            updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
-            stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
-            break;
-        } catch(e) {
-            lastError = e;
-            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
-        }
-    }
-    
-    if (!stream) {
+let stream = null; let lastError = null;
+if (DEMO_MODE) {
+// 🎬 DEMO: clip en vez de cámara (todo lo demás funciona igual)
+updateProgress(30, "CARGANDO CLIP DEMO...");
+await initDemoVideo();
+if (videoStream && videoStream.getVideoTracks().length) {
+localStorage.setItem("camPermission", "granted");
+refreshLiveFilterCache();
+initGLEngine();
+stream = videoStream;
+}
+}
+if (!DEMO_MODE) {
+for (let i = 0; i < constraintSets.length; i++) {
+try {
+updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
+stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
+break;
+} catch(e) {
+lastError = e;
+if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
+}
+}
+}
+if (!stream) {
     // 🔒 SIN BLOQUEO: la app entra en MODO ESPECTADOR aunque no haya cámara
     const e = lastError;
     localStorage.removeItem("camPermission");
@@ -5572,6 +5721,7 @@ async function toggleAudioScanner() {
     state.isAudioScan = true;
     if (btnMenu) btnMenu.classList.add('active-state');
     document.body.classList.add('audio-scan-active');
+    if (DEMO_MODE) startDemoScript(); // 🎬 transcripciones simuladas del guion
     
     // 6. Inicializar variables de sesión
     window._pendingUserCommand = null;
