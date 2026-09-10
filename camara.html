@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '26'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '27'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -4603,6 +4603,15 @@ function startDemoScript() {
       window._liveUserText = item.text.toUpperCase();
       window._liveUserLastUpdate = Date.now();
       console.log('[DEMO] 🗣️ transcripción simulada:', item.text);
+      
+      // 🔒 DEMO: simular pico de voz en el gráfico (aumentar gain temporalmente)
+      if (window._demoAudioGain) {
+        const originalGain = window._demoAudioGain.gain.value;
+        window._demoAudioGain.gain.setValueAtTime(3.5, audioCtx.currentTime); // pico fuerte
+        window._demoAudioGain.gain.exponentialRampToValueAtTime(originalGain, audioCtx.currentTime + 2.5); // vuelve al base en 2.5s
+        console.log('[DEMO] 🔊 Pico de voz simulado (gain 3.5 → ' + originalGain + ')');
+      }
+      
       // 🔒 Espera silencio real (sin anuncio/EVP hablando) y fuerza la cadena de respuesta completa
       const waitSilence = (tries) => {
         if (!state.isAudioScan) return;
