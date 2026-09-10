@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '23'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '26'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -3547,6 +3547,13 @@ function stopLocalSpeech() {
             micGainNode.gain.value = 7.5; 
 
             audioAnalyser = audioCtx.createAnalyser();
+            // 🔒 DEMO: si el clip ya está cargado, conectar su audio al analyser recién creado
+if (DEMO_MODE && window._demoAudioGain) {
+  try {
+    window._demoAudioGain.connect(audioAnalyser);
+    console.log('[DEMO] 🔊 Audio del clip → analyser (conexión tardía)');
+  } catch(e) {}
+}
             audioAnalyser.fftSize = 2048;
             audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
 
@@ -4555,14 +4562,23 @@ async function initDemoVideo() {
     const silentDest = actx.createMediaStreamDestination();
     audioStream = silentDest.stream; // 🔒 mic silencioso; el estado MIC LOCAL lo activa toggleLocalMic() al arranque (M2)
     if (!el.video._demoSrcNode) {
-      const srcNode = actx.createMediaElementSource(el.video);
-      const demoGain = actx.createGain(); demoGain.gain.value = 0.9;
-      srcNode.connect(demoGain);
-      demoGain.connect(actx.destination);
-      if (mixDestination) demoGain.connect(mixDestination);
-      window._demoAudioGain = demoGain;
-      el.video._demoSrcNode = srcNode;
-    }
+  const srcNode = actx.createMediaElementSource(el.video);
+  const demoGain = actx.createGain(); demoGain.gain.value = 0.9;
+  srcNode.connect(demoGain);
+  demoGain.connect(actx.destination);              // se escucha en el dispositivo
+  if (mixDestination) demoGain.connect(mixDestination);
+  
+  // 🔒 DEMO: conectar audio del clip al analyser de AUDIO SCAN (para que el gráfico se mueva)
+  if (typeof analyser !== 'undefined' && analyser) {
+    try {
+      demoGain.connect(analyser);
+      console.log('[DEMO] 🔊 Audio del clip → analyser de AUDIO SCAN');
+    } catch(e) { console.warn('[DEMO] No se pudo conectar al analyser:', e); }
+  }
+  
+  window._demoAudioGain = demoGain;
+  el.video._demoSrcNode = srcNode;
+}
     const _demoMixInt = setInterval(() => {
       if (window._demoAudioGain && typeof mixDestination !== 'undefined' && mixDestination) {
         try { window._demoAudioGain.connect(mixDestination); console.log('[DEMO] audio del clip → mezcla de grabación'); } catch(e){}
