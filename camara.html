@@ -1001,6 +1001,29 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
   input, textarea, select { font-size: 16px !important; }
 }
 
+    
+    
+/* ===== 🔒 CAMPO: botones superiores usables (fuera de notch/status bar) ===== */
+/* VERTICAL: baja 42px + safe-area (el notch manda) */
+@media (orientation: portrait) {
+  #top-right-group { top: calc(env(safe-area-inset-top, 0px) + 42px) !important; right: calc(env(safe-area-inset-right, 0px) + 10px) !important; }
+  .immersive-btn   { top: calc(env(safe-area-inset-top, 0px) + 42px) !important; left: calc(env(safe-area-inset-left, 0px) + 10px) !important; }
+  #offline-container { top: calc(env(safe-area-inset-top, 0px) + 42px) !important; right: calc(env(safe-area-inset-right, 0px) + 10px) !important; }
+}
+/* HORIZONTAL: solo safe-area +10px (aquí el menú IA está centrado y no debemos bajar tanto) */
+@media (orientation: landscape) {
+  #top-right-group { top: calc(env(safe-area-inset-top, 0px) + 10px) !important; }
+  .immersive-btn   { top: calc(env(safe-area-inset-top, 0px) + 10px) !important; }
+  #offline-container { top: calc(env(safe-area-inset-top, 0px) + 10px) !important; }
+}
+
+/* ===== 👆 ZONA DE TOQUE INVISIBLE AMPLIADA (sin mover lo visual) ===== */
+#settings-gear-icon { position: relative; font-size: 1.5rem !important; }
+#settings-gear-icon::after { content: ''; position: absolute; inset: -14px; } /* +28px de dedo (::after libre; ::before es el glifo de Font Awesome) */
+.immersive-btn::before { content: ''; position: absolute; inset: -10px; }      /* +20px de dedo */
+#offline-container { padding: 0; }
+#offline-container::before { content: ''; position: absolute; inset: -10px; }  /* +20px de dedo */
+
     </style>
 </head>
 <body>
@@ -1430,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '12'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '15'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -4488,8 +4511,7 @@ async function initDemoVideo() {
   try {
     const actx = getAudioContext();
     const silentDest = actx.createMediaStreamDestination();
-    audioStream = silentDest.stream;
-    isLocalMicForced = true;
+    audioStream = silentDest.stream; // 🔒 mic silencioso; el estado MIC LOCAL lo activa toggleLocalMic() al arranque (M2)
     if (!el.video._demoSrcNode) {
       const srcNode = actx.createMediaElementSource(el.video);
       const demoGain = actx.createGain(); demoGain.gain.value = 0.9;
@@ -5163,12 +5185,19 @@ if (_deviceCores <= 4) {
     document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
     // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
 if (DEMO_MODE && window._demoVideo && !window._demoFailed) {
-  try {
-    window._demoVideo.currentTime = 0;
-    await window._demoVideo.play().catch(()=>{});
-    window._demoVideo.muted = false;
-    console.log('[DEMO] ▶️ clip iniciado dentro de la app');
-  } catch(e){}
+try {
+window._demoVideo.currentTime = 0;
+await window._demoVideo.play().catch(()=>{});
+window._demoVideo.muted = false;
+console.log('[DEMO] ▶️ clip iniciado dentro de la app');
+// 🎬 DEMO: MIC LOCAL ON desde el arranque (sin abrir configuración, sin perder clip)
+setTimeout(() => {
+try {
+if (!isLocalMicForced && typeof toggleLocalMic === 'function') toggleLocalMic();
+console.log('[DEMO] 🎙️ MIC LOCAL activo:', isLocalMicForced);
+} catch(e){ console.warn('[DEMO] mic auto:', e); }
+}, 400);
+} catch(e){}
 }
     document.getElementById('cam-error-panel').style.display = 'none';
     requestWakeLock();
