@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>CAMARA OBR PRO</title>
     
 <!--  Cache busting: cambia el ?v=X cuando actualices obr-logo.png -->
@@ -996,6 +996,11 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
     overflow: hidden !important;
 }
 
+/* 🔒 CAMPO: iOS zoom automático al enfocar inputs chicos */
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
     </style>
 </head>
 <body>
@@ -1425,7 +1430,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '42'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '32'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -2073,7 +2078,7 @@ function setTTSMode(mode) {
 
  if ('serviceWorker' in navigator) {
 const swCode = `
-const CACHE_NAME = 'obr-cam-v${ASSET_VERSION}-progressive';
+const CACHE_NAME = 'obr-cam-v\${ASSET_VERSION}-progressive';
 const RUNTIME_CACHE = 'obr-cam-runtime-v11';
 
 // 🔒 FASE 1: Solo recursos CRÍTICOS al inicio (carga rápida en datos móviles)
@@ -2242,46 +2247,43 @@ self.addEventListener('fetch', e => {
 });
 `;
 
-try {
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  const url = URL.createObjectURL(blob);
-  
-  navigator.serviceWorker.register(url).then(registration => {
-    console.log('[APP] SW registrado:', registration.scope);
-    
-    if (registration.waiting) {
-      registration.waiting.postMessage({type: 'SKIP_WAITING'});
-    }
-    
+function onSWReg(registration) {
+  console.log('[APP] SW registrado:', registration.scope);
+  try {
+    if (registration.waiting) registration.waiting.postMessage({type: 'SKIP_WAITING'});
     registration.addEventListener('updatefound', () => {
       const newWorker = registration.installing;
       newWorker.addEventListener('statechange', () => {
         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
           console.log('[APP] Nueva versión del SW disponible');
-          if (newWorker.waiting) {
-            newWorker.waiting.postMessage({type: 'SKIP_WAITING'});
-          }
-          // Recargar solo si el usuario no está grabando
-          if (!isRecordingActive) {
-            setTimeout(() => window.location.reload(), 1000);
-          }
+          if (newWorker.waiting) newWorker.waiting.postMessage({type: 'SKIP_WAITING'});
+          if (!isRecordingActive) setTimeout(() => window.location.reload(), 1000);
         }
       });
     });
-  }).catch(err => {
-    console.warn('[APP] Error registrando SW:', err);
-  });
+  } catch(e) { console.warn('[APP] SW handlers:', e); }
+}
+try {
+  // 🔒 CAMPO: Safari/iOS NO soporta blob SW → preferir el sw.js FÍSICO del repo
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(onSWReg).catch(err => {
+      console.warn('[APP] sw.js no disponible, usando blob SW:', err);
+      try {
+        const blob = new Blob([swCode], {type:'application/javascript'});
+        const url = URL.createObjectURL(blob);
+        navigator.serviceWorker.register(url).then(onSWReg).catch(e2 => console.warn('[APP] Error registrando SW blob:', e2));
+      } catch(e2) { console.warn('[APP] Error creando blob del SW:', e2); }
+    });
+  }
 } catch(e) {
-  console.warn('[APP] Error creando blob del SW:', e);
+  console.warn('[APP] Error registrando SW:', e);
 }
 }
 
+let sharedMicMode = true;
+let isLocalMicForced = false;
 
-    let sharedMicMode = true;
-    let isLocalMicForced = false;
-
-    let audioStream = null;
-    // ===== FASE 2: AUDIO CONTEXT SINGLETON =====
+let audioStream = null;
 let audioCtx = null;
 let evpAudioCtx = null;
 
@@ -4144,6 +4146,13 @@ setInterval(systemGC, 60000);
     const loadedBlobs = {};
 
  async function preloadLocalAssets() {
+  // 🔒 CAMPO: con datos móviles/celular NO se pre-cargan MP4 (era el atasco)
+const _c = navigator.connection;
+if (typeof OBR_NET !== 'undefined' && OBR_NET.offline) return;
+if (_c && (_c.saveData || _c.type === 'cellular' || /2g|3g/.test(_c.effectiveType || ''))) {
+  console.log('[PRELOAD] Omitido: conexión limitada');
+  return;
+}
 const orient = (window.innerHeight > window.innerWidth) ? 'Vertical' : 'Horizontal';
 const types = ['intro', 'outro', 'banner'];
 await Promise.all(types.map(async (t) => {
@@ -4451,33 +4460,42 @@ async function initDemoVideo() {
   el.video.srcObject = null;
   el.video.src = DEMO_VIDEO_URL;
   el.video.loop = true;
-  el.video.muted = false; // 🔒 el audio va por WebAudio (necesario desmuteado para el tap)
   el.video.playsInline = true;
+  el.video.setAttribute('playsinline', '');
+  el.video.muted = true; // 🔒 arranca muteado: autoplay permitido sin gesto activo
   el.video.volume = 1;
-  // 🔒 DEMO: sin micrófono real y sin Web Speech real (nada se captura)
   window.SpeechRecognition = undefined;
   window.webkitSpeechRecognition = undefined;
-  await new Promise(res => { el.video.onloadeddata = () => res(true); setTimeout(() => res(false), 6000); });
+  const loaded = await new Promise(res => {
+    el.video.onloadeddata = () => res(true);
+    el.video.onerror = () => res(false); // 🔒 archivo inexistente → salir ya
+    setTimeout(() => res(false), 6000);
+  });
+  if (!loaded) {
+    console.error('[DEMO] No se pudo cargar el clip:', DEMO_VIDEO_URL);
+    showToast('⚠️ CLIP DEMO NO ENCONTRADO — usando cámara real', true);
+    el.video.src = '';
+    window._demoFailed = true;
+    return;
+  }
   await el.video.play().catch(()=>{});
+  el.video.muted = false; // 🔒 desmutea tras play exitoso (sticky activation del clic INICIAR)
   try { videoStream = el.video.captureStream ? el.video.captureStream() : (el.video.mozCaptureStream ? el.video.mozCaptureStream() : null); } catch(e){ videoStream = null; }
   window._demoVideo = el.video;
   try {
     const actx = getAudioContext();
-    // 🔒 MIC SILENCIOSO: la cadena de audio funciona sin capturar nada
     const silentDest = actx.createMediaStreamDestination();
     audioStream = silentDest.stream;
     isLocalMicForced = true;
-    // 🔒 AUDIO DEL CLIP: audible en el equipo + hacia la mezcla de grabación
     if (!el.video._demoSrcNode) {
       const srcNode = actx.createMediaElementSource(el.video);
       const demoGain = actx.createGain(); demoGain.gain.value = 0.9;
       srcNode.connect(demoGain);
-      demoGain.connect(actx.destination);              // se escucha en el dispositivo
+      demoGain.connect(actx.destination);
       if (mixDestination) demoGain.connect(mixDestination);
       window._demoAudioGain = demoGain;
       el.video._demoSrcNode = srcNode;
     }
-    // 🔒 Conecta el clip a la mezcla de grabación cuando mixDestination exista
     const _demoMixInt = setInterval(() => {
       if (window._demoAudioGain && typeof mixDestination !== 'undefined' && mixDestination) {
         try { window._demoAudioGain.connect(mixDestination); console.log('[DEMO] audio del clip → mezcla de grabación'); } catch(e){}
@@ -4579,6 +4597,12 @@ if (DEMO_MODE) {
 if (window._demoVideo) { // 🎬 En demo, "estabilizar" = reiniciar el clip
   try { window._demoVideo.currentTime = 0; await window._demoVideo.play(); } catch(e){}
   showToast("🎬 DEMO: clip reiniciado", false);
+  isRestartingCamera = false;
+  return;
+}
+if (state.isLidar && !_isHighEndDevice) {
+  // 🔒 CAMPO: en gama baja el "congelamiento" con LiDAR es CPU saturada, no cámara muerta
+  showToast("⚠️ CPU ALTA CON LIDAR EN ESTE EQUIPO — se recomienda desactivarlo", true);
   isRestartingCamera = false;
   return;
 }
@@ -5161,36 +5185,36 @@ const constraintSets = [
     
 let stream = null; let lastError = null;
 if (DEMO_MODE) {
-// 🎬 DEMO: clip en vez de cámara (todo lo demás funciona igual)
-updateProgress(30, "CARGANDO CLIP DEMO...");
-await initDemoVideo();
-if (videoStream && videoStream.getVideoTracks().length) {
-localStorage.setItem("camPermission", "granted");
-refreshLiveFilterCache();
-initGLEngine();
-stream = videoStream;
+  // 🎬 DEMO: clip en vez de cámara (NO tocar srcObject: el video ya reproduce el archivo)
+  updateProgress(30, "CARGANDO CLIP DEMO...");
+  await initDemoVideo();
+  if (!window._demoFailed) {
+    localStorage.setItem("camPermission", "granted");
+    refreshLiveFilterCache();
+    initGLEngine();
+    stream = videoStream; // puede ser null en iOS: el clip sigue visible y funcional
+    window._demoActive = true;
+  }
 }
-}
-if (!DEMO_MODE) {
-for (let i = 0; i < constraintSets.length; i++) {
-try {
-updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
-stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
-break;
-} catch(e) {
-lastError = e;
-if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
-}
-}
-}
-if (!stream) {
+if (!DEMO_MODE || window._demoFailed) {
+  for (let i = 0; i < constraintSets.length; i++) {
+    try {
+      updateProgress(30 + (i * 10), `ESTABLECIENDO FLUJO DE VIDEO (${constraintSets[i].video.width.ideal}p)...`);
+      stream = await navigator.mediaDevices.getUserMedia(constraintSets[i]);
+      break;
+    } catch(e) {
+      lastError = e;
+      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
+    }
+  }
+  if (!stream) {
     // 🔒 SIN BLOQUEO: la app entra en MODO ESPECTADOR aunque no haya cámara
     const e = lastError;
     localStorage.removeItem("camPermission");
     _warn('[CAM] Cámara no disponible, entrando sin video:', e && e.name, e && e.message);
     showToast(`⚠️ CÁMARA NO DISPONIBLE (${e ? e.name : 'ERROR'}) — MODO ESPECTADOR`, true);
     videoStream = null;
-} else {
+  } else {
     localStorage.setItem("camPermission", "granted");
     try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
     videoStream = new MediaStream(stream.getVideoTracks());
@@ -5198,8 +5222,9 @@ if (!stream) {
     refreshLiveFilterCache();
     el.video.play().then(() => {}).catch(()=>{});
     initGLEngine(); // 🔒 si falla, la app sigue con el fallback 2D anterior
-}    
-    updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
+  }
+}
+updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
 // 🔒 NO bloqueante: precarga en segundo plano cuando el hilo está libre (arranque más fluido)
 setTimeout(() => {
 if ('requestIdleCallback' in window) requestIdleCallback(() => preloadLocalAssets().catch(() => {}), { timeout: 8000 });
@@ -7333,7 +7358,7 @@ setInterval(() => {
     
     // Si han pasado más de 5 segundos sin actualizar (antes 8s) O hay 5 frames idénticos
     if ((timeSinceLastFrame > 5000 && videoReady && isVideoPaused && !streamVideoTrack) || 
-        (identicalFrames >= 5 && videoReady)) {
+        (identicalFrames >= (_isHighEndDevice ? 5 : 14) && videoReady)) {
         cameraFreezeCounter++;
         _warn(`[GUARDIAN] Congelamiento detectado (${cameraFreezeCounter}/3) - Tiempo: ${timeSinceLastFrame}ms`);
         
@@ -8461,7 +8486,11 @@ async function callSingleAI(cfg, promptBase64, promptText, maxTokens, temperatur
       }
       
       data = await resp.json();
-      return data.choices?.[0]?.message?.content || null;
+      const txtG = data.choices?.[0]?.message?.content || null;
+const cleanG = txtG ? txtG.trim() : null;
+// 🔒 CAMPO: respuesta larga sin ninguna palabra española = basura/inglés → salta al fallback
+if (cleanG && /[a-zA-Z]{20,}/.test(cleanG) && !/(que|el|la|los|las|hay|está|esta|voz|luz|presencia|aquí|acá|frío|frio|sí|no|nada|alguien)/i.test(cleanG)) throw new Error('Respuesta no española');
+return cleanG;
     } else {
       // Gemini
       const body = promptBase64 ?
@@ -8479,7 +8508,10 @@ async function callSingleAI(cfg, promptBase64, promptText, maxTokens, temperatur
       }
       
       data = await resp.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+      const txtM = data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+const cleanM = txtM ? txtM.trim() : null;
+if (cleanM && /[a-zA-Z]{20,}/.test(cleanM) && !/(que|el|la|los|las|hay|está|esta|voz|luz|presencia|aquí|acá|frío|frio|sí|no|nada|alguien)/i.test(cleanM)) throw new Error('Respuesta no española');
+return cleanM;
     }
   } catch(e) { 
     clearTimeout(t); 
@@ -9015,7 +9047,7 @@ await initAudioEngine();
 const res = chooseRecResolution();
 let RW = Math.min(res.W || 1920, 1920), RH = Math.min(res.H || 1920, 1920);
 RW -= RW % 2; RH -= RH % 2;
-const RFPS = _isHighEndDevice ? 60 : 30;
+const RFPS = _isHighEndDevice ? 60 : 24; // 🔒 CAMPO: 24fps en gama baja = menos calor/lag
 
 if (!recCanvas4K) recCanvas4K = document.createElement('canvas');
 recCanvas4K.width = RW; recCanvas4K.height = RH;
@@ -9055,7 +9087,8 @@ const attempt = (i) => {
 const cfg = cfgs[i];
 // 🔒 FASE 3: bitrate según tier del dispositivo (misma resolución 1080p60 siempre)
 // 12Mbps en 1080p60 sigue siendo visualmente sin pérdida; evita calor y caídas de frames
-const tierBits = { high: 20_000_000, medium: 16_000_000, low: 12_000_000 }[OBR_QUALITY.tier] || 16_000_000;
+const tierBits = { high: 20_000_000, medium: 16_000_000, low: 6_000_000 } // 🔒 CAMPO: low=6Mbps (XR aguanta)
+[OBR_QUALITY.tier] || 16_000_000;
 const bits = Math.max(8_000_000, Math.round(tierBits * (RW * RH) / (3840 * 2160) * (cfg.fps / 30)));
 recordedChunks = [];
 try {
@@ -9490,7 +9523,7 @@ setInterval(() => { if (!OBR_NET.forced) probeConnectivity().then(ok => { if (ok
 // ==========================================================
 (function checkAppVersion() {
     if (!navigator.onLine) return;
-    fetch('./index.html?nc=' + Date.now(), { cache: 'no-store' })
+    fetch(location.pathname + '?nc=' + Date.now(), { cache: 'no-store' })
     .then(r => r.ok ? r.text() : '')
     .then(html => {
         const m = html.match(/ASSET_VERSION\s*=\s*['"](\d+)['"]/);
