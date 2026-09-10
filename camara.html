@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '15'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '17'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -5190,11 +5190,23 @@ window._demoVideo.currentTime = 0;
 await window._demoVideo.play().catch(()=>{});
 window._demoVideo.muted = false;
 console.log('[DEMO] ▶️ clip iniciado dentro de la app');
-// 🎬 DEMO: MIC LOCAL ON desde el arranque (sin abrir configuración, sin perder clip)
+// 🎬 DEMO: MIC LOCAL ON desde el arranque (ciclo OFF→ON completo, UI y wrapper sincronizados)
 setTimeout(() => {
 try {
-if (!isLocalMicForced && typeof toggleLocalMic === 'function') toggleLocalMic();
-console.log('[DEMO] 🎙️ MIC LOCAL activo:', isLocalMicForced);
+// 🔒 Garantiza stream silencioso antes de cualquier lógica de mic
+if (!audioStream || !audioStream.getAudioTracks().length) {
+const actx = getAudioContext();
+if (actx) { audioStream = actx.createMediaStreamDestination().stream; }
+}
+if (typeof toggleLocalMic === 'function') {
+isLocalMicForced = false; // normaliza: asegura un ciclo OFF→ON real con sync de UI
+toggleLocalMic();
+} else {
+isLocalMicForced = true;
+}
+if (typeof updateAudioScanVisibility === 'function') updateAudioScanVisibility();
+if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
+console.log('[DEMO] 🎙️ MIC LOCAL:', isLocalMicForced, '| wrapper:', (document.getElementById('wrapper-audio-scan') || {style:{}}).style.display);
 } catch(e){ console.warn('[DEMO] mic auto:', e); }
 }, 400);
 } catch(e){}
