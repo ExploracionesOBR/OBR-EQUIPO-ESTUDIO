@@ -1430,12 +1430,15 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '32'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '12'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
 const DEMO_VIDEO_URL = 'demo.mp4';
 const DEMO_MODE = !!DEMO_VIDEO_URL; // 🎬 true cuando hay clip de demo
+if (DEMO_MODE) { // 🔒 DEMO: mata Web Speech desde el parse (antes de que cualquier captura lo guarde)
+  try { window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; } catch(e){}
+}
 (function applyGlobalVersion() {
   // 1. Título de la pestaña / app
   document.title = 'CAMARA OBR PRO v' + ASSET_VERSION;
@@ -3435,7 +3438,7 @@ function startLocalSpeech() {
             setTimeout(() => {
                 if (state.isAudioScan && _speechWanted && !localSpeechRec && !isTtsPlaying && !isSpookySpeaking) {
                     _log('[SPEECH] Reiniciando reconocimiento...');
-                    startLocalSpeech();
+                    if (!DEMO_MODE) startLocalSpeech();
                 }
             }, 2000);
         }
@@ -4478,8 +4481,8 @@ async function initDemoVideo() {
     window._demoFailed = true;
     return;
   }
-  await el.video.play().catch(()=>{});
-  el.video.muted = false; // 🔒 desmutea tras play exitoso (sticky activation del clic INICIAR)
+  el.video.currentTime = 0; // 🔒 DEMO: cargado y PAUSADO en 0 (ni un frame perdido)
+// El play + unmute reales ocurren al final de initApp (FIX 1B)
   try { videoStream = el.video.captureStream ? el.video.captureStream() : (el.video.mozCaptureStream ? el.video.mozCaptureStream() : null); } catch(e){ videoStream = null; }
   window._demoVideo = el.video;
   try {
@@ -4520,7 +4523,19 @@ function startDemoScript() {
       window._liveUserText = item.text.toUpperCase();
       window._liveUserLastUpdate = Date.now();
       console.log('[DEMO] 🗣️ transcripción simulada:', item.text);
-      setTimeout(() => { try { procesarComandoEVP(item.text); } catch(e){ _warn('[DEMO] EVP:', e); } }, 400);
+      // 🔒 Espera silencio real (sin anuncio/EVP hablando) y fuerza la cadena de respuesta completa
+      const waitSilence = (tries) => {
+        if (!state.isAudioScan) return;
+        if ((isSpookySpeaking || isTtsPlaying || window._isAnnouncement) && tries > 0) {
+          setTimeout(() => waitSilence(tries - 1), 500);
+          return;
+        }
+        lastEvpTime = 0;
+        window._demoForceResponse = true;
+        try { procesarComandoEVP(item.text); } catch(e){ _warn('[DEMO] EVP:', e); }
+        setTimeout(() => { window._demoForceResponse = false; }, 1500);
+      };
+      setTimeout(() => waitSilence(16), 300);
     }, item.t);
   });
 }
@@ -5146,6 +5161,15 @@ if (_deviceCores <= 4) {
     showToast('🔋 MODO OPTIMIZADO ACTIVADO', false);
 }
     document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
+    // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
+if (DEMO_MODE && window._demoVideo && !window._demoFailed) {
+  try {
+    window._demoVideo.currentTime = 0;
+    await window._demoVideo.play().catch(()=>{});
+    window._demoVideo.muted = false;
+    console.log('[DEMO] ▶️ clip iniciado dentro de la app');
+  } catch(e){}
+}
     document.getElementById('cam-error-panel').style.display = 'none';
     requestWakeLock();
     
@@ -5649,7 +5673,7 @@ applyGoogleTTSFilters(false);
         }
     }
     
-    let forceImmediateResponse = isQuestion || Math.random() > 0.7;
+    let forceImmediateResponse = isQuestion|| window._demoForceResponse || Math.random() > 0.7;
     if (forceImmediateResponse && state.isAudioScan && !isSpookySpeaking && !isTtsPlaying && (Date.now() - lastEvpTime > 1500)) {
         window._liveUserFadeStart = performance.now();
         window._liveUserFadeDuration = 400;
@@ -5773,7 +5797,7 @@ async function toggleAudioScanner() {
         updateAudioRouting();
         
         // 🔒 FORZAR GROQ/GEMINI PARA TRANSCRIPCIÓN
-        startVoiceRecognition();
+        if (!DEMO_MODE) startVoiceRecognition(); // 🎬 DEMO: sin transcripción real (guion simulado)
 
     // 9. Esperar un momento para que el reconocimiento de voz se inicialice
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -7775,7 +7799,26 @@ function getSafeGeminiVisionModel() {
 }
 
 
-    async function triggerPareidolia() {
+    // ===== 🎬 DEMO: pausa programada en frames limpios durante el análisis =====
+window.DEMO_PAUSE_POINTS = [4, 12, 20, 30, 40, 50]; // 🔒 segundos NÍTIDOS de tu demo.mp4 (ajústalos)
+function demoHoldFrame() {
+  return new Promise(res => {
+    const v = window._demoVideo;
+    if (!DEMO_MODE || !v) return res();
+    const pts = window.DEMO_PAUSE_POINTS;
+    const target = pts.find(p => p > v.currentTime + 0.5);
+    const t = (target !== undefined) ? target : pts[0];
+    let fired = false;
+    const done = () => { if (fired) return; fired = true; v.pause(); setTimeout(res, 120); };
+    v.addEventListener('seeked', done, { once: true });
+    v.currentTime = t; // salta al punto limpio (nada de frames borrosos)
+    setTimeout(done, 900); // respaldo si el seek tarda
+    clearTimeout(window._demoResumeT);
+    window._demoResumeT = setTimeout(() => { v.play().catch(()=>{}); }, 6500); // reanuda tras el análisis
+  });
+}
+async function triggerPareidolia() {
+  if (DEMO_MODE) { await demoHoldFrame(); }
 const video = el.video;
 if (!AI_API_KEY) return;
 if (isAIProcessing || isTtsPlaying) return;
