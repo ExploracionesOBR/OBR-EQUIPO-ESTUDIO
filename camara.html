@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '17'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '13'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -1802,7 +1802,7 @@ link.rel = 'manifest';
 link.href = URL.createObjectURL(blob);
 document.head.appendChild(link);
 console.log('[MANIFEST] Generado dinámicamente');
-} catch(e) { console.warn('[MANIFEST] No se pudo generar:', e); }
+} catch(e) {console.warn('[MANIFEST] Logo no disponible en este entorno (normal en JSFiddle/pruebas); con obr-logo.png en el servidor se genera correcto.'); }
 })();
 
 
@@ -1810,6 +1810,17 @@ console.log('[MANIFEST] Generado dinámicamente');
 // 🔒 SISTEMA DE LOGGING CONDICIONAL (CRÍTICO PARA MÓVILES)
 // ==========================================================
 const DEBUG_MODE = false; // 🔒 FALSE en producción. TRUE solo para depurar.
+
+// 🔒 Silenciar logs DEBUG de Agora SDK (reduce ruido en consola)
+if (typeof window !== 'undefined') {
+  const originalConsoleDebug = console.debug;
+  console.debug = function(...args) {
+    if (args[0] && typeof args[0] === 'string' && args[0].includes('Agora-SDK') && args[1] && args[1].includes('color: #64B5F6')) {
+      return; // Suprimir DEBUG level de Agora
+    }
+    return originalConsoleDebug.apply(console, args);
+  };
+}
 
 // ✅ CORREGIDO: Debe llamar a console.log, no a sí mismo (evita crash por recursión infinita)
 const _log = (...args) => { if (DEBUG_MODE) console.log('[OBR]', ...args); };
@@ -1821,6 +1832,35 @@ const _error = (...args) => { if (DEBUG_MODE) console.error('[OBR]', ...args); }
 // ==========================================================
 const AGORA_APP_ID = 'f56ed1937b944e35ae6195bb0c0b2d55';
 const AGORA_TOKEN  = '007eJxTYGDwP/d/v9xe7czpnYVt32w/TP6SOdXJ5bqvnXOfxOSA+8cUGNJMzVJTDC2NzZMsTUxSjU0TU80MLU2TkgySDZKMUkxNxcwYsxoCGRk4jtxhYIRCEJ+bIT+pSDe1uKQ0JTOfgQEAU2sh5A==';
+// 🔒 CAMPO: sin token válido, Agora se desactiva EN SILENCIO (adiós loops, batería y ruido)
+const AGORA_DISABLED = !AGORA_TOKEN || AGORA_TOKEN.trim().length < 20;
+if (AGORA_DISABLED && window.AgoraRTC) {
+  const _never = () => new Promise(() => {}); // promesa que nunca resuelve: sin catch, sin toasts, sin red
+  AgoraRTC.createClient = function () {
+    console.log('[AGORA] Desactivado (sin token válido)');
+    return {
+      join: _never, leave: () => Promise.resolve(),
+      on: () => {}, off: () => {}, once: () => {},
+      publish: _never, unpublish: () => Promise.resolve(),
+      subscribe: _never, unsubscribe: () => Promise.resolve(),
+      setClientRole: () => Promise.resolve(),
+      enableAudioVolumeIndicator: () => {},
+      connectionState: 'DISCONNECTED'
+    };
+  };
+}
+if (AGORA_DISABLED && window.AgoraRTM && AgoraRTM.createClient) {
+  const _never2 = () => new Promise(() => {});
+  AgoraRTM.createClient = function () {
+    return { login: _never2, logout: () => Promise.resolve(), on: () => {}, off: () => {}, sendMessage: _never2, joinChannel: _never2, leaveChannel: () => Promise.resolve() };
+  };
+}
+// 🔒 Silenciar logs internos del SDK (nivel 4 = NONE) + filtro de consola por si algo se cuela
+try { if (window.AgoraRTC && AgoraRTC.setLogLevel) AgoraRTC.setLogLevel(4); } catch(e){}
+(function(){
+  const _log = console.log.bind(console);
+  console.log = function(...a){ if (typeof a[0] === 'string' && a[0].includes('Agora-SDK')) return; return _log(...a); };
+})();
 const AGORA_CHANNEL = 'obr-estudio';
 let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 const RTM_TOKEN = undefined;
@@ -5185,31 +5225,40 @@ if (_deviceCores <= 4) {
     document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
     // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
 if (DEMO_MODE && window._demoVideo && !window._demoFailed) {
-try {
-window._demoVideo.currentTime = 0;
-await window._demoVideo.play().catch(()=>{});
-window._demoVideo.muted = false;
-console.log('[DEMO] ▶️ clip iniciado dentro de la app');
-// 🎬 DEMO: MIC LOCAL ON desde el arranque (ciclo OFF→ON completo, UI y wrapper sincronizados)
-setTimeout(() => {
-try {
-// 🔒 Garantiza stream silencioso antes de cualquier lógica de mic
-if (!audioStream || !audioStream.getAudioTracks().length) {
-const actx = getAudioContext();
-if (actx) { audioStream = actx.createMediaStreamDestination().stream; }
-}
-if (typeof toggleLocalMic === 'function') {
-isLocalMicForced = false; // normaliza: asegura un ciclo OFF→ON real con sync de UI
-toggleLocalMic();
-} else {
-isLocalMicForced = true;
-}
-if (typeof updateAudioScanVisibility === 'function') updateAudioScanVisibility();
-if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
-console.log('[DEMO] 🎙️ MIC LOCAL:', isLocalMicForced, '| wrapper:', (document.getElementById('wrapper-audio-scan') || {style:{}}).style.display);
-} catch(e){ console.warn('[DEMO] mic auto:', e); }
-}, 400);
-} catch(e){}
+  try {
+    window._demoVideo.currentTime = 0;
+    await window._demoVideo.play().catch(()=>{});
+    window._demoVideo.muted = false;
+    console.log('[DEMO] ▶️ clip iniciado dentro de la app');
+    // 🎬 DEMO: MIC LOCAL ON directo (sin pedir permisos, sin getUserMedia)
+    setTimeout(() => {
+      try {
+        // 🔒 Fuerza el estado sin pasar por toggleLocalMic (evita pedir micrófono real)
+        isLocalMicForced = true;
+        
+        // Sincroniza la UI del switch
+        const switchEl = document.getElementById('btn-toggle-mic-switch');
+        if (switchEl) {
+          switchEl.style.transform = 'translateX(20px)';
+          switchEl.classList.replace('bg-gray-400', 'bg-green-500');
+        }
+        const micIcon = document.getElementById('btn-toggle-mic');
+        if (micIcon) micIcon.className = 'fas fa-microphone text-green-500 cursor-pointer transition-colors hover:text-white';
+        
+        // Actualiza el indicador de estado
+        if (DOM_CACHE.micStat) {
+          DOM_CACHE.micStat.innerText = "MIC LOCAL (DEMO)";
+          DOM_CACHE.micStat.className = "text-green-500 font-bold";
+        }
+        
+        // Muestra el botón de AUDIO SCAN
+        if (typeof updateAudioScanVisibility === 'function') updateAudioScanVisibility();
+        if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
+        
+        console.log('[DEMO] 🎙️ MIC LOCAL: true | wrapper:', (document.getElementById('wrapper-audio-scan')|| {style:{}}).style.display);
+      } catch(e){ console.warn('[DEMO] mic auto:', e); }
+    }, 400);
+  } catch(e){}
 }
     document.getElementById('cam-error-panel').style.display = 'none';
     requestWakeLock();
