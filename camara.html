@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '27'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '28'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -4698,6 +4698,12 @@ if (DEMO_MODE) {
     async function restartCameraTrackOnly() {
   if (isRestartingCamera) return;
   isRestartingCamera = true;
+// 🔒 FIX PARPADEO: en gama baja con LiDAR/SLS activo, NO reiniciar (es saturación de CPU, no cámara muerta)
+if (!_isHighEndDevice && (state.isLidar || state.isSLS)) {
+  console.log('[GUARDIAN] Ignorado: LiDAR/SLS activo en gama baja (saturación CPU, no freeze)');
+  isRestartingCamera = false;
+  return;
+}
 if (window._demoVideo) { // 🎬 En demo, "estabilizar" = reiniciar el clip
   try { window._demoVideo.currentTime = 0; await window._demoVideo.play(); } catch(e){}
   showToast("🎬 DEMO: clip reiniciado", false);
@@ -7843,15 +7849,37 @@ if (f === 'lidar') document.body.classList.add('lidar-fx-active');
 else document.body.classList.remove('lidar-fx-active');
     
     // 🔒 CRÍTICO: limpiar estado de IA al cambiar filtro
-    targetPoses = [];
-    smoothedPoses = [];
-    lidarMask = null;
-    lastLidarMask = null;
-    window.motionLevel = 0;
-    
+targetPoses = [];
+smoothedPoses = [];
+lidarMask = null;
+lastLidarMask = null;
+window.motionLevel = 0;
+
+// 🔒 FIX FANTASMA: limpiar TODOS los buffers del LiDAR/SLS al cambiar filtro
+try {
+  if (lfxMaskX) lfxMaskX.clearRect(0, 0, lfxMaskC.width, lfxMaskC.height);
+  if (lfxReliefX) lfxReliefX.clearRect(0, 0, lfxReliefC.width, lfxReliefC.height);
+  if (lfxTintX) lfxTintX.clearRect(0, 0, lfxTintC.width, lfxTintC.height);
+  if (lfxRimX) lfxRimX.clearRect(0, 0, lfxRimC.width, lfxRimC.height);
+  if (scanlineCanvas) {
+    const slCtx = scanlineCanvas.getContext('2d');
+    if (slCtx) slCtx.clearRect(0, 0, scanlineCanvas.width, scanlineCanvas.height);
+  }
+  // Limpiar también el canvas principal si existe
+  if (typeof masterCtx !== 'undefined' && masterCtx) {
+    masterCtx.clearRect(0, 0, masterCtx.canvas.width, masterCtx.canvas.height);
+  }
+  console.log('[FILTER] Buffers LiDAR/SLS limpiados');
+} catch(e) { console.warn('[FILTER] Error limpiando buffers:', e); }
+
     sendScanDataToStudio();
     
     if (typeof showTelemetry === 'function') showTelemetry();
+    // 🔒 FIX RESCALE: forzar resize del canvas al cambiar filtro (evita desalineación en iOS)
+setTimeout(() => {
+  if (typeof resize === 'function') resize();
+  console.log('[FILTER] Canvas reescalado tras cambio de filtro');
+}, 100);
     
     refreshLiveFilterCache();
     }
