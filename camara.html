@@ -1453,7 +1453,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '28'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '29'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -6403,7 +6403,9 @@ const LFX = { coverage:0, perturb:0, cx:.5, cy:.4, topY:.12, personH:.7, footX:.
 let _lidarFrameSkip = 0; // para alternar frames
 
 function drawLidarEffect(c, width, height, currentFrame) {
-    const isHighEnd = _isHighEndDevice; // ✅ Usa el caché global
+// 🔒 FIX RESCALE iOS: dimensiones SIEMPRE = raster real del canvas (mata caja chica + fantasmas)
+width = c.canvas.width; height = c.canvas.height;
+const isHighEnd = _isHighEndDevice; // ✅ Usa el caché global
     // En gama baja/media, procesamos solo cada 2 frames
     // 🔒 LiDAR a 20fps en gama baja (no 30fps) - imperceptible visualmente
 if (!_isHighEndDevice) {
@@ -7841,12 +7843,12 @@ sendRTMCommand('estudio_principal', { type: 'register', name: name, hasAI: true,
     else if (f === 'thermal') document.body.classList.add('filter-thermal');
     else if (f === 'urbex') document.body.classList.add('filter-urbex');
     
-    // 🔒 TODOS los filtros activan el flash (mejor análisis en oscuridad)
-if (f !== 'normal') toggleTorch(true);
-else toggleTorch(false);
-// 🔒 LIDAR ESPECTRAL: activa su propio UI
+    // 🔒 LIDAR ESPECTRAL: activa su propio UI (PRIMERO: nunca debe quedar sin aplicarse)
 if (f === 'lidar') document.body.classList.add('lidar-fx-active');
 else document.body.classList.remove('lidar-fx-active');
+
+// 🔒 Flash blindado: si torch no existe (iOS/demo), NO rompe el resto de setFilter
+try { if (f !== 'normal') toggleTorch(true); else toggleTorch(false); } catch(e) { console.warn('[FILTER] torch no disponible:', e); }
     
     // 🔒 CRÍTICO: limpiar estado de IA al cambiar filtro
 targetPoses = [];
