@@ -1457,7 +1457,7 @@ const ASSET_VERSION = '29'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-lo
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
-const DEMO_VIDEO_URL = 'demo.mp4';
+const DEMO_VIDEO_URL = '';
 const DEMO_MODE = !!DEMO_VIDEO_URL; // 🎬 true cuando hay clip de demo
 if (DEMO_MODE) { // 🔒 DEMO: mata Web Speech desde el parse (antes de que cualquier captura lo guarde)
   try { window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; } catch(e){}
