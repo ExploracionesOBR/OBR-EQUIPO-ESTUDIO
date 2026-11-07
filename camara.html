@@ -1629,7 +1629,7 @@ body.split-active #obr-gl-video {
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '36'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '38'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -2042,7 +2042,7 @@ let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialst
 const RTM_TOKEN = undefined;
 const MIC_CHANNEL = 'obr-mic';
 const AI_SENSITIVITY = 0.35;
-const VOLUMEN_BARRIDO = 0.25;      // ← Era 0.40, bajar para que no sature el gráfico
+const VOLUMEN_BARRIDO = 0.15;      // 🔒 FIX B: bajado de 0.25 → 0.15 para reducir feedback del mic
 const VOLUMEN_RESPUESTA = 0.20;    // ← Era 0.35, bajar un poco
 const VOLUMEN_EVP = 3.0;           // ← Era 2.2, subir para que se escuche mejor
 const VOLUMEN_IA_VISION = 3.0;     // ← Mantener igual
@@ -2634,6 +2634,7 @@ function getAudioContext() {
 let voiceRecDestination = null;
 let scriptProcessorNode = null;
 let audioAccumulator = [];
+let voiceRecMimeType = null;   // 🔒 declaración explícita (antes era global implícito)
 
 
     let DOM_CACHE = null;
@@ -2726,7 +2727,8 @@ function isGhostTranscript(rawText, audioBlob) {
         'gracias', 'muchas gracias', 'thank you', 'thanks', 'vamos', 'vamonos', 'vámonos', 
         'vale', 'ok', 'okay', 'amen', 'amén', 'hola', 'subtitulos', 'subtítulos', 
         'subtitulo', 'subtítulo', 'musica', 'música', 'silencio', 'siguiente', 
-        'como te llamas', 'hola como te llamas', 'buenos dias', 'buenas tardes', 
+        // 🔒 FIX 2: 'como te llamas' REMOVIDO de aquí — se maneja con voz-fuerte abajo
+        'buenos dias', 'buenas tardes', 
         'buenas noches', 'esto es una prueba',
         // 🔒 NUEVOS patrones de alucinaciones
         'adiós', 'hasta luego', 'nos vemos', 'chao', 'chau',
@@ -2743,15 +2745,32 @@ function isGhostTranscript(rawText, audioBlob) {
         'si si si', 'no no no', 'ya ya', 'dale dale'
     ]);
     
-    if (exactGhosts.has(txt)) {
-        console.warn('[VOICE REC] Transcripción fantasma descartada:', original);
-        return true;
-    }
-    // 🔒 ANTI PROMPT-ECHO: Whisper "lee" el prompt cuando no hay voz clara
+if (exactGhosts.has(txt)) {
+    console.warn('[VOICE REC] Transcripción fantasma descartada:', original);
+    return true;
+}
+// 🔒 ANTI PROMPT-ECHO: Whisper "lee" el prompt cuando no hay voz clara
 const echoFrags = ['transcrib', 'voz humana', 'cadena vac', 'no inventes', 'no devuelvas', 'instrucci', 'ruido de fondo', 'silencio o', 'español. solo', 'subtitulos'];
 if (echoFrags.some(p => txt.includes(p))) {
   console.warn('[VOICE REC] Prompt echo descartado:', original);
   return true;
+}
+
+// 🔒 FIX A: Alucinaciones típicas de Whisper con el barrido/sweep como input
+// Estas frases aparecen cuando el mic capta el audio del sweep y Whisper intenta
+// "inventar" un texto coherente a partir de un barrido de frecuencias.
+const sweepHallucinations = [
+    'español', 'espanol', 'erespañol', 'erespanol',
+    'obrador', 'pueblo de la paz', 'canal de la ciudad',
+    'hombre de la vida', 'hombre de la calle',
+    'ciudad de', 'canal de', 'radio', 'noticias',
+    'música', 'musica', 'subtítulos', 'subtitulos'
+];
+// Si el texto es CORTO (≤2 palabras) y contiene alguna de estas palabras → descartar
+const palabrasTxt = txt.split(/\s+/).filter(Boolean);
+if (palabrasTxt.length <= 3 && sweepHallucinations.some(f => txt === f || txt.includes(f))) {
+    console.warn('[VOICE REC] Alucinación de barrido descartada:', original);
+    return true;
 }
 // 🔒 Fragmentos cortos típicos de eco/ruido
 if (['ops', 'op5', 'ups', 'uh', 'eh', 'aja', 'ajá', 'mmm', 'mmmh'].includes(txt)) {
@@ -2807,6 +2826,24 @@ if (['ops', 'op5', 'ups', 'uh', 'eh', 'aja', 'ajá', 'mmm', 'mmmh'].includes(txt
     if (/(.)\1{4,}/.test(txt)) {
         console.warn('[VOICE REC] Repetición de caracteres descartada:', original);
         return true;
+    }
+    
+    // 🔒 FIX 2: "como te llamas" es alucinación típica de Whisper PERO también pregunta real al EVP
+    // Discriminar por fuerza de voz: si el audio tiene señal clara → es pregunta real
+    const llamasPatterns = ['como te llamas', 'hola como te llamas', 'como te llamas tu', 'cual es tu nombre'];
+    if (llamasPatterns.includes(txt)) {
+        // audioBlob ahora tiene metadata de calidad (ver FIX 2 Parte C)
+        const calidad = audioBlob?._voiceQuality;
+        const vozFuerte = calidad && calidad.peak > 0.25 && calidad.vad > 0.18;
+        
+        if (vozFuerte) {
+            console.warn('[VOICE REC] ✅ "como te llamas" ACEPTADA (voz fuerte detectada):', 
+                {peak: calidad.peak.toFixed(2), vad: calidad.vad.toFixed(2)});
+            return false; // ← aceptar como pregunta real
+        }
+        console.warn('[VOICE REC] Alucinación "como te llamas" descartada (voz débil):', 
+            calidad ? {peak: calidad.peak.toFixed(2), vad: calidad.vad.toFixed(2)} : 'sin metadata');
+        return true; // ← probable alucinación, descartar
     }
     
     return false;
@@ -2933,22 +2970,23 @@ if (now - lastProcessTime > PROC_INTERVAL) {
                 offset += audioAccumulator[i].length;
             }
             
-            // 🔒 CRÍTICO: Detección de silencio MÁS AGRESIVA (anti-fantasma)
-            const rms = calculateAudioRMS(merged);
-            const SILENCE_THRESHOLD = 0.02; // antes 0.008 → 2.5× más estricto
-            
-            // 🔒 VAD: % de muestras con volumen real (voz detectada)
-            let loudCount = 0;
-            let peak = 0;
-            for (let i = 0; i < merged.length; i++) {
-                const abs = Math.abs(merged[i]);
-                if (abs > peak) peak = abs;
-                if (abs > 0.08) loudCount++;
-            }
-            const vad = loudCount / merged.length;
-            
-            // 🔒 Triple check: RMS alto + VAD alto + pico alto = hay voz real
-            const hasVoice = rms >= SILENCE_THRESHOLD && vad >= 0.12 && peak >= 0.15;
+// 🔒 CRÍTICO: Detección de silencio MÁS AGRESIVA (anti-fantasma)
+const rms = calculateAudioRMS(merged);
+const SILENCE_THRESHOLD = 0.03; // 🔒 FIX C: 0.02 → 0.03 (barrido tiene RMS sostenido más alto)
+
+// 🔒 VAD: % de muestras con volumen real (voz detectada)
+let loudCount = 0;
+let peak = 0;
+for (let i = 0; i < merged.length; i++) {
+    const abs = Math.abs(merged[i]);
+    if (abs > peak) peak = abs;
+    if (abs > 0.12) loudCount++;  // 🔒 FIX C: 0.08 → 0.12 (barrido no llega tan alto)
+}
+const vad = loudCount / merged.length;
+
+// 🔒 Triple check: RMS alto + VAD alto + pico alto = hay voz real
+// 🔒 FIX C: umbrales más estrictos para discriminar barrido vs voz
+const hasVoice = rms >= SILENCE_THRESHOLD && vad >= 0.15 && peak >= 0.20;
             
             if (!hasVoice) {
                 // Silencio o ruido leve → NO enviar a la API
@@ -2956,9 +2994,13 @@ if (now - lastProcessTime > PROC_INTERVAL) {
                 return;
             }
             
+            // 🔒 B.4-OPT: descartar antes de gastar CPU en el WAV
+            if (isTranscribing) { audioAccumulator = []; return; }
+            
             const wavBlob = float32ToWav16k(merged, audioCtx.sampleRate);
+            // 🔒 FIX 2: adjuntar metadata de calidad al blob (para discriminar alucinaciones)
+            wavBlob._voiceQuality = { rms, vad, peak };
             audioAccumulator = [];
-            if (isTranscribing) return;
             isTranscribing = true;
             sendToGroqTranscription(wavBlob);
         }
@@ -2981,50 +3023,6 @@ function stopVoiceRecognition() {
     audioAccumulator = [];
     isTranscribing = false;
     console.log('[VOICE REC] Reconocimiento detenido');
-}
-
-
-// 🔒 B.4: ¿Es un duplicado reciente?
-function isDuplicateTranscript(nuevoTxt) {
-    const now = Date.now();
-    const recent = (window._lastUserTranscripts || []).filter(r => now - r.ts < TRANSCRIPT_TTL_MS);
-    window._lastUserTranscripts = recent; // purga TTL
-
-    const nuevoLower = nuevoTxt.toLowerCase().trim();
-    const nuevasPalabras = nuevoLower.split(/\s+/).filter(w => w.length > 2);
-
-    for (const entry of recent) {
-        const viejoLower = entry.txt.toLowerCase().trim();
-
-        // Caso 1: mismo texto exacto
-        if (viejoLower === nuevoLower) {
-            console.warn('[VOICE REC] Duplicado exacto (≤10s):', nuevoTxt);
-            return true;
-        }
-
-        // Caso 2: frases cortas (≤3 palabras reales) → solo exacto cuenta
-        const viejasPalabras = viejoLower.split(/\s+/).filter(w => w.length > 2);
-        if (nuevasPalabras.length <= 3 || viejasPalabras.length <= 3) {
-            continue; // no comparar por similitud si son muy cortas
-        }
-
-        // Caso 3: Jaccard dinámico (más estricto en frases largas)
-        const comunes = nuevasPalabras.filter(w => viejasPalabras.includes(w)).length;
-        const union = Math.max(nuevasPalabras.length, viejasPalabras.length);
-        const similitud = comunes / union;
-        const umbral = union >= 8 ? 0.85 : 0.75; // frases largas → exigimos más coincidencia
-        if (similitud >= umbral) {
-            console.warn(`[VOICE REC] Duplicado ${(similitud*100).toFixed(0)}% (umbral ${umbral*100}%):`, nuevoTxt);
-            return true;
-        }
-    }
-    return false;
-}
-
-// 🔒 B.4: registrar texto aceptado
-function rememberTranscript(txt) {
-    window._lastUserTranscripts.unshift({ txt, ts: Date.now() });
-    if (window._lastUserTranscripts.length > 5) window._lastUserTranscripts.length = 5;
 }
 
 
@@ -3077,6 +3075,7 @@ async function sendToGroqTranscription(wavBlob) {
             isTranscribing = false;
             return;
         }
+        // 🔒 FIX 2: el blob lleva _voiceQuality adjunta — isGhostTranscript la lee directo
         if (isFeedback(transcript)) {
             isTranscribing = false;
             return;
@@ -3110,13 +3109,10 @@ if (esDuplicado) {
             return;
         }
         
+        // Texto válido y nuevo: registrar + mostrar (UNA SOLA VEZ)
         rememberTranscript(txt);
         window._liveUserText = normalizarTexto(transcript).toUpperCase();
-
-// Texto válido y nuevo: registrar + mostrar
-rememberTranscript(txt);
-window._liveUserText = normalizarTexto(transcript).toUpperCase();
-window._liveUserLastUpdate = Date.now();
+        window._liveUserLastUpdate = Date.now();
         
         const isSystemSpeaking = isTtsPlaying || isSpookySpeaking || window._isAnnouncement;
         if (isSystemSpeaking) {
@@ -6436,6 +6432,17 @@ async function toggleAudioScanner() {
 }
 
 function executeAudioScanDeactivation(btnMenu) {
+    // 🔒 FIX 3: diagnóstico — quién llamó a la desactivación
+    console.warn('[AUDIO SCAN] 🔻 DESACTIVANDO — llamada desde:', 
+        new Error().stack.split('\n').slice(2, 5).join(' | '));
+    console.warn('[AUDIO SCAN] Estado en el momento de desactivar:', {
+        online: OBR_NET.online,
+        offline: OBR_NET.offline,
+        remoteMic: !!window.remoteMicStream,
+        localMic: isLocalMicForced,
+        audioStreamTracks: audioStream?.getAudioTracks().length || 0
+    });
+    
     state.isAudioScan = false;
     if (btnMenu) btnMenu.classList.remove('active-state');
     
@@ -10335,7 +10342,7 @@ get offline() { return this.forced || !this.online; }
 };
 window.OBR_NET = OBR_NET;
 let _hideOfflineSwitchTimer = null;
-async function probeConnectivity(timeoutMs = 4000) {
+async function probeConnectivity(timeoutMs = 8000) {  // 🔒 FIX 1: 4s → 8s (4G lento)
 if (navigator.onLine === false) return false;
 try {
 const ac = new AbortController();
@@ -10345,6 +10352,10 @@ clearTimeout(t);
 return true;
 } catch (e) { return false; }
 }
+// 🔒 FIX 1: grace timer para evitar que un blip de red de 1-2s apague Audio Scan
+let _offlineGraceTimer = null;
+const OFFLINE_GRACE_MS = 20000;  // 20 segundos de tolerancia antes de apagar
+
 function applyOfflineMode(silent = false) {
 const off = OBR_NET.offline;
 document.body.classList.toggle('obr-offline', off);
@@ -10354,21 +10365,49 @@ if (inp) inp.checked = off;
 if (txt) txt.textContent = off ? 'OFFLINE' : 'ONLINE';
 const cont = document.getElementById('offline-container');
 if (off) {
-if (isPareidoliaActive) executePareidoliaDeactivation(document.getElementById('btn-ia'));
-if (state.isAudioScan) executeAudioScanDeactivation(document.getElementById('btn-audio-menu'));
-try { if (agoraClient) { agoraClient.leave(); agoraClient = null; } } catch (e) {}
-try { if (rtmClient) { rtmClient.logout(); rtmClient = null; } } catch (e) {}
-if (!silent) showToast('📴 MODO OFFLINE — IA VISION y AUDIO SCAN desactivados', true);
-clearTimeout(_hideOfflineSwitchTimer);
-// 🔒 Nuevo switch avión: el estado verde queda visible (ya no se oculta)
-const offTxt = document.querySelector('#offline-container .off-txt');
-if (offTxt) offTxt.textContent = 'OFFLINE';
+    // 🔒 FIX 1: si es detección AUTOMÁTICA (silent) y hay Audio Scan activo,
+    // dar un grace period. Si la red vuelve antes, NO se apaga nada.
+    if (silent && state.isAudioScan) {
+        if (_offlineGraceTimer) clearTimeout(_offlineGraceTimer);
+        console.log('[OFFLINE-GRACE] Pérdida de red detectada — esperando 20s antes de apagar Audio Scan');
+        _offlineGraceTimer = setTimeout(() => {
+            _offlineGraceTimer = null;
+            if (OBR_NET.offline && state.isAudioScan) {
+                console.warn('[OFFLINE-GRACE] Timeout expirado sin red → apagando Audio Scan');
+                if (isPareidoliaActive) executePareidoliaDeactivation(document.getElementById('btn-ia'));
+                if (state.isAudioScan) executeAudioScanDeactivation(document.getElementById('btn-audio-menu'));
+                try { if (agoraClient) { agoraClient.leave(); agoraClient = null; } } catch (e) {}
+                try { if (rtmClient) { rtmClient.logout(); rtmClient = null; } } catch (e) {}
+                showToast('📴 OFFLINE PROLONGADO — IA VISION y AUDIO SCAN desactivados', true);
+            }
+        }, OFFLINE_GRACE_MS);
+        // 🔒 No desactivar nada todavía. Solo actualizar UI visual.
+        const offTxtGrace = document.querySelector('#offline-container .off-txt');
+        if (offTxtGrace) offTxtGrace.textContent = 'OFFLINE?';
+        if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
+        return;
+    }
+    // Manual o forzado (silent=false) → apagar inmediatamente
+    if (isPareidoliaActive) executePareidoliaDeactivation(document.getElementById('btn-ia'));
+    if (state.isAudioScan) executeAudioScanDeactivation(document.getElementById('btn-audio-menu'));
+    try { if (agoraClient) { agoraClient.leave(); agoraClient = null; } } catch (e) {}
+    try { if (rtmClient) { rtmClient.logout(); rtmClient = null; } } catch (e) {}
+    if (!silent) showToast('📴 MODO OFFLINE — IA VISION y AUDIO SCAN desactivados', true);
+    clearTimeout(_hideOfflineSwitchTimer);
+    const offTxt = document.querySelector('#offline-container .off-txt');
+    if (offTxt) offTxt.textContent = 'OFFLINE';
 } else {
-clearTimeout(_hideOfflineSwitchTimer);
-if (cont) cont.classList.remove('hidden');
-const offTxtOn = document.querySelector('#offline-container .off-txt');
-if (offTxtOn) offTxtOn.textContent = 'ONLINE';
-if (!silent) showToast('🌐 CONEXIÓN RESTABLECIDA', false);
+    // 🔒 FIX 1: si vuelve la red durante el grace period, cancelar el timer
+    if (_offlineGraceTimer) {
+        clearTimeout(_offlineGraceTimer);
+        _offlineGraceTimer = null;
+        console.log('[OFFLINE-GRACE] Red recuperada antes del timeout — Audio Scan sigue activo ✅');
+    }
+    clearTimeout(_hideOfflineSwitchTimer);
+    if (cont) cont.classList.remove('hidden');
+    const offTxtOn = document.querySelector('#offline-container .off-txt');
+    if (offTxtOn) offTxtOn.textContent = 'ONLINE';
+    if (!silent) showToast('🌐 CONEXIÓN RESTABLECIDA', false);
 }
 if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
 }
