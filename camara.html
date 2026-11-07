@@ -1454,7 +1454,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '32'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -6436,10 +6436,7 @@ width = c.canvas.width; height = c.canvas.height;
 const isHighEnd = _isHighEndDevice; // ✅ Usa el caché global
     // En gama baja/media, procesamos solo cada 2 frames
     // 🔒 LiDAR a 20fps en gama baja (no 30fps) - imperceptible visualmente
-if (!_isHighEndDevice) {
-  _lidarFrameSkip = (_lidarFrameSkip + 1) % 3; //  Cada 3 frames = ~20fps
-  if (_lidarFrameSkip !== 0 && !isRecordingActive) return;
-}
+// (el skip se aplica más abajo, solo al cálculo de píxeles — NO al dibujo)
 
     const maskToUse = lidarMask || lastLidarMask;
     const src = (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
@@ -6451,11 +6448,12 @@ c.fillStyle = '#04060a'; c.fillRect(0, 0, width, height);
 if (hasSrc) {
 const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
 const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
-c.save(); c.globalAlpha = 0.5;
-if (isHighEnd) c.filter = 'saturate(0.7) contrast(1.1) brightness(0.75)'; // 🔒 solo gama alta
+    // 🔒 FONDO MÁS CLARO: subimos opacidad y reducimos filtro oscuro
+c.save(); c.globalAlpha = 0.85; // Antes 0.5
+if (isHighEnd) c.filter = 'saturate(0.85) contrast(1.05) brightness(0.95)'; // Menos oscuro
 c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
 c.restore(); c.filter = 'none'; c.globalAlpha = 1;
-if (!isHighEnd) { c.fillStyle = 'rgba(4,6,10,0.25)'; c.fillRect(0, 0, width, height); } // 🔒 atenuado barato
+if (!isHighEnd) { c.fillStyle = 'rgba(4,6,10,0.10)'; c.fillRect(0, 0, width, height); } // Casi transparente
 }
 
 // ── 1) Buffers optimizados: 25% menos memoria en gama baja ──
@@ -6478,8 +6476,14 @@ const BW = Math.max(24, Math.min(192, Math.round(BH * width / height)));
     }
 
     // ── 3) RELIEVE CIAN (solo si hay video) ──
-    if (hasSrc) {
-        const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
+// 🔒 SKIP QUIRÚRGICO: solo se recalculan píxeles 1 de cada 3 frames (20fps)
+//    El DIBUJO de abajo (silueta, anillos, HUD) sigue a 60fps con datos cacheados.
+//    Esto elimina el parpadeo y ahorra ~66% CPU en el cálculo pesado.
+_lidarFrameSkip = (_lidarFrameSkip + 1) % 3;
+const _shouldCompute = (_lidarFrameSkip === 0) || isRecordingActive;
+
+if (hasSrc && _shouldCompute) {
+    const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
         const sc3 = Math.max(BW/sw, BH/sh), dW3 = sw*sc3, dH3 = sh*sc3;
         lfxReliefX.clearRect(0, 0, BW, BH);
         lfxReliefX.drawImage(src, (BW-dW3)/2, (BH-dH3)/2, dW3, dH3);
@@ -6505,56 +6509,79 @@ const BW = Math.max(24, Math.min(192, Math.round(BH * width / height)));
             const gy = lfxLum[i+BW] - lfxLum[i-BW];
             const shade = Math.max(0, Math.min(1, 0.25 + l*0.45 + gx*1.8 + gy*1.2));
             const idx = i*4;
-            d[idx]   = 10 + 40*l;
-            d[idx+1] = 60 + 195*shade;
-            d[idx+2] = 90 + 165*shade;
+            // 🔒 VERDE PARANORMAL: base verde + highlight neón
+            const inten = Math.max(0, Math.min(1, 0.45 + shade * 0.7 + l * 0.35));
+            d[idx]   = 10 * inten;                  // Rojo casi nulo (tinte ácido)
+            d[idx+1] = 150 + 105 * inten;           // Verde intenso (150→255)
+            d[idx+2] = 25 + 35 * inten;             // Azul muy bajo (25→60)
             d[idx+3] = 255;
         }
         lfxReliefX.putImageData(img, 0, 0);
         const tmp = lfxLumPrev; lfxLumPrev = lfxLum; lfxLum = tmp;
     }
 
-    // ── 4) Análisis de la máscara con FILTRO DE BRILLO ──
-if (maskToUse) {
+       // ── 4) Análisis de la máscara con FILTRO DE BRILLO Y FORMA ──
+if (maskToUse && _shouldCompute) {
     const md = lfxMaskX.getImageData(0, 0, BW, BH).data;
-    const vd = lfxReliefX.getImageData(0, 0, BW, BH).data; // 🔒 ESTA LÍNEA ES OBLIGATORIA
+    const vd = lfxReliefX.getImageData(0, 0, BW, BH).data; 
+    
     let acc = 0, topY = -1, botY = -1, sx = 0, footN = 0, footSX = 0;
+    let minX = BW, maxX = -1;
     const totalPixels = BW * BH;
     
     for (let i = 0; i < totalPixels; i++) {
         const alpha = md[i * 4 + 3];
         const idx = i * 4;
         
-        // 🔒 FILTRO DE BRILLO: Ignorar píxeles muy brillantes (luces, flashes)
+        // 🔒 Filtro más permisivo con las luces
         const brightness = (vd[idx] * 0.299 + vd[idx+1] * 0.587 + vd[idx+2] * 0.114);
-        const isTooBright = brightness > 220; 
-        const isFlash = alpha > 200 && brightness > 180; 
+        const isTooBright = brightness > 240; 
+        const isFlash = alpha > 200 && brightness > 220; 
         
-        if (alpha > 110 && !isTooBright && !isFlash) {
+        // 🔒 Umbral bajado a 100: detecta siluetas aunque no sean 100% opacas
+        if (alpha > 100 && !isTooBright && !isFlash) {
             acc++;
             const y = (i / BW) | 0;
             const x = i % BW;
             if (topY < 0) topY = y;
             botY = y;
             sx += x;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
         }
     }
         const coverage = acc / (BW*BH);
-        const hasPerson = coverage > 0.02 && (botY - topY) > BH*0.2;
-        if (hasPerson) {
+        const boxH = botY - topY;
+        const boxW = maxX - minX;
+        
+        // 🔒 PROPORCIÓN RELAJADA: aspect > 0.6 permite cabezas/hombros en primer plano
+        const aspect = boxH / Math.max(1, boxW);
+        const isCandidate = coverage > 0.015 && boxH > BH * 0.12 && aspect > 0.6 && aspect < 5.0;
+
+        if (isCandidate) {
             for (let y = Math.max(topY, botY-6); y <= botY; y++) for (let x = 0; x < BW; x++) {
-                if (md[(y*BW+x)*4+3] > 110) { footN++; footSX += x; }
+                if (md[(y*BW+x)*4+3] > 100) { footN++; footSX += x; }
             }
-            // 🔒 SUAVIZADO MÁS AGRESIVO PARA EVITAR PARPADEOS POR EL FILTRO DE BRILLO
-LFX.coverage += (coverage - LFX.coverage) * 0.2;  
-LFX.cx += (sx/acc/BW - LFX.cx) * 0.2;
-LFX.topY += (topY/BH - LFX.topY) * 0.2;
-LFX.personH += ((botY-topY)/BH - LFX.personH) * 0.2;
-LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX) * 0.2;
-LFX.footY += (botY/BH - LFX.footY) * 0.2;
+            LFX.coverage += (coverage - LFX.coverage) * 0.2;  
+            LFX.cx += (sx/acc/BW - LFX.cx) * 0.2;
+            LFX.topY += (topY/BH - LFX.topY) * 0.2;
+            LFX.personH += ((botY-topY)/BH - LFX.personH) * 0.2;
+            LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX) * 0.2;
+            LFX.footY += (botY/BH - LFX.footY) * 0.2;
             LFX.hasFeet = footN >= 8 && botY < BH - 2;
-        } else { LFX.coverage += (coverage - LFX.coverage)*0.2; LFX.hasFeet = false; }
-        LFX.hasPerson = hasPerson;
+            LFX.hasPerson = true;
+            LFX.missFrames = 0; // 🔒 Resetea el contador de pérdida
+        } else { 
+            LFX.missFrames = (LFX.missFrames || 0) + 1;
+            // 🔒 PERIODO DE GRACIA: Si parpadea 20 frames (0.6s), mantiene el escaneo activo
+            if (LFX.missFrames > 20) {
+                LFX.coverage += (0 - LFX.coverage)*0.2; 
+                LFX.hasFeet = false;
+                LFX.hasPerson = false;
+            } else {
+                LFX.hasPerson = true;
+            }
+        }
     }
     LFX.perturb += ((LFX.hasPerson ? 1 : 0) - LFX.perturb)*0.08;
     LFX.vortex  += (((LFX.motion > 0.22 && !LFX.hasPerson) ? 1 : 0) - LFX.vortex)*0.15;
@@ -6577,44 +6604,35 @@ for (let ox = -1; ox <= 1; ox++) {
     }
 }
         lfxRimX.globalCompositeOperation = 'source-in';
-        lfxRimX.fillStyle = 'rgba(255,170,50,1)'; lfxRimX.fillRect(0, 0, BW, BH);
+        lfxRimX.fillStyle = 'rgba(180, 255, 90, 1)'; lfxRimX.fillRect(0, 0, BW, BH);
         lfxRimX.globalCompositeOperation = 'destination-out';
         lfxRimX.drawImage(lfxMaskC, 0, 0, BW, BH);
         lfxRimX.globalCompositeOperation = 'source-over';
 
         c.save();
-        c.imageSmoothingEnabled = true; c.imageSmoothingQuality = isHighEnd ? 'high' : 'low'; // 🔒 'low' en gama baja: es un glow, no se nota
+        c.imageSmoothingEnabled = true; c.imageSmoothingQuality = isHighEnd ? 'high' : 'low';
+        
+        // Pase 1: cuerpo semi-transparente (deja ver el objeto interior)
         c.globalCompositeOperation = 'screen';
-        c.globalAlpha = 0.92; c.drawImage(lfxTintC, 0, 0, width, height);
+        c.globalAlpha = 0.65; c.drawImage(lfxTintC, 0, 0, width, height);
+        
+        // Pase 2: realce de brillo interno (más sutil)
         c.globalCompositeOperation = 'lighter';
-        if (isHighEnd) { c.shadowColor = 'rgba(255,140,20,0.8)'; c.shadowBlur = 10; }
-        c.globalAlpha = 0.8; c.drawImage(lfxRimC, 0, 0, width, height);
-c.shadowBlur = 0;
-if (isHighEnd) { c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height); } // 🔒 2ª pasada solo gama alta
+        c.globalAlpha = 0.25; c.drawImage(lfxTintC, 0, 0, width, height);
+        
+        // Pase 3: contorno verde lima nítido
+        c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height);
+        
         c.restore(); c.globalAlpha = 1;
-
-        // Anillos (cian)
-        const rx = LFX.cx*width, ry = (LFX.topY + LFX.personH*0.18)*height;
-        const R = Math.max(30, LFX.personH*height*0.30);
-        LFX.rot += 0.03;
-        c.save();
-        c.strokeStyle = 'rgba(0,240,255,0.5)'; c.lineWidth = Math.max(1.2, width*0.0016);
-        c.beginPath(); c.arc(rx, ry, R, 0, Math.PI*2); c.stroke();
-        c.strokeStyle = 'rgba(0,240,255,0.25)';
-        c.beginPath(); c.arc(rx, ry, R*1.12, 0, Math.PI*2); c.stroke();
-        c.strokeStyle = 'rgba(0,255,255,0.9)'; c.lineWidth = Math.max(2, width*0.0026);
-        c.beginPath(); c.arc(rx, ry, R, LFX.rot, LFX.rot+1.1); c.stroke();
-        c.beginPath(); c.arc(rx, ry, R, LFX.rot+Math.PI, LFX.rot+Math.PI+1.1); c.stroke();
-        c.restore();
 
         if (LFX.hasFeet) {
             const fx = LFX.footX*width, fy = LFX.footY*height, rw = Math.max(26, width*0.10);
             c.save();
-            c.strokeStyle = 'rgba(0,255,255,0.6)'; c.lineWidth = Math.max(1.2, width*0.0016);
+            c.strokeStyle = 'rgba(140,255,80,0.7)'; c.lineWidth = Math.max(1.2, width*0.0016);
             c.beginPath(); c.ellipse(fx, fy, rw, rw*0.22, 0, 0, Math.PI*2); c.stroke();
-            c.strokeStyle = 'rgba(0,255,255,0.35)';
+            c.strokeStyle = 'rgba(140,255,80,0.40)';
             c.beginPath(); c.ellipse(fx, fy, rw*1.5, rw*0.33, 0, 0, Math.PI*2); c.stroke();
-            c.strokeStyle = 'rgba(0,255,255,0.18)';
+            c.strokeStyle = 'rgba(140,255,80,0.20)';
             c.beginPath(); c.ellipse(fx, fy, rw*2.1, rw*0.46, 0, 0, Math.PI*2); c.stroke();
             c.restore();
         }
@@ -6636,9 +6654,11 @@ if (isHighEnd) { c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height)
     const fs = Math.round(11*u), fsB = Math.round(13*u), fsT = Math.round(14*u);
     const LT = 'rgba(255,86,86,';   // etiquetas
     const VL = 'rgba(255,196,96,';  // valores
-    const dens = Math.min(99, Math.round(LFX.coverage*220));
+        // 🔒 PARÁMETROS DINÁMICOS (Ruido + Escala realista)
+    const noise = (Math.sin(currentFrame * 0.15) * 3) + (Math.random() * 2);
+    const dens = Math.min(99, Math.max(0, Math.round(LFX.coverage * 400 + noise)));
     const clase = Math.max(1, Math.min(5, 1 + Math.floor(dens/20)));
-    const senal = Math.min(100, Math.round(60 + LFX.coverage*300 + LFX.motion*20));
+    const senal = Math.min(100, Math.max(0, Math.round(40 + LFX.coverage * 250 + LFX.motion * 40 + noise)));
     c.save(); c.textBaseline = 'top';
     const banner = LFX.perturb > 0.5 ? 'PERTURBACIÓN VISUAL DETECTADA' : 'ANALIZANDO ENTORNO';
     const bCol = LFX.perturb > 0.5 ? '255,60,60' : '255,170,60';
@@ -6657,7 +6677,7 @@ if (isHighEnd) { c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height)
     };
     const ly = by + fsT + 20*u, lx = 10*u, rx2 = width - 10*u;
     line2('FLASH: ', 'ON', lx, ly, VL + '1)');
-    line2('RANGO: ', (8 - LFX.coverage*6).toFixed(1) + 'm', lx, ly + fs*1.6, VL + '1)');
+        line2('RANGO: ', (9.5 - LFX.coverage * 25 + Math.random() * 0.2).toFixed(1) + 'm', lx, ly + fs*1.6, VL + '1)');
     line2('DENSIDAD: ', dens + '%' + (dens > 60 ? ' (CRÍTICO)' : ''), lx, ly + fs*3.2, dens > 60 ? 'rgba(255,60,60,1)' : VL + '1)');
 
     const lineR = (lab, val, y, vCol, big) => {
@@ -6676,8 +6696,8 @@ if (isHighEnd) { c.globalAlpha = 0.85; c.drawImage(lfxRimC, 0, 0, width, height)
 
     const by2 = height - fs*5.2;
     line2('VECTOR PATH_01: ', 'MEJORADO', lx, by2, VL + '1)');
-    line2('VARIANZA TEMP: ', (-2 - LFX.coverage*8).toFixed(1) + '°C', lx, by2 + fs*1.6, VL + '1)');
-    line2('VOLUMEN MAPEADO: ', (5 + LFX.coverage*60).toFixed(1) + ' m³', lx, by2 + fs*3.2, VL + '1)');
+    line2('VARIANZA TEMP: ', (-1.0 - LFX.coverage * 35 + Math.random() * 0.8).toFixed(1) + '°C', lx, by2 + fs*1.6, VL + '1)');
+    line2('VOLUMEN MAPEADO: ', (1.5 + LFX.coverage * 220 + Math.random() * 2.0).toFixed(1) + ' m³', lx, by2 + fs*3.2, VL + '1)');
 
     // ── 7) FRECUENCIA EN VIVO (con audio real) ──
     let lvl = LFX.motion;
@@ -7254,6 +7274,10 @@ function computeLetterbox(vw, vh, W, H) {
 }
 
 function composeFullFrame(g, W, H) {
+// 🔒 Sincroniza el GL antes de leer (única línea nueva)
+if (typeof OBRL !== 'undefined' && OBRL.ready) {
+  try { renderGLVideo(); } catch(e){}
+}
 g.setTransform(1, 0, 0, 1, 0, 0);
 g.globalCompositeOperation = 'source-over';
 g.globalAlpha = 1;
@@ -7518,7 +7542,7 @@ if (_overlayDirty || isRecordingActive) {
   drawOverlayChain(ctx, W, H);
   _overlayDirty = false; //  Resetear flag después de dibujar
 } else {
-  //  Solo HUD estático (no redibujar mapa ni tally si no cambiaron)
+  // HUD estático (el canvas se limpia cada frame, hay que redibujar siempre)
   drawBurnInHUD(ctx, W, H, animState.hudScale);
 }
   
@@ -9569,26 +9593,14 @@ void main(){
 vec2 uv = u_uvOff + v_uv*u_uvScale;
 vec3 base = texture2D(u_tex, uv).rgb;
 if (u_sharp > 0.001) {
-// 1) NITIDEZ ISÓTROPICA (8 vecinos): trata igual diagonales y rectas → ADIÓS diente de sierra
+// 🔒 SHARPEN 4-SAMPLE: solo cruz (N/S/E/O) — 3× más rápido, 90% mismo resultado
 vec2 t = u_texel;
-vec3 n4 = texture2D(u_tex, uv+vec2(0.0,t.y)).rgb
-        + texture2D(u_tex, uv-vec2(0.0,t.y)).rgb
-        + texture2D(u_tex, uv+vec2(t.x,0.0)).rgb
-        + texture2D(u_tex, uv-vec2(t.x,0.0)).rgb;
-vec3 d4 = texture2D(u_tex, uv+t).rgb
-        + texture2D(u_tex, uv-t).rgb
-        + texture2D(u_tex, uv+vec2(t.x,-t.y)).rgb
-        + texture2D(u_tex, uv+vec2(-t.x,t.y)).rgb;
-vec3 blur8 = (n4 + d4) * 0.125;
-vec3 fine = base + (base - blur8) * (u_sharp * 1.7);
-// 2) CLARIDAD SUAVE (micro-contraste solo en luma, sin bordes duros)
-vec2 t2 = t * 2.0;
-float lC = luma(base);
-float lN = (luma(texture2D(u_tex, uv+vec2(0.0,t2.y)).rgb)
-          + luma(texture2D(u_tex, uv-vec2(0.0,t2.y)).rgb)
-          + luma(texture2D(u_tex, uv+vec2(t2.x,0.0)).rgb)
-          + luma(texture2D(u_tex, uv-vec2(t2.x,0.0)).rgb)) * 0.25;
-base = clamp(fine, 0.0, 1.0) + (lC - lN) * (u_sharp * 0.5);
+vec3 n = texture2D(u_tex, uv + vec2(0.0, t.y)).rgb;
+vec3 s = texture2D(u_tex, uv - vec2(0.0, t.y)).rgb;
+vec3 e = texture2D(u_tex, uv + vec2(t.x, 0.0)).rgb;
+vec3 w = texture2D(u_tex, uv - vec2(t.x, 0.0)).rgb;
+vec3 blur4 = (n + s + e + w) * 0.25;
+base = clamp(base + (base - blur4) * (u_sharp * 1.5), 0.0, 1.0);
 }
 vec3 col = applyFilter(clamp(base,0.0,1.0), u_filter);
 float L = luma(col);
