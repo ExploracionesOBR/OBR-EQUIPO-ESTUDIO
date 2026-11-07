@@ -762,6 +762,70 @@ body.hide-hud-text #hud-text-container { display: none !important; }
         #zoom-target-indicator { position: absolute; width: 60px; height: 60px; border: 2px solid #00ff00; border-radius: 50%; transform: translate(-50%, -50%) scale(0.5); opacity: 0; pointer-events: none; z-index: 80; transition: transform 0.3s, opacity 0.3s; }
         #zoom-target-indicator.active { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 
+/* ===== 🔀 SPLIT-SCREEN — canvas raw + línea ===== */
+#raw-split-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    z-index: 3;
+    display: none;
+    pointer-events: none;
+}
+#raw-split-canvas.active { display: block; }
+
+#master-canvas { z-index: 4 !important; } /* Asegura master siempre encima del raw */
+
+#split-line {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(to bottom, transparent, #00ff88 15%, #00ff88 85%, transparent);
+    transform: translateX(-50%);
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.8);
+    z-index: 5;
+    display: none;
+    pointer-events: none;
+}
+#split-line.active { display: block; }
+
+/* LIDAR activo: oculta el botón (ya no aplica split) */
+body.lidar-fx-active #btn-split-toggle { display: none !important; }
+
+/* Canvas raw: cubre la mitad izquierda */
+#raw-split-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 50vw;
+    height: 100vh;
+    z-index: 3;
+    display: none;
+    pointer-events: none;
+    object-fit: cover;
+}
+#raw-split-canvas.active { display: block; }
+
+/* Línea divisoria vertical */
+#split-line {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100vh;
+    background: linear-gradient(to bottom, transparent, #00ff88 15%, #00ff88 85%, transparent);
+    transform: translateX(-50%);
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.8);
+    z-index: 4;
+    display: none;
+    pointer-events: none;
+}
+#split-line.active { display: block; }
+
+
     #map-container-slot {
 position: absolute; left: 30px; bottom: 15px; z-index: 85;
 width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
@@ -1025,6 +1089,110 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 #offline-container { padding: 0; }
 #offline-container::before { content: ''; position: absolute; inset: -10px; }  /* +20px de dedo */
 
+
+/* ===== 🔀 SPLIT: ocultar fuentes de video crudas ===== */
+body.split-active #shared-video-element,
+body.split-active #obr-gl-video {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+body.split-active #raw-split-canvas.active {
+    display: block !important;
+}
+body.split-active #split-line.active {
+    display: block !important;
+}
+
+
+/* ===== 🔀 SPLIT-SCREEN — barrita debajo del mapa ===== */
+#btn-split-toggle {
+    position: fixed;
+    left: 30px;
+    bottom: 4px;
+    width: 156px;
+    height: 26px;
+    border-radius: 6px;
+    background: rgba(0, 255, 136, 0.08);
+    border: 1px solid rgba(0, 255, 136, 0.35);
+    color: rgba(0, 255, 136, 0.7);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    z-index: 86;
+    opacity: 0.55;
+    transition: all 0.25s ease;
+    pointer-events: auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+#btn-split-toggle i { font-size: 11px; }
+#btn-split-toggle:hover { opacity: 1; }
+#btn-split-toggle:active { transform: scale(0.96); }
+#btn-split-toggle.active {
+    opacity: 1;
+    background: rgba(0, 255, 136, 0.25);
+    color: #00ff88;
+    border-color: rgba(0, 255, 136, 0.8);
+    box-shadow: 0 0 14px rgba(0, 255, 136, 0.6);
+}
+
+/* Vertical: mapa en bottom:2px con h=140 → botón debajo */
+@media (orientation: portrait) {
+    #btn-split-toggle {
+        left: 2px;
+        bottom: 2px;
+        width: 140px;
+        height: 24px;
+        font-size: 9px;
+        letter-spacing: 1px;
+    }
+    #map-container-slot { bottom: 30px !important; }
+}
+
+/* Ocultar en LiDAR (no aplica) y en landscape pequeño */
+body.lidar-fx-active #btn-split-toggle { display: none !important; }
+
+/* ===== 🔀 SPLIT-SCREEN — canvas raw + línea ===== */
+#raw-split-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    z-index: 3;
+    display: none;
+    pointer-events: none;
+}
+#raw-split-canvas.active { display: block; }
+
+#master-canvas { z-index: 4 !important; }
+
+#split-line {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(to bottom, transparent, #00ff88 15%, #00ff88 85%, transparent);
+    transform: translateX(-50%);
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.8);
+    z-index: 5;
+    display: none;
+    pointer-events: none;
+}
+#split-line.active { display: block; }
+
+/* Cuando split activo: ocultar video y GL crudos */
+body.split-active #shared-video-element,
+body.split-active #obr-gl-video {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
     </style>
 </head>
 <body>
@@ -1042,10 +1210,12 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
         </filter>
     </defs>
 </svg>
-    <div id="main-view-area">
+        <div id="main-view-area">
         <div id="zoom-container">
   <video id="shared-video-element" autoplay playsinline muted></video>
+  <canvas id="raw-split-canvas"></canvas>
   <canvas id="master-canvas"></canvas>
+  <div id="split-line"></div>
 </div>
         <div id="ai-scan-overlay"></div>
     </div>
@@ -1119,6 +1289,11 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
     <div id="top-right-group" class="absolute top-6 right-4 flex items-center gap-3 z-50 pointer-events-auto">
         <i id="settings-gear-icon" class="fas fa-cog text-xl text-gray-500 cursor-pointer hover:scale-110 transition-transform" onclick="openSettings()"></i>
     </div>
+
+        <!-- 🔀 BOTÓN SPLIT-SCREEN (barrita debajo del mapa) -->
+    <button id="btn-split-toggle" onclick="toggleSplitScreen()" title="Comparar RAW vs FILTRO">
+        <i class="fas fa-columns"></i><span>SPLIT</span>
+    </button>
     
     <div id="map-container-slot" class="map-visible">
         <div style="position: relative; width: 100%; height: 100%;">
@@ -1454,7 +1629,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '34'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '36'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -2433,6 +2608,10 @@ function getAudioContext() {
     let lastEvpTime = 0;
     let speechTimer = null;
     let lastSpokenText = "";
+
+    // 🔒 B.4: memoria anti-repetición de transcripciones (global)
+    window._lastUserTranscripts = [];       // [{txt, ts}]
+    const TRANSCRIPT_TTL_MS = 10000;        // 10s de ventana anti-duplicado
     
     let lastValidAudioTime = Date.now();
     let lastReconnectTime = 0;
@@ -2612,6 +2791,24 @@ if (['ops', 'op5', 'ups', 'uh', 'eh', 'aja', 'ajá', 'mmm', 'mmmh'].includes(txt
         return true;
     }
     
+    // 🔒 FIX FANTASMA: 1 palabra muy corta = probable ruido
+    if (words.length === 1 && txt.length <= 5) {
+        console.warn('[VOICE REC] Palabra aislada muy corta descartada:', original);
+        return true;
+    }
+    
+    // 🔒 FIX FANTASMA: sin vocales = ruido/garbage
+    if (!/[aeiouáéíóú]/i.test(txt)) {
+        console.warn('[VOICE REC] Sin vocales (ruido) descartado:', original);
+        return true;
+    }
+    
+    // 🔒 FIX FANTASMA: mucha repetición de caracteres
+    if (/(.)\1{4,}/.test(txt)) {
+        console.warn('[VOICE REC] Repetición de caracteres descartada:', original);
+        return true;
+    }
+    
     return false;
 }
 
@@ -2736,12 +2933,25 @@ if (now - lastProcessTime > PROC_INTERVAL) {
                 offset += audioAccumulator[i].length;
             }
             
-            // 🔒 CRÍTICO: Detectar silencio ANTES de enviar a la API
+            // 🔒 CRÍTICO: Detección de silencio MÁS AGRESIVA (anti-fantasma)
             const rms = calculateAudioRMS(merged);
-            const SILENCE_THRESHOLD = 0.008; // Umbral de silencio (ajustable)
+            const SILENCE_THRESHOLD = 0.02; // antes 0.008 → 2.5× más estricto
             
-            if (rms < SILENCE_THRESHOLD) {
-                // Silencio detectado - NO enviar a la API
+            // 🔒 VAD: % de muestras con volumen real (voz detectada)
+            let loudCount = 0;
+            let peak = 0;
+            for (let i = 0; i < merged.length; i++) {
+                const abs = Math.abs(merged[i]);
+                if (abs > peak) peak = abs;
+                if (abs > 0.08) loudCount++;
+            }
+            const vad = loudCount / merged.length;
+            
+            // 🔒 Triple check: RMS alto + VAD alto + pico alto = hay voz real
+            const hasVoice = rms >= SILENCE_THRESHOLD && vad >= 0.12 && peak >= 0.15;
+            
+            if (!hasVoice) {
+                // Silencio o ruido leve → NO enviar a la API
                 audioAccumulator = [];
                 return;
             }
@@ -2774,8 +2984,57 @@ function stopVoiceRecognition() {
 }
 
 
+// 🔒 B.4: ¿Es un duplicado reciente?
+function isDuplicateTranscript(nuevoTxt) {
+    const now = Date.now();
+    const recent = (window._lastUserTranscripts || []).filter(r => now - r.ts < TRANSCRIPT_TTL_MS);
+    window._lastUserTranscripts = recent; // purga TTL
+
+    const nuevoLower = nuevoTxt.toLowerCase().trim();
+    const nuevasPalabras = nuevoLower.split(/\s+/).filter(w => w.length > 2);
+
+    for (const entry of recent) {
+        const viejoLower = entry.txt.toLowerCase().trim();
+
+        // Caso 1: mismo texto exacto
+        if (viejoLower === nuevoLower) {
+            console.warn('[VOICE REC] Duplicado exacto (≤10s):', nuevoTxt);
+            return true;
+        }
+
+        // Caso 2: frases cortas (≤3 palabras reales) → solo exacto cuenta
+        const viejasPalabras = viejoLower.split(/\s+/).filter(w => w.length > 2);
+        if (nuevasPalabras.length <= 3 || viejasPalabras.length <= 3) {
+            continue; // no comparar por similitud si son muy cortas
+        }
+
+        // Caso 3: Jaccard dinámico (más estricto en frases largas)
+        const comunes = nuevasPalabras.filter(w => viejasPalabras.includes(w)).length;
+        const union = Math.max(nuevasPalabras.length, viejasPalabras.length);
+        const similitud = comunes / union;
+        const umbral = union >= 8 ? 0.85 : 0.75; // frases largas → exigimos más coincidencia
+        if (similitud >= umbral) {
+            console.warn(`[VOICE REC] Duplicado ${(similitud*100).toFixed(0)}% (umbral ${umbral*100}%):`, nuevoTxt);
+            return true;
+        }
+    }
+    return false;
+}
+
+// 🔒 B.4: registrar texto aceptado
+function rememberTranscript(txt) {
+    window._lastUserTranscripts.unshift({ txt, ts: Date.now() });
+    if (window._lastUserTranscripts.length > 5) window._lastUserTranscripts.length = 5;
+}
+
 
 async function sendToGroqTranscription(wavBlob) {
+    // 🔒 B.4: guard — abortar si Audio Scan se desactivó mientras esperábamos
+    if (!state.isAudioScan) {
+        console.log('[VOICE REC] B.4: cancelado (Audio Scan inactivo al inicio)');
+        isTranscribing = false;
+        return;
+    }
     try {
         const formData = new FormData();
         formData.append('file', wavBlob, 'audio.wav');
@@ -2824,13 +3083,40 @@ async function sendToGroqTranscription(wavBlob) {
         }
         
         const txt = normalizarTexto(transcript);
-        if (txt.length <= 2) {
+if (txt.length <= 2) {
+    isTranscribing = false;
+    return;
+}
+
+// 🔒 B.4: filtro anti-repetición
+const esDuplicado = isDuplicateTranscript(txt);
+
+if (esDuplicado) {
+    // No mostramos en pantalla, pero SÍ dejamos pasar a la IA
+    // para que un "¿hay alguien?" repetido legítimo tenga respuesta
+    // (solo si tiene ≥3 palabras reales, para no gastar tokens en ruido)
+    const palabrasReales = txt.split(/\s+/).filter(w => w.length > 2);
+    if (palabrasReales.length >= 3) {
+        procesarComandoEVP(txt);
+    }
+    isTranscribing = false;
+    return;
+}
+
+        // 🔒 B.4: segundo guard — Audio Scan puede haberse desactivado DURANTE el fetch
+        if (!state.isAudioScan) {
+            console.log('[VOICE REC] B.4: cancelado (Audio Scan desactivado durante fetch)');
             isTranscribing = false;
             return;
         }
         
+        rememberTranscript(txt);
         window._liveUserText = normalizarTexto(transcript).toUpperCase();
-        window._liveUserLastUpdate = Date.now();
+
+// Texto válido y nuevo: registrar + mostrar
+rememberTranscript(txt);
+window._liveUserText = normalizarTexto(transcript).toUpperCase();
+window._liveUserLastUpdate = Date.now();
         
         const isSystemSpeaking = isTtsPlaying || isSpookySpeaking || window._isAnnouncement;
         if (isSystemSpeaking) {
@@ -3126,6 +3412,42 @@ function isFeedback(transcript) {
     }
     
     return matchCount / words.length > 0.5;
+}
+
+// 🔒 B.4: ¿Es un duplicado reciente de los últimos transcripts?
+function isDuplicateTranscript(nuevoTxt) {
+    const now = Date.now();
+    const recent = (window._lastUserTranscripts || []).filter(r => now - r.ts < TRANSCRIPT_TTL_MS);
+    window._lastUserTranscripts = recent; // purga TTL automática
+
+    const nuevoLower = nuevoTxt.toLowerCase().trim();
+    const nuevasPalabras = nuevoLower.split(/\s+/).filter(w => w.length > 2);
+
+    for (const entry of recent) {
+        const viejoLower = entry.txt.toLowerCase().trim();
+        if (viejoLower === nuevoLower) {
+            console.warn('[VOICE REC] Duplicado exacto (≤10s):', nuevoTxt);
+            return true;
+        }
+        const viejasPalabras = viejoLower.split(/\s+/).filter(w => w.length > 2);
+        if (nuevasPalabras.length <= 3 || viejasPalabras.length <= 3) continue;
+
+        const comunes = nuevasPalabras.filter(w => viejasPalabras.includes(w)).length;
+        const union = Math.max(nuevasPalabras.length, viejasPalabras.length);
+        const similitud = comunes / union;
+        const umbral = union >= 8 ? 0.85 : 0.75;
+        if (similitud >= umbral) {
+            console.warn(`[VOICE REC] Duplicado ${(similitud*100).toFixed(0)}% (umbral ${umbral*100}%):`, nuevoTxt);
+            return true;
+        }
+    }
+    return false;
+}
+
+// 🔒 B.4: registrar transcript aceptado
+function rememberTranscript(txt) {
+    window._lastUserTranscripts.unshift({ txt, ts: Date.now() });
+    if (window._lastUserTranscripts.length > 5) window._lastUserTranscripts.length = 5;
 }
 
 async function fetchBackgroundAIContext() {
@@ -3649,6 +3971,9 @@ try { if (ttsLimiter) ttsLimiter.connect(mixDestination); else if (ttsMainGain) 
     async function speakText(text) {
         if (!text) return;
         isTtsPlaying = true; isSpookySpeaking = false;
+
+                // 👻 Contador EVP: la IA Vision también cuenta como "comunicación"
+        window._evpCount = (window._evpCount || 0) + 1;
         
         clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
         await initAudioEngine();
@@ -3695,6 +4020,10 @@ if (window._pendingUserCommand) {
     async function speakSpooky(text) {
         if (!text) return;
         isTtsPlaying = true; isSpookySpeaking = true;
+
+
+
+                window._evpCount = (window._evpCount || 0) + 1;
 
         clearTimeout(_ttsWatchdog); _ttsWatchdog = setTimeout(() => { _resetTtsFlags(); }, 22000);
         const safeText = text.substring(0, 120); const randomVoice = getRandomVoice();
@@ -4817,7 +5146,9 @@ const UI_HIDE_OPTIONS = [
     { key: 'hide-settings-gear', label: 'BOTÓN CONFIGURACIONES', icon: '⚙️', desc: 'Engranaje invisible (sigue funcional)' },
     { key: 'hide-map', label: 'MAPA', icon: '🗺️', desc: 'Mini mapa GPS' },
     { key: 'hide-hud-text', label: 'HUD TEXTO', icon: '📝', desc: 'Solo deja el logo OBR visible' },
-{ key: 'hide-user-transcript', label: 'TRANSCRIPCIÓN USUARIO', icon: '🗣️', desc: 'Oculta tu texto en vivo' }];
+    { key: 'hide-user-transcript', label: 'TRANSCRIPCIÓN USUARIO', icon: '🗣️', desc: 'Oculta tu texto en vivo' },
+    { key: 'hide-session-hud', label: 'CONTADOR SESIÓN', icon: '⏱', desc: 'Tiempo, EVPs, detecciones, GPS, batería' }
+];
 
 function loadUIHideSettings() {
   UI_HIDE_OPTIONS.forEach(opt => {
@@ -5277,6 +5608,85 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
     }, 1000);
 }
 
+
+// ==========================================================
+// 🔀 SPLIT-SCREEN — Comparar RAW vs FILTRO
+// ==========================================================
+window._splitScreenActive = false;
+let _rawSplitCtx = null;
+
+function toggleSplitScreen() {
+    window._splitScreenActive = !window._splitScreenActive;
+    const btn = document.getElementById('btn-split-toggle');
+    const rawCanvas = document.getElementById('raw-split-canvas');
+    const splitLine = document.getElementById('split-line');
+    const active = window._splitScreenActive;
+
+    if (active) {
+        if (btn) btn.classList.add('active');
+        if (rawCanvas) rawCanvas.classList.add('active');
+        if (splitLine) splitLine.classList.add('active');
+        document.body.classList.add('split-active');
+        showToast('🔀 COMPARACIÓN RAW / FILTRO', false);
+    } else {
+        if (btn) btn.classList.remove('active');
+        if (rawCanvas) rawCanvas.classList.remove('active');
+        if (splitLine) splitLine.classList.remove('active');
+        document.body.classList.remove('split-active');
+        showToast('VISTA SIMPLE', false);
+    }
+}
+window.toggleSplitScreen = toggleSplitScreen;
+
+function drawRawSplitFrame() {
+    if (!window._splitScreenActive) return;
+    const c = document.getElementById('raw-split-canvas');
+    if (!c || !el.video || !el.video.videoWidth) return;
+    if (!_rawSplitCtx) _rawSplitCtx = c.getContext('2d', { alpha: false });
+
+    const w = c.clientWidth, h = c.clientHeight;
+    if (w < 2 || h < 2) return;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+
+    // COVER ajustado a ESTA mitad (50% ancho)
+    const vW = el.video.videoWidth, vH = el.video.videoHeight;
+    const sc = Math.max(w / vW, h / vH);
+    const dW = vW * sc, dH = vH * sc;
+    _rawSplitCtx.drawImage(el.video, (w - dW) / 2, (h - dH) / 2, dW, dH);
+}
+
+function drawFilteredSplitFrame(ctx2, W, H) {
+    if (!window._splitScreenActive) return;
+    const v = el.video;
+    if (!v || !v.videoWidth) return;
+
+    // Si GL está listo, usar su canvas (ya tiene filtro en shader)
+    const useGL = (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1);
+    const src = useGL ? OBRL.canvas : v;
+    const srcW = useGL ? src.width  : v.videoWidth;
+    const srcH = useGL ? src.height : v.videoHeight;
+
+    const halfW = W / 2;
+    // COVER ajustado a MITAD DERECHA
+    const sc = Math.max(halfW / srcW, H / srcH);
+    const dW = srcW * sc, dH = srcH * sc;
+    const dx = (halfW - dW) / 2, dy = (H - dH) / 2;
+
+    ctx2.save();
+    ctx2.beginPath();
+    ctx2.rect(halfW, 0, halfW, H);
+    ctx2.clip();
+    if (!useGL) {
+        const f = getCanvasVideoFilter();
+        if (f !== 'none') ctx2.filter = f;
+    }
+    ctx2.imageSmoothingEnabled = true;
+    ctx2.imageSmoothingQuality = 'high';
+    ctx2.drawImage(src, halfW + dx, dy, dW, dH);
+    ctx2.restore();
+}
+
+
 async function initApp() {
   // Detectar offline inmediatamente
   const isOffline = !navigator.onLine || OBR_NET.offline;
@@ -5288,10 +5698,23 @@ async function initApp() {
 
   unlockAudioContext();
 
-  if (_deviceCores <= 4) {
-    qualityScale = 0.95;
-    showToast('🔋 MODO OPTIMIZADO ACTIVADO', false);
+    // 📊 Inicializar contadores de sesión
+  window._sessionStartTime = Date.now();
+  window._evpCount = 0;
+  window._detectionCount = 0;
+  window._batteryLevel = null;
+
+  // Batería (se actualiza cada 30s)
+  if (navigator.getBattery) {
+      navigator.getBattery().then(b => {
+          const update = () => { window._batteryLevel = Math.round(b.level * 100); };
+          update();
+          b.addEventListener('levelchange', update);
+      }).catch(() => {});
   }
+
+  // 🔒 qualityScale fijo en 1.0 (nitidez total)
+  qualityScale = 1.0;
 
   document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
   document.getElementById('cam-error-panel').style.display = 'none';
@@ -5532,7 +5955,12 @@ if (d.type === 'poses') {
 slsBusy = false;
 const AW = analysisCanvas.width, AH = analysisCanvas.height;
 const mapped = (d.poses || []).map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x / AW, y: k.y / AH, score: k.score })) }));
+const prevCount = targetPoses.length;
 targetPoses = filterOverlapping(mapped);
+// 📡 Contador SLS: nueva pose detectada (subió de 0 a 1+ o apareció una nueva)
+if (targetPoses.length > prevCount) {
+    window._detectionCount = (window._detectionCount || 0) + 1;
+}
 if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
 else { targetPoses = []; currentPose = null; smoothedPoses = []; }
 }
@@ -5629,7 +6057,11 @@ scoreThreshold: AI_SENSITIVITY
 });
 if (newPoses && newPoses.length > 0) {
 let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
+const prevCount = targetPoses.length;
 targetPoses = filterOverlapping(mappedPoses);
+if (targetPoses.length > prevCount) {
+    window._detectionCount = (window._detectionCount || 0) + 1;
+}
 if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
 } else {
 targetPoses = []; currentPose = null; smoothedPoses = [];
@@ -5964,6 +6396,8 @@ async function toggleAudioScanner() {
     evpContextMemory = [];
     cumulativeEVPEnergy = 0;
     ambientNoiseLevel = 0.01;
+    window._lastUserTranscripts = [];      // 🔒 B.4: reset al ACTIVAR
+    console.log('[AUDIO SCAN] B.4: memoria anti-repetición reiniciada');
     
             // 7. Asegurar que el AudioContext esté corriendo (doble verificación para móviles)
         await _ensureContextRunning();
@@ -6022,6 +6456,8 @@ function executeAudioScanDeactivation(btnMenu) {
     window._liveUserText = '';
     window._liveUserLastUpdate = 0;
     lastSpokenText = '';
+    window._lastUserTranscripts = [];      // 🔒 B.4: liberar al DESACTIVAR (GC + seguridad)
+    console.log('[AUDIO SCAN] B.4: memoria anti-repetición liberada');
     
     if (cloudTTSPlayer) { 
         cloudTTSPlayer.pause(); 
@@ -6117,7 +6553,8 @@ cumulativeEVPEnergy += (rmsLevel - dynamicThreshold) * 15.0;
         evpFS = 11.9;
         screenScale = 1;
     } else {
-        screenScale = Math.max(1.2, Math.min(4, 1920 / (w || 1920)));
+        // 🔒 FIX: escalar por ALTO (no por ancho) para evitar onda gigante en pantallas chicas
+        screenScale = Math.max(1.0, Math.min(1.8, h / 540));
         displayWidth = w * 0.465;
         startX = (w - displayWidth) / 2;
         bottomY = h * 0.88;
@@ -6265,15 +6702,14 @@ if (window._liveUserText && Date.now() - window._liveUserLastUpdate < 5000 && !d
     c.textBaseline = 'middle';
     c.font = `bold ${userTextFS}px 'Share Tech Mono', monospace`;
     
-    // 🔒 POSICIÓN: ambas orientaciones pegadas arriba de la onda
+    // 🔒 POSICIÓN: justo sobre la onda, cerca del EVP (profesional)
     let userTextY;
     if (isPortrait) {
-        userTextY = bottomY - waveHeight - 15;
+        userTextY = bottomY - waveHeight - 8;   // antes -15 → 7px más abajo
     } else {
-        // 🔒 HORIZONTAL: bajado del 45% → justo sobre la gráfica de onda
-        userTextY = bottomY - waveHeight - (25 * screenScale);
+        userTextY = bottomY - waveHeight - 10;  // antes -25*screenScale → 10px fijo
     }
-    const userTextX = w / 2; // ⚠️ CRÍTICO: Esta línea debe existir para que no falle
+    const userTextX = w / 2;
     
     c.shadowColor = 'rgba(0,0,0,0.95)';
     c.shadowBlur = 8;
@@ -6431,9 +6867,7 @@ const LFX = { coverage:0, perturb:0, cx:.5, cy:.4, topY:.12, personH:.7, footX:.
 let _lidarFrameSkip = 0; // para alternar frames
 
 function drawLidarEffect(c, width, height, currentFrame) {
-// 🔒 FIX RESCALE iOS: dimensiones SIEMPRE = raster real del canvas (mata caja chica + fantasmas)
-width = c.canvas.width; height = c.canvas.height;
-const isHighEnd = _isHighEndDevice; // ✅ Usa el caché global
+const isHighEnd = _isHighEndDevice;
     // En gama baja/media, procesamos solo cada 2 frames
     // 🔒 LiDAR a 20fps en gama baja (no 30fps) - imperceptible visualmente
 // (el skip se aplica más abajo, solo al cálculo de píxeles — NO al dibujo)
@@ -6568,6 +7002,10 @@ if (maskToUse && _shouldCompute) {
             LFX.personH += ((botY-topY)/BH - LFX.personH) * 0.2;
             LFX.footX += ((footN ? footSX/footN : sx/acc)/BW - LFX.footX) * 0.2;
             LFX.footY += (botY/BH - LFX.footY) * 0.2;
+            // 📡 Incrementar contador SOLO cuando aparece una detección nueva
+            if (!LFX.hasPerson) {
+                window._detectionCount = (window._detectionCount || 0) + 1;
+            }
             LFX.hasFeet = footN >= 8 && botY < BH - 2;
             LFX.hasPerson = true;
             LFX.missFrames = 0; // 🔒 Resetea el contador de pérdida
@@ -6786,6 +7224,121 @@ let _hudTextCanvas = null;
 let _hudTextCtx = null;
 let _lastHudDate = '';
 
+// ==========================================================
+// 📊 SESSION HUD — Pill horizontal arriba-centro
+// ==========================================================
+function drawSessionHUD(ctx2, width, height, scale) {
+    if (scale <= 0.01) return;
+    if (document.body.classList.contains('hide-session-hud')) return;
+
+    const isPortrait = height > width;
+    const uiS = Math.max(0.9, Math.min(1.1, width / (isPortrait ? 1080 : 1920)));
+
+    const sessionStart = window._sessionStartTime || Date.now();
+    const sessionSec = Math.floor((Date.now() - sessionStart) / 1000);
+    const mm = String(Math.floor(sessionSec / 60)).padStart(2, '0');
+    const ss = String(sessionSec % 60).padStart(2, '0');
+    const evps = window._evpCount || 0;
+    const dets = window._detectionCount || 0;
+    const bat = window._batteryLevel != null ? window._batteryLevel + '%' : '--';
+
+    // Bloques: icono + valor (todo en la misma línea)
+    const items = [
+        { icon: '⏱', val: `${mm}:${ss}`, color: '#00ff88' },
+        { icon: '👻', val: String(evps),  color: '#00d9ff' },
+        { icon: '📡', val: String(dets),  color: '#ff8833' },
+        { icon: '🔋', val: bat,           color: '#ffdd00' }
+    ];
+
+    const valueFS = Math.round(13 * uiS);
+    const iconFS  = Math.round(13 * uiS);
+    const padX    = Math.round(14 * uiS);
+    const padY    = Math.round(7  * uiS);
+    const gapIcon = Math.round(4  * uiS);  // espacio entre icono y valor
+    const sepText = '  ·  ';
+
+    ctx2.save();
+    ctx2.globalAlpha = Math.max(0, Math.min(1, scale));
+
+    // ── Medir todo primero ──
+    ctx2.font = `bold ${valueFS}px 'Share Tech Mono', monospace`;
+    const sepW = ctx2.measureText(sepText).width;
+
+    // Cada bloque = icono (iconFS) + gap + valor
+    const blocks = items.map(it => {
+        // Medir el icono renderizado
+        ctx2.font = `${iconFS}px serif`;
+        const iconW = ctx2.measureText(it.icon).width;
+        ctx2.font = `bold ${valueFS}px 'Share Tech Mono', monospace`;
+        const valW = ctx2.measureText(it.val).width;
+        return { iconW, valW, total: iconW + gapIcon + valW, ...it };
+    });
+
+    const contentW = blocks.reduce((sum, b) => sum + b.total, 0) + (sepW * (blocks.length - 1));
+    const boxW = contentW + padX * 2;
+    const boxH = valueFS + padY * 2;
+
+    // Posición: arriba-centro, pegado al borde
+    const boxX = (width - boxW) / 2;
+    const boxY = Math.max(8, height * 0.015);
+
+    // ── Fondo pill redondeado ──
+    const r = boxH / 2;
+    ctx2.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx2.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+    ctx2.lineWidth = 1.2;
+    ctx2.shadowColor = 'rgba(0, 255, 136, 0.35)';
+    ctx2.shadowBlur = 8 * uiS;
+    ctx2.beginPath();
+    ctx2.moveTo(boxX + r, boxY);
+    ctx2.lineTo(boxX + boxW - r, boxY);
+    ctx2.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r);
+    ctx2.lineTo(boxX + boxW, boxY + boxH - r);
+    ctx2.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH);
+    ctx2.lineTo(boxX + r, boxY + boxH);
+    ctx2.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
+    ctx2.lineTo(boxX, boxY + r);
+    ctx2.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.shadowBlur = 0;
+
+    // ── Dibujar iconos + valores + separadores ──
+    ctx2.textAlign = 'left';
+    ctx2.textBaseline = 'middle';
+    const centerY = boxY + boxH / 2;
+
+    let curX = boxX + padX;
+    blocks.forEach((b, i) => {
+        // Icono
+        ctx2.font = `${iconFS}px serif`;
+        ctx2.fillStyle = '#ffffff';
+        ctx2.fillText(b.icon, curX, centerY);
+        curX += b.iconW + gapIcon;
+
+        // Valor con glow
+        ctx2.font = `bold ${valueFS}px 'Share Tech Mono', monospace`;
+        ctx2.fillStyle = b.color;
+        ctx2.shadowColor = b.color;
+        ctx2.shadowBlur = 5 * uiS;
+        ctx2.fillText(b.val, curX, centerY);
+        ctx2.shadowBlur = 0;
+        curX += b.valW;
+
+        // Separador (excepto el último)
+        if (i < blocks.length - 1) {
+            ctx2.font = `bold ${valueFS}px 'Share Tech Mono', monospace`;
+            ctx2.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx2.fillText(sepText, curX, centerY);
+            curX += sepW;
+        }
+    });
+
+    ctx2.restore();
+}
+
+
 function drawBurnInHUD(ctx2, width, height, scale) {
     if (scale <= 0.01) return;
     const hideText = document.body.classList.contains('hide-hud-text');
@@ -6857,16 +7410,7 @@ _lastHudDate = fullDate;
 ctx2.drawImage(tCanv, textX, pad + 2 * uiS + titleFS + 6 * uiS, tCanv.width / SS, tCanv.height / SS);
     }
 
-    // 3. Indicador SLS (discreto)
-    if (state.isSLS && height <= width) {
-        const fs = 12 * uiS;
-        ctx2.font = `bold ${fs}px 'Share Tech Mono', monospace`;
-        ctx2.textAlign = 'center';
-        ctx2.fillStyle = 'rgba(0,255,255,0.9)';
-        ctx2.fillText('SLS ACTIVO', width / 2, pad);
-        ctx2.textAlign = 'left';
-    }
-    ctx2.restore();
+   ctx2.restore();
 }
 
 
@@ -7316,7 +7860,8 @@ const vW = el.video.videoWidth, vH = el.video.videoHeight;
 if (vW && vH) {
 const sc = Math.max(W / vW, H / vH);
 const dW = vW * sc, dH = vH * sc;
-const f = cachedLiveFilter || 'none';
+// 🔒 NO aplicar filtro CSS si GL está activo (GL ya lo aplicó en shader)
+const f = (typeof OBRL !== 'undefined' && OBRL.ready) ? 'none' : (cachedLiveFilter || 'none');
 g.save();
 if (f !== 'none') g.filter = f;
 g.imageSmoothingEnabled = true;
@@ -7325,6 +7870,35 @@ g.drawImage(el.video, (W - dW) / 2, (H - dH) / 2, dW, dH);
 g.restore();
 g.filter = 'none';
 }
+}
+
+// 🔀 SPLIT-SCREEN en grabación: video raw en mitad izquierda + línea
+if (window._splitScreenActive) {
+    const vW = el.video.videoWidth, vH = el.video.videoHeight;
+    if (vW && vH) {
+        const sc = Math.max(W / vW, H / vH);
+        const dW = vW * sc, dH = vH * sc;
+        g.save();
+        g.beginPath();
+        g.rect(0, 0, W / 2, H);
+        g.clip();
+        g.filter = 'none';
+        g.imageSmoothingEnabled = true;
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(el.video, (W - dW) / 2, (H - dH) / 2, dW, dH);
+        g.restore();
+    }
+    // Línea verde vertical
+    g.save();
+    g.strokeStyle = '#00ff88';
+    g.lineWidth = Math.max(2, W * 0.002);
+    g.shadowColor = 'rgba(0, 255, 136, 0.9)';
+    g.shadowBlur = 12;
+    g.beginPath();
+    g.moveTo(W / 2, 0);
+    g.lineTo(W / 2, H);
+    g.stroke();
+    g.restore();
 }
 const master = el.masterCanvas;
 if (master && master.width > 1 && master.height > 1) {
@@ -7469,13 +8043,47 @@ window.takeScreenshot = takeScreenshot;
 
 // 🔒 Cadena de overlays: se dibuja UNA sola vez, calibrada a la ventana
 function drawOverlayChain(tctx, W, H) {
-if (state.isLidar) { drawLidarEffect(tctx, W, H, frameCount); drawTallyBorder(tctx, W, H); return; }
+if (state.isLidar) {
+    if (window._splitScreenActive) {
+        // 🔀 Split: LiDAR solo en mitad derecha
+        tctx.save();
+        tctx.beginPath();
+        tctx.rect(W / 2, 0, W / 2, H);
+        tctx.clip();
+        tctx.translate(W / 2, 0);
+        drawLidarEffect(tctx, W / 2, H, frameCount);
+        tctx.restore();
+    } else {
+        drawLidarEffect(tctx, W, H, frameCount);
+    }
+    drawSessionHUD(tctx, W, H, animState.hudScale);
+    drawTallyBorder(tctx, W, H);
+    return;
+}
     if (state.isSLS && !state.isLidar) {
         const renderPoses = (smoothedPoses && smoothedPoses.length > 0) ? smoothedPoses : [];
-        for (let ti = 0; ti < renderPoses.length; ti++) drawHybrid(tctx, renderPoses[ti], ti);
+        if (window._splitScreenActive) {
+            // 🔀 Split: recalcular coords para mitad derecha
+            const halfW = W / 2;
+            const vW = el.video.videoWidth || 1920;
+            const vH = el.video.videoHeight || 1080;
+            const sc = Math.max(halfW / vW, H / vH);
+            const dW = vW * sc, dH = vH * sc;
+            const halfCoords = {
+                dW, dH,
+                dX: halfW + (halfW - dW) / 2,
+                dY: (H - dH) / 2,
+                vW, vH
+            };
+            for (let ti = 0; ti < renderPoses.length; ti++) drawHybrid(tctx, renderPoses[ti], ti, halfCoords);
+        } else {
+            for (let ti = 0; ti < renderPoses.length; ti++) drawHybrid(tctx, renderPoses[ti], ti);
+        }
     }
+
     if (state.isPareidolia) drawCanvasScanBoxes(tctx, W, H);
     drawBurnInHUD(tctx, W, H, animState.hudScale);
+    drawSessionHUD(tctx, W, H, animState.hudScale);
     if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) drawAIBurnIn(tctx, W, H, animState.aiScale);
     drawTallyBorder(tctx, W, H);
     drawMapToMaster(tctx, W, H);
@@ -7483,6 +8091,8 @@ if (state.isLidar) { drawLidarEffect(tctx, W, H, frameCount); drawTallyBorder(tc
 
 // 🔒 CACHE: evitar recalcular drawCoords si no cambió el tamaño
 let _lastDrawCoordsW = 0, _lastDrawCoordsH = 0, _lastDrawCoordsVW = 0, _lastDrawCoordsVH = 0;
+
+
 
 function renderLoop(now, metadata) {
   if (!now) now = performance.now();
@@ -7513,6 +8123,11 @@ function renderLoop(now, metadata) {
   // ✅ 3. Configurar transform UNA SOLA VEZ
   ctx.setTransform(cW / W, 0, 0, cH / H, 0, 0);
   ctx.clearRect(0, 0, cW, cH);
+
+  // 🔀 SPLIT: dibuja mitad derecha con filtro (reframe a 50%)
+  if (window._splitScreenActive) {
+      drawFilteredSplitFrame(ctx, W, H);
+  }
   
   // ✅ 4. updateSmoothing: SOLO si hay poses (evita trabajo inútil)
   if (targetPoses && targetPoses.length > 0) {
@@ -7544,10 +8159,14 @@ if (_overlayDirty || isRecordingActive) {
 } else {
   // HUD estático (el canvas se limpia cada frame, hay que redibujar siempre)
   drawBurnInHUD(ctx, W, H, animState.hudScale);
+  drawSessionHUD(ctx, W, H, animState.hudScale);
 }
   
   // ✅ 8. Audio visualizer: SOLO si está activo
   if (state.isAudioScan) drawAudioVisualizer(ctx, W, H);
+
+  // 🔀 SPLIT: video raw en mitad izquierda (reframe a 50%)
+  if (window._splitScreenActive) drawRawSplitFrame();
 
 // ✅ 8.5 REC CONTINUA: alimenta el canvas de grabación (1080p 60fps)
 // 🔒 Gama baja: compone 30fps reales (captureStream duplica a 60fps) → mitad de carga 2D
@@ -7680,23 +8299,8 @@ else if (currentFps >= 25) performanceLagging = false;
 // 🔒 SIN wrapper fxActive: qualityScale nunca queda "congelado" para
 // restaurarse en el instante del toggle (eso causaba el reescalado).
 AI_FRAME_SKIP.adjustForPerformance(currentFps);
-if (_deviceCores <= 4 && !isRecordingActive) {
-if (currentFps < 24) { lowFpsTime++; highFpsTime = 0; }
-else if (currentFps > 28) { highFpsTime++; lowFpsTime = 0; }
-else { lowFpsTime = 0; highFpsTime = 0; }
-if (lowFpsTime >= 3 && qualityScale > 0.85) {
-qualityScale = Math.max(0.85, qualityScale - 0.15);
-applyQualityScale();
-lowFpsTime = 0;
-} else if (highFpsTime >= 8 && qualityScale < 1) {
-qualityScale = Math.min(1, qualityScale + 0.15);
-applyQualityScale();
-highFpsTime = 0;
-}
-} else if (qualityScale !== 1) {
-qualityScale = 1;
-applyQualityScale();
-}
+// 🔒 NITIDEZ FIJA: no bajamos resolución automáticamente
+// (el resto de optimizaciones ya está en AI_FRAME_SKIP y detectionLoop)
 // ==========================================================
 // 2. THROTTLE DE DOM (Freno de mano: solo actualiza textos cada 500ms)
 // ==========================================================
@@ -8240,6 +8844,11 @@ try {
     currentAiText = text;
     currentAiImgEl = pendingAiImgEl;
     currentAiImage = pendingAiImageSrc;
+
+        // 📡 Contador de anomalías IA (funciona con cualquier filtro activo)
+    if (text && text !== "señal interferida" && text !== "error de señal") {
+        window._detectionCount = (window._detectionCount || 0) + 1;
+    }
     
     clearTimeout(aiTextTimer);
     aiTextTimer = setTimeout(() => {
@@ -9629,12 +10238,13 @@ function initGLEngine() {
         master.parentNode.insertBefore(canvas, master);
         // 🔒 FORZAR ALTO RENDIMIENTO: Usa la GPU potente del móvil
 let gl = canvas.getContext('webgl', {
-  alpha: false,                // 🔒 OPAQUE: elimina el oscurecimiento por canal alfa
-  premultipliedAlpha: true,    // default correcto para Android
+  alpha: false,
+  premultipliedAlpha: true,
   powerPreference: "high-performance",
   antialias: false,
-  preserveDrawingBuffer: true, // necesario para capturas
-  desynchronized: true         // menos latencia en Android
+  preserveDrawingBuffer: false,  // 🔒 FIX glitch: sin tearing en Android
+  desynchronized: false,         // 🔒 FIX glitch: sin tearing en Adreno/Mali
+  failIfMajorPerformanceCaveat: false
 }) || canvas.getContext('experimental-webgl');
 if (!gl) {
   _error('[GL] WebGL no disponible');
@@ -9837,6 +10447,15 @@ setInterval(() => { if (!OBR_NET.forced) probeConnectivity().then(ok => { if (ok
 
 // ✅ APLICAR MODO OFFLINE DE FORMA SILENCIOSA (true = sin toasts de error)
 applyOfflineMode(true); 
+
+// 📡 Contador por movimiento brusco en filtros visuales
+if (!state.isLidar && !state.isSLS && !state.isPareidolia && state.filter !== 'normal') {
+    const now = performance.now();
+    if (window.motionLevel > 0.08 && (!window._lastFilterMotionCount || now - window._lastFilterMotionCount > 3000)) {
+        window._lastFilterMotionCount = now;
+        window._detectionCount = (window._detectionCount || 0) + 1;
+    }
+}
 
 </script>
 </body>
