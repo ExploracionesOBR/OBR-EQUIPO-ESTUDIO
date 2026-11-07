@@ -935,7 +935,8 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 #main-view-area { transition: none; will-change: auto; }
 #zoom-container { will-change: auto; backface-visibility: visible; }
 /* Si quieres conservar la animación del zoom software, borra solo "transition" de la regla original de #zoom-container y deja esta línea sin transition */
-#master-canvas, #obr-gl-video { object-fit: fill !important; }
+/* Los canvas no usan object-fit (ya lo maneja el CSS width/height 100%) */
+#master-canvas, #obr-gl-video { display: block; }
 
 
 /* ===== ✈️ SWITCH MODO AVIÓN (ONLINE gris / OFFLINE verde) ===== */
@@ -1453,7 +1454,7 @@ body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '31'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '32'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -1926,6 +1927,42 @@ try {
     _deviceCores = 4; // Fallback seguro si el navegador bloquea el acceso
 }
 const _isHighEndDevice = _deviceCores >= 6;
+
+// 🔒 Detecta si el viewport ocupa la pantalla física o no
+function getCaptureTarget() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const sw = (window.screen && window.screen.width)  || vw;
+  const sh = (window.screen && window.screen.height) || vh;
+
+  // ¿el viewport ocupa al menos 90% de la pantalla física? (standalone/fullscreen)
+  const fullscreen = (vw >= sw * 0.9) && (vh >= sh * 0.9);
+
+  // Aspecto objetivo: pantalla física si NO es fullscreen, viewport si SÍ
+  return {
+    aspect: fullscreen ? (vw / vh) : (sw / sh),
+    W: fullscreen ? vw : sw,
+    H: fullscreen ? vh : sh,
+    fullscreen
+  };
+}
+
+// 🔒 Detecta si estamos en navegador (viewport reducido) o standalone
+function getCaptureTarget() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const sw = (window.screen && window.screen.width)  || vw;
+  const sh = (window.screen && window.screen.height) || vh;
+
+  // ¿el viewport ocupa al menos 90% de la pantalla física? (standalone/fullscreen)
+  const fullscreen = (vw >= sw * 0.9) && (vh >= sh * 0.9);
+
+  // Retornamos el aspecto objetivo: pantalla física si NO es fullscreen, viewport si SÍ
+  return {
+    aspect: fullscreen ? (vw / vh) : (sw / sh),
+    W: fullscreen ? vw : sw,
+    H: fullscreen ? vh : sh,
+    fullscreen
+  };
+}
 
 // 🎨 FILTRO CACHEADO (evita getComputedStyle por frame)
 let cachedLiveFilter = 'none';
@@ -4416,8 +4453,6 @@ const OBR_EVENT_MANAGER = {
 };
 
 // Usar el gestor en lugar de addEventListener directo
-OBR_EVENT_MANAGER.add(window, 'resize', checkOrientation);
-OBR_EVENT_MANAGER.add(window, 'orientationchange', checkOrientation);
 
 // Limpiar al cerrar la app
 window.addEventListener('beforeunload', () => {
@@ -5121,7 +5156,7 @@ async function captureMapToMirror() {
 }
 
 function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
-    // 🔒 NUEVO: Ocultar texto de carga después de 4 segundos sí o sí
+    // Ocultar texto de carga después de 4 segundos
     if (loadingEl) {
         setTimeout(() => {
             loadingEl.style.opacity = '0';
@@ -5129,26 +5164,16 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
         }, 4000);
     }
 
-    // 🔒 CRÍTICO: Cambiar emoji cada 2 minutos aunque el usuario no se mueva
-    if (!window._emojiChangeInterval) {
-        window._emojiChangeInterval = setInterval(() => {
-            if (mapMarker && !mapMarker._isExploding) {
-                mapMarker.setIcon(createGhostIcon());
-                _log('[MAPA] Emoji cambiado por tiempo (2 min)');
-            }
-        }, 120000); // 2 minutos = 120000 ms
-    }
-    
     navigator.geolocation.watchPosition((pos) => {
         let lat = pos.coords.latitude;
         let lon = pos.coords.longitude;
         let point = [lat, lon];
         window._currentGPS = { lat, lon };
-        
+
         if (!miniMapInstance) {
             if (loadingEl) loadingEl.style.display = 'none';
-            
-            // 🔒 ZOOM OUT: Cambiado de 19 a 14 (vista más amplia tipo atlas)
+
+            // ZOOM OUT: vista amplia tipo atlas
             miniMapInstance = L.map('mini-map', {
                 zoomControl: false,
                 dragging: false,
@@ -5157,41 +5182,39 @@ function startMapWatcher(createGhostIcon, glitchEl, loadingEl) {
                 touchZoom: false,
                 attributionControl: false
             }).setView(point, 14);
-            
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?obr=1', {
-    maxZoom: 18,
-    attribution: '© OpenStreetMap',
-    crossOrigin: 'anonymous'
-}).addTo(miniMapInstance);
-// 🔒 Actualiza el espejo en cuanto las teselas terminan de cargar
-miniMapInstance.on('load', () => { lastMapCapture = 0; captureMapToMirror(); });
-miniMapInstance.on('tileload', () => { if (!mapMirrorGood) { lastMapCapture = 0; captureMapToMirror(); } }); // 🔒 primer espejo bueno cuanto antes
-            
-            // 🔒 MARKER CON EMOJI (usando la función global)
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?obr=1', {
+                maxZoom: 18,
+                attribution: '© OpenStreetMap',
+                crossOrigin: 'anonymous'
+            }).addTo(miniMapInstance);
+
+            // Actualiza el espejo en cuanto las teselas terminan de cargar
+            miniMapInstance.on('load', () => { lastMapCapture = 0; captureMapToMirror(); });
+            miniMapInstance.on('tileload', () => { if (!mapMirrorGood) { lastMapCapture = 0; captureMapToMirror(); } });
+
+            // MARKER CON EMOJI
             mapMarker = L.marker(point, { icon: createGhostIcon() }).addTo(miniMapInstance);
-            
-            // Línea de recorrido más visible
+
+            // Línea de recorrido
             mapPolyline = L.polyline([], {
                 color: '#00ffff',
                 weight: 4,
                 opacity: 0.8,
                 dashArray: '10, 10'
             }).addTo(miniMapInstance);
-            
+
             setTimeout(() => { miniMapInstance.invalidateSize(); }, 500);
-// 🗺️ Primera captura del espejo apenas el mapa existe
-setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
+            setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
         }
-        
-        // 🔒 MANTENER ZOOM 14 (vista amplia)
+
         miniMapInstance.setView(point, 14);
-        
+
         // Actualizar marker con animación de explosión
         if (mapMarker) {
             const oldLatLng = mapMarker.getLatLng();
             const distance = oldLatLng.distanceTo(point);
-            
-            // Si se movió más de 5 metros, hacer explosión y cambiar emoji
+
             if (distance > 5) {
                 const markerElement = document.querySelector('.ghost-marker');
                 if (markerElement) {
@@ -5205,17 +5228,17 @@ setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
                     }, 800);
                 }
             }
-            
+
             mapMarker.setLatLng(point);
         } else {
             mapMarker = L.marker(point, { icon: createGhostIcon() }).addTo(miniMapInstance);
         }
-        
+
         // Actualizar polyline
         mapPath.push(point);
         mapPolyline.setLatLngs(mapPath);
         if (mapPath.length > 60) mapPath.shift();
-        
+
         // Efecto glitch
         if (glitchEl) {
             let pixel = miniMapInstance.latLngToContainerPoint(point);
@@ -5227,64 +5250,70 @@ setTimeout(() => { lastMapCapture = 0; captureMapToMirror(); }, 1200);
     }, {
         enableHighAccuracy: true
     });
-    
-    // Glitch aleatorio
+
+    // 🔒 UN SOLO TIMER: mapa cada 5s + glitch aleatorio + emoji cada 2 min
     setInterval(() => {
-        if (glitchEl && Math.random() < 0.12) {
-            glitchEl.classList.add("hard");
-            setTimeout(() => {
-                glitchEl.classList.remove("hard");
-            }, 150 + Math.random() * 200);
+        if (document.hidden) return;
+
+        // Mapa cada 5s
+        if (!window._mapTick || Date.now() - window._mapTick > 5000) {
+            window._mapTick = Date.now();
+            if (typeof captureMapToMirror === 'function') captureMapToMirror();
         }
-    }, 2500);
+
+        // Glitch aleatorio
+        if (glitchEl && Math.random() < 0.12) {
+            glitchEl.classList.add('hard');
+            setTimeout(() => glitchEl.classList.remove('hard'), 200);
+        }
+
+        // Emoji cada 2 min
+        if (!window._emojiTick || Date.now() - window._emojiTick > 120000) {
+            window._emojiTick = Date.now();
+            if (mapMarker && !mapMarker._isExploding) {
+                mapMarker.setIcon(createGhostIcon());
+            }
+        }
+    }, 1000);
 }
 
 async function initApp() {
-  // 🔒 Detectar offline inmediatamente
+  // Detectar offline inmediatamente
   const isOffline = !navigator.onLine || OBR_NET.offline;
   if (isOffline) {
     _log('[APP] Modo OFFLINE detectado');
     showToast('📴 Modo offline — IA desactivada', false);
     document.body.classList.add('obr-offline');
   }
-  
+
   unlockAudioContext();
-  
-  // 🔒 DETECCIÓN Y ACTIVACIÓN DE MODO OPTIMIZADO (4GB RAM)
+
   if (_deviceCores <= 4) {
     qualityScale = 0.95;
     showToast('🔋 MODO OPTIMIZADO ACTIVADO', false);
   }
-  
+
   document.querySelectorAll('.load-btn').forEach(b => b.style.display = 'none');
   document.getElementById('cam-error-panel').style.display = 'none';
   requestWakeLock();
-  
-  // Guardar URL del chat si se modificó en el modal antes de iniciar
+
   const newChatUrl = document.getElementById('chat-url-input')?.value.trim();
   if (newChatUrl) {
     CHAT_OVERLAY_URL = newChatUrl;
     localStorage.setItem('obr_chat_url', newChatUrl);
   }
 
-  // 🗺️ PASO 1: Iniciar mapa INMEDIATAMENTE (antes de la cámara para que no se trabe)
+  // 🗺️ PASO 1: Iniciar mapa INMEDIATAMENTE
   updateProgress(10, "INICIALIZANDO SISTEMAS OBR...");
   initMiniMap();
   initMapMirror();
-  
-  setInterval(() => {
-    if (document.hidden) return;
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(() => captureMapToMirror(), { timeout: 1500 });
-    } else {
-      captureMapToMirror();
-    }
-  }, 6000);
-  
+  // (El setInterval(6000) de captureMapToMirror se eliminó;
+  //  ahora vive dentro del timer unificado de startMapWatcher)
+
   await new Promise(r => setTimeout(r, 300));
   updateProgress(20, "SOLICITANDO ACCESO A SENSOR ÓPTICO...");
   clearTimeout(loadingTimer);
-  
+
   const qualitySettings = OBR_QUALITY.getCurrent();
   const targetResolution = qualitySettings.videoResolution;
 
@@ -5293,10 +5322,10 @@ async function initApp() {
     { audio: false, video: { facingMode: 'environment', width: { exact: 1920 }, height: { exact: 1080 }, frameRate: { ideal: 60, max: 60 } } },
     { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } } }
   ];
-    
-  let stream = null; 
+
+  let stream = null;
   let lastError = null;
-  
+
   if (DEMO_MODE) {
     updateProgress(30, "CARGANDO CLIP DEMO...");
     await initDemoVideo();
@@ -5308,7 +5337,7 @@ async function initApp() {
       window._demoActive = true;
     }
   }
-  
+
   if (!DEMO_MODE || window._demoFailed) {
     for (let i = 0; i < constraintSets.length; i++) {
       try {
@@ -5320,7 +5349,7 @@ async function initApp() {
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') break;
       }
     }
-    
+
     if (!stream) {
       const e = lastError;
       localStorage.removeItem("camPermission");
@@ -5337,9 +5366,9 @@ async function initApp() {
       initGLEngine();
     }
   }
-  
+
   updateProgress(62, "PRECARGANDO ACTIVOS LOCALES...");
-  
+
   setTimeout(() => {
     if ('requestIdleCallback' in window) {
       requestIdleCallback(() => preloadLocalAssets().catch(() => {}), { timeout: 8000 });
@@ -5347,19 +5376,19 @@ async function initApp() {
       preloadLocalAssets().catch(() => {});
     }
   }, 2500);
-  
+
   updateProgress(72, "CALIBRANDO MOTOR SLS...");
   updateProgress(80, "CALIBRANDO LIDAR...");
   updateProgress(88, "CALIBRANDO PAREIDOLIA...");
   updateProgress(94, "SINCRONIZANDO INTERFAZ...");
-    
+
   setTimeout(async () => {
     try {
-      if(window.tf) { 
-        try { await tf.setBackend('webgl'); } 
-        catch(e) { await tf.setBackend('cpu'); } 
+      if(window.tf) {
+        try { await tf.setBackend('webgl'); }
+        catch(e) { await tf.setBackend('cpu'); }
       }
-      
+
       if(window.poseDetection) {
         aiDetector = await poseDetection.createDetector(
           poseDetection.SupportedModels.MoveNet,
@@ -5368,37 +5397,37 @@ async function initApp() {
             : { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: false, maxPoses: 2, scoreThreshold: 0.45 }
         );
       }
-      
-      if(window.SelfieSegmentation) { 
+
+      if(window.SelfieSegmentation) {
         segmenter = new SelfieSegmentation({
           locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
-        }); 
-        segmenter.setOptions({ modelSelection: 1 }); 
-        segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; }); 
+        });
+        segmenter.setOptions({ modelSelection: 1 });
+        segmenter.onResults(res => { lidarMask = res.segmentationMask; lidarBusy = false; });
       }
-      
-      const vRatio = el.video.videoHeight / el.video.videoWidth; 
+
+      const vRatio = el.video.videoHeight / el.video.videoWidth;
       analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
       analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
       initSLSWorker();
-      
-      if(segmenter) await segmenter.send({image: analysisCanvas}); 
+
+      if(segmenter) await segmenter.send({image: analysisCanvas});
       if(aiDetector) await aiDetector.estimatePoses(analysisCanvas);
-    } catch(e) { 
-      _warn("Error leve en calibración IA:", e); 
+    } catch(e) {
+      _warn("Error leve en calibración IA:", e);
     }
-        
+
     updateProgress(95, "CONFIGURANDO MOTOR DE AUDIO Y TTS...");
     await initAudioEngine();
     updateProgress(100, "SISTEMA LISTO");
     updateProgress(100, "SISTEMAS EN LÍNEA - ACCEDIENDO AL ENTORNO...");
-        
-    setTimeout(async () => {  // 🔒 FIX: async agregado para permitir await del play()
-      document.getElementById('loading').style.display = 'none'; 
-      resize(); 
+
+    setTimeout(async () => {
+      document.getElementById('loading').style.display = 'none';
+      resize();
       OBR_EVENT_MANAGER.add(window, 'resize', resize);
       initDOMCache();
-      
+
       // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
       if (DEMO_MODE && window._demoVideo && !window._demoFailed) {
         try {
@@ -5406,51 +5435,50 @@ async function initApp() {
           await window._demoVideo.play().catch(()=>{});
           window._demoVideo.muted = false;
           console.log('[DEMO] ▶️ clip iniciado dentro de la app');
-          
-          // 🎬 DEMO: MIC LOCAL ON directo (sin pedir permisos, sin getUserMedia)
+
           setTimeout(() => {
             try {
               isLocalMicForced = true;
-              
+
               const switchEl = document.getElementById('btn-toggle-mic-switch');
               if (switchEl) {
                 switchEl.style.transform = 'translateX(20px)';
                 switchEl.classList.replace('bg-gray-400', 'bg-green-500');
               }
-              
+
               const micIcon = document.getElementById('btn-toggle-mic');
               if (micIcon) {
                 micIcon.className = 'fas fa-microphone text-green-500 cursor-pointer transition-colors hover:text-white';
               }
-              
+
               if (DOM_CACHE && DOM_CACHE.micStat) {
                 DOM_CACHE.micStat.innerText = "MIC LOCAL (DEMO)";
                 DOM_CACHE.micStat.className = "text-green-500 font-bold";
               }
-              
+
               if (typeof updateAudioScanVisibility === 'function') updateAudioScanVisibility();
               if (typeof updateSettingsIndicator === 'function') updateSettingsIndicator();
-              
+
               console.log('[DEMO] 🎙️ MIC LOCAL: true | wrapper:', (document.getElementById('wrapper-audio-scan') || {style:{}}).style.display);
-            } catch(e){ 
-              console.warn('[DEMO] mic auto:', e); 
+            } catch(e){
+              console.warn('[DEMO] mic auto:', e);
             }
           }, 400);
-        } catch(e){ 
-          console.warn('[DEMO] arranque clip:', e); 
+        } catch(e){
+          console.warn('[DEMO] arranque clip:', e);
         }
       }
-      
+
       if (isRecordingActive && recCtx4K && recCanvas4K) {
         composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
       }
-      
+
       if ('requestVideoFrameCallback' in el.video) {
-        el.video.requestVideoFrameCallback(renderLoop); 
+        el.video.requestVideoFrameCallback(renderLoop);
       } else {
         requestAnimationFrame(renderLoop);
       }
-      
+
       setInterval(telemetryLoop, 2000);
       setInterval(updateClock, 1000);
       requestAnimationFrame(detectionLoop);
@@ -7232,6 +7260,30 @@ g.globalAlpha = 1;
 g.filter = 'none';
 g.fillStyle = '#000';
 g.fillRect(0, 0, W, H);
+// 🔒 LETTERBOX: si el aspecto objetivo difiere del viewport, centramos con barras negras
+const vw = window.innerWidth, vh = window.innerHeight;
+const vAspect = vw / vh;
+const cAspect = W / H;
+if (Math.abs(vAspect - cAspect) > 0.02) {
+  // Ajustar qué tan grande dibujamos el contenido
+  let drawW = W, drawH = H, offX = 0, offY = 0;
+  if (vAspect > cAspect) {
+    // contenido es más ancho que el target → barras arriba/abajo
+    drawH = W / vAspect;
+    offY = (H - drawH) / 2;
+  } else {
+    // contenido es más alto que el target → barras izq/der
+    drawW = H * vAspect;
+    offX = (W - drawW) / 2;
+  }
+  g.save();
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, W, H);
+  g.translate(offX, offY);
+  // El resto del composeFullFrame trabaja dentro de drawW×drawH
+  // (parámetro global temporal)
+  window._composeOffset = { offX, offY, drawW, drawH };
+}
 // 1) Video base (GL si está listo, si no fallback 2D)
 if (typeof OBRL !== 'undefined' && OBRL.ready && OBRL.canvas.width > 1) {
 g.drawImage(OBRL.canvas, 0, 0, W, H);
@@ -7331,7 +7383,6 @@ function takeScreenshot() {
     }
 }
 window.takeScreenshot = takeScreenshot;
-
 function performScreenshot() {
 // 🔒 PREVENIR CAPTURAS MÚLTIPLES RÁPIDAS (evita saturación)
 const now = Date.now();
@@ -7340,12 +7391,18 @@ _warn('[SCREENSHOT] Throttle: espera 1s entre capturas');
 return;
 }
 window._lastScreenshot = now;
-// 🔒 Resolución de salida AUTÓNOMA (aspecto de ventana, tope clase 1080p):
-// no depende del estado de chooseRecResolution() → la FOTO nunca crashea.
-const ww = window.innerWidth || 1920, wh = window.innerHeight || 1080;
+// 🔒 Resolución con aspecto de pantalla física (no del viewport)
+const target = getCaptureTarget();
 let W, H;
-if (wh > ww) { H = 1920; W = Math.round(H * ww / wh); if (W > 1080) { W = 1080; H = Math.round(W * wh / ww); } }
-else { W = 1920; H = Math.round(W * wh / ww); if (H > 1080) { H = 1080; W = Math.round(H * ww / wh); } }
+if (target.H > target.W) {
+  H = 1920;
+  W = Math.round(H * target.aspect);
+  if (W > 1080) { W = 1080; H = Math.round(W / target.aspect); }
+} else {
+  W = 1920;
+  H = Math.round(W / target.aspect);
+  if (H > 1080) { H = 1080; W = Math.round(H * target.aspect); }
+}
 W -= W % 2; H -= H % 2;
 const isPortrait = H > W;
 // 🔒 SIN dpr: composeFullFrame() resetea el transform y dibuja exacto a W×H
@@ -9179,20 +9236,20 @@ let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCou
 let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
 
 function chooseRecResolution() {
-// 🔒 Aspecto de salida == aspecto de VENTANA (idéntico a la vista viva):
-// el canvas GL NO se re-encuadra al grabar y los overlays no se deforman.
-const wW = window.innerWidth || 1920, wH = window.innerHeight || 1080;
-const portrait = wH > wW;
-let W, H;
-if (portrait) {
-H = 1920; W = Math.round(H * wW / wH);
-if (W > 1080) { W = 1080; H = Math.round(W * wH / wW); }
-} else {
-W = 1920; H = Math.round(W * wH / wW);
-if (H > 1080) { H = 1080; W = Math.round(H * wW / wH); }
-}
-W -= W % 2; H -= H % 2;
-return { W, H, fps: 60 }; // 🔒 60 fps siempre
+  // 🔒 Resolución con aspecto de pantalla física (no del viewport)
+  const target = getCaptureTarget();
+  let W, H;
+  if (target.H > target.W) {
+    H = 1920;
+    W = Math.round(H * target.aspect);
+    if (W > 1080) { W = 1080; H = Math.round(W / target.aspect); }
+  } else {
+    W = 1920;
+    H = Math.round(W / target.aspect);
+    if (H > 1080) { H = 1080; W = Math.round(H * target.aspect); }
+  }
+  W -= W % 2; H -= H % 2;
+  return { W, H, fps: 60 };
 }
 
 function cleanupRecording() {
@@ -9536,7 +9593,8 @@ base = clamp(fine, 0.0, 1.0) + (lC - lN) * (u_sharp * 0.5);
 vec3 col = applyFilter(clamp(base,0.0,1.0), u_filter);
 float L = luma(col);
 col = mix(vec3(L), col, u_saturate);
-col = (col-0.5)*u_contrast + 0.5 + (u_brightness-1.0);
+col = (col - 0.5) * u_contrast + 0.5;
+col *= u_brightness * 1.10;   // 🔒 boost base 10% (brillo multiplicativo, respeta tonos)
 float sAmt = clamp(u_sharp, 0.0, 1.0) * 0.25; // 🔒 curva S suave: piel natural, no amarilla
 col = mix(col, col*col*(3.0-2.0*col), sAmt);
 if (u_grain > 0.001) {
@@ -9559,9 +9617,12 @@ function initGLEngine() {
         master.parentNode.insertBefore(canvas, master);
         // 🔒 FORZAR ALTO RENDIMIENTO: Usa la GPU potente del móvil
 let gl = canvas.getContext('webgl', {
-  alpha: true, premultipliedAlpha: false,
+  alpha: false,                // 🔒 OPAQUE: elimina el oscurecimiento por canal alfa
+  premultipliedAlpha: true,    // default correcto para Android
   powerPreference: "high-performance",
-  antialias: false, preserveDrawingBuffer: true
+  antialias: false,
+  preserveDrawingBuffer: true, // necesario para capturas
+  desynchronized: true         // menos latencia en Android
 }) || canvas.getContext('experimental-webgl');
 if (!gl) {
   _error('[GL] WebGL no disponible');
@@ -9629,7 +9690,12 @@ function renderGLVideo() {
 gl.uniform1f(OBRL.uni.u_grain, disableGrainOnIOS ? 0.0 : grainAmt);
     gl.uniform1f(OBRL.uni.u_time, (performance.now() / 1000) % 10);
     gl.uniform1f(OBRL.uni.u_filter, { normal: 0, night: 1, thermal: 2, urbex: 3 }[state.filter] || 0);
-    const cs = { 1: [1.10, 1.12, 1.00], 2: [1.18, 1.22, 1.00], 3: [1.28, 1.32, 1.00] }[currentSharpness] || [1, 1, 1];
+   const cs = {
+  0: [1.00, 1.00, 1.05],
+  1: [1.05, 1.08, 1.10],
+  2: [1.10, 1.15, 1.12],
+  3: [1.15, 1.22, 1.15]
+}[currentSharpness] || [1, 1, 1];
     gl.uniform1f(OBRL.uni.u_contrast, cs[0]);
     gl.uniform1f(OBRL.uni.u_saturate, cs[1]);
     gl.uniform1f(OBRL.uni.u_brightness, cs[2]);
