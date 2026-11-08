@@ -1653,7 +1653,7 @@ body.split-active #obr-gl-video {
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '40'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '41'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -4354,7 +4354,7 @@ const paranormalQuestions = [
     function playResponseStart() {
 return new Promise(resolve => {
 _ensureSweepRouting();
-if (state.isAudioScan) _fadeVolume(sweepAudio, 0.60, 200);
+if (state.isAudioScan) _fadeVolume(sweepAudio, 0.30, 200);  // 🔒 antes 0.60 → mic capta menos eco
 responseAudio.volume = VOLUMEN_RESPUESTA;
 responseAudio.currentTime = 0;
 responseAudio.play().catch(() => { responseFileAvailable = false; console.warn('[AUDIO] respuesta.mp3 no disponible'); });
@@ -10554,6 +10554,13 @@ let isRecording = false;
 let recCanvas4K = null, recCtx4K = null, isRecordingActive = false, lowRecFpsCount = 0;
 let _recAudioNodes = []; // 🔒 nodos de audio creados para la grabación (se desconectan al parar)
 
+// 🎚️ Buses independientes de grabación (Fix "mic bajito + TTS doble")
+let _recMicGain   = null;   // bus del micrófono (prioridad absoluta)
+let _recTtsGain   = null;   // bus del TTS / EVP
+let _recSweepGain = null;   // bus del barrido.mp3
+let _recRespGain  = null;   // bus de respuesta.mp3
+let _recMicDucked = false;  // estado del ducking para evitar parpadeos
+
 function chooseRecResolution() {
   // 🔒 Resolución con aspecto de pantalla física (no del viewport)
   const target = getCaptureTarget();
@@ -10572,54 +10579,119 @@ function chooseRecResolution() {
 }
 
 function cleanupRecording() {
-// 🔒 NO tocar recordedChunks aquí: onstop arma el archivo y los limpia.
-// 🔒 NO zerar recCanvas4K aquí: la liberación diferida vive en onstop.
-if (mediaRecorder && mediaRecorder._canvasStream) {
-mediaRecorder._canvasStream.getTracks().forEach(track => track.stop());
-mediaRecorder._canvasStream = null;
-}
-// 🔒 window.gc solo existe con --js-flags="--expose-gc" (desarrollo).
-// En producción es código muerto. Se elimina para evitar confusión.
+  // 🔒 NO tocar recordedChunks aquí: onstop arma el archivo y los limpia.
+  // 🔒 NO zerar recCanvas4K aquí: la liberación diferida vive en onstop.
+
+  // 🔒 Desconectar la FUENTE → bus (para que micGainNode/ttsLimiter dejen de alimentar)
+  try { if (micGainNode && _recMicGain) micGainNode.disconnect(_recMicGain); } catch(e){}
+  try { if (typeof ttsLimiter !== 'undefined' && ttsLimiter && _recTtsGain) ttsLimiter.disconnect(_recTtsGain); } catch(e){}
+  try { if (window._sweepSource && _recSweepGain) window._sweepSource.disconnect(_recSweepGain); } catch(e){}
+  try { if (window._respSource && _recRespGain) window._respSource.disconnect(_recRespGain); } catch(e){}
+
+  // 🔒 Desconectar buses → destino
+  _recAudioNodes.forEach(n => { try { n.disconnect(); } catch(e){} });
+  _recAudioNodes = [];
+  _recMicGain = _recTtsGain = _recSweepGain = _recRespGain = null;
+  _recMicDucked = false;
+
+  if (mediaRecorder && mediaRecorder._canvasStream) {
+    mediaRecorder._canvasStream.getTracks().forEach(track => track.stop());
+    mediaRecorder._canvasStream = null;
+  }
+  console.log('[REC] Nodos de audio liberados (4 buses + conexiones fuente)');
 }
 
-// 🎙️ Mezcla dedicada para grabación: voz interna REDUCIDA + micro completo
-// 🎙️ Mezcla dedicada para grabación: interno 50% + micrófono 100% = 1 sola pista
+// 🎙️ Mezcla dedicada para grabación: 4 buses independientes con niveles balanceados
+// Mic (100% del 7.5x) · TTS (post-limiter) · Barrido y Respuesta (ambiente sutil)
 function buildRecAudioTrack() {
   try {
-    const ctxA = audioCtx || evpAudioCtx; // 🔒 variables reales del scope, NO window.*
+    const ctxA = audioCtx || evpAudioCtx;
     if (!ctxA) { _warn('[REC] Sin AudioContext'); return null; }
     if (ctxA.state === 'suspended') ctxA.resume().catch(()=>{});
 
-    const dest = ctxA.createMediaStreamDestination();
+    // 🔒 Limpiar conexiones anteriores (evita acumulación en grabaciones repetidas)
+    _recAudioNodes.forEach(n => { try { n.disconnect(); } catch(e){} });
+    _recAudioNodes = [];
+    _recMicGain = _recTtsGain = _recSweepGain = _recRespGain = null;
+    _recMicDucked = false;
 
-    // ── BUS INTERNO (todo al 50%) ──────────────────────────────
-    const gInt = ctxA.createGain();
-    gInt.gain.value = 0.5;               // 🔒 voz interna / EVP / barrido al 50%
-    gInt.connect(dest);
-    _recAudioNodes.push(gInt);
+    const dest = ctxA.createMediaStreamDestination();
     let hasAny = false;
 
-    if (ttsMainGain)            { try { ttsMainGain.connect(gInt);            hasAny = true; } catch(e){} }
-    if (window._sweepSource)    { try { window._sweepSource.connect(gInt);    hasAny = true; } catch(e){} }
-    if (window._respSource)     { try { window._respSource.connect(gInt);     hasAny = true; } catch(e){} }
-
-    // ── MICRÓFONO (100%) — prioridad MIC SENDER remoto, luego local ──
-    const micStream =
-      (window.remoteMicStream && window.remoteMicStream.getAudioTracks().length) ? window.remoteMicStream :
-      (audioStream && audioStream.getAudioTracks().length) ? audioStream : null;
-
-    if (micStream) {
-      try {
-        const src  = ctxA.createMediaStreamSource(micStream);
-        const gMic = ctxA.createGain();
-        gMic.gain.value = 1.0;           // 🔒 micro al 100%
-        src.connect(gMic); gMic.connect(dest);
-        _recAudioNodes.push(src, gMic);
-        hasAny = true;
-      } catch (e) { _warn('[REC] micro:', e); }
+    // ═══════════════════════════════════════════════════════
+    // 🔊 BUS 1: TTS / EVP (post-limiter = niveles seguros)
+    // ═══════════════════════════════════════════════════════
+    const gTts = ctxA.createGain();
+    gTts.gain.value = 0.60;
+    gTts.connect(dest);
+    _recAudioNodes.push(gTts);
+    _recTtsGain = gTts;
+    // 🔒 TAPEAR desde el limiter (no desde ttsMainGain) para no grabar picos sin comprimir
+    const ttsTap = (typeof ttsLimiter !== 'undefined' && ttsLimiter) ? ttsLimiter : ttsMainGain;
+    if (ttsTap) {
+      try { ttsTap.connect(gTts); hasAny = true; } catch(e){ _warn('[REC] tts:', e); }
     }
 
-    // ── Último recurso: la mezcla general ya existente ──
+    // ═══════════════════════════════════════════════════════
+    // 🔊 BUS 2: BARRIDO (barrido.mp3) — solo ambiente
+    // ═══════════════════════════════════════════════════════
+    const gSweep = ctxA.createGain();
+    gSweep.gain.value = 0.15;
+    gSweep.connect(dest);
+    _recAudioNodes.push(gSweep);
+    _recSweepGain = gSweep;
+    if (window._sweepSource) {
+      try { window._sweepSource.connect(gSweep); hasAny = true; } catch(e){}
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 🔊 BUS 3: RESPUESTA (respuesta.mp3) — solo ambiente
+    // ═══════════════════════════════════════════════════════
+    const gResp = ctxA.createGain();
+    gResp.gain.value = 0.20;
+    gResp.connect(dest);
+    _recAudioNodes.push(gResp);
+    _recRespGain = gResp;
+    if (window._respSource) {
+      try { window._respSource.connect(gResp); hasAny = true; } catch(e){}
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 🎤 BUS 4: MICRÓFONO — PRIORIDAD ABSOLUTA (7.5x heredado)
+    // ═══════════════════════════════════════════════════════
+    if (micGainNode) {
+      try {
+        const gMic = ctxA.createGain();
+        gMic.gain.value = 1.0;   // micGainNode YA tiene 7.5x aplicado → no doblar
+        micGainNode.connect(gMic);
+        gMic.connect(dest);
+        _recAudioNodes.push(gMic);
+        _recMicGain = gMic;
+        hasAny = true;
+        console.log('[REC] ✅ Mic → grabación (7.5x heredado de micGainNode)');
+      } catch(e) { _warn('[REC] micGainNode:', e); }
+    }
+
+    // Fallback: crear source del stream con boost manual de 7.5x
+    if (!_recMicGain) {
+      const micStream =
+        (window.remoteMicStream && window.remoteMicStream.getAudioTracks().length) ? window.remoteMicStream :
+        (audioStream && audioStream.getAudioTracks().length) ? audioStream : null;
+      if (micStream) {
+        try {
+          const src = ctxA.createMediaStreamSource(micStream);
+          const gMic = ctxA.createGain();
+          gMic.gain.value = 7.5;  // mismo boost que el sistema principal
+          src.connect(gMic);
+          gMic.connect(dest);
+          _recAudioNodes.push(src, gMic);
+          _recMicGain = gMic;
+          hasAny = true;
+          console.log('[REC] ✅ Mic → grabación (7.5x manual, fallback)');
+        } catch(e) { _warn('[REC] micro fallback:', e); }
+      }
+    }
+
     if (!hasAny && mixDestination && mixDestination.stream.getAudioTracks().length) {
       return mixDestination.stream.getAudioTracks()[0];
     }
@@ -10833,6 +10905,25 @@ async function toggleScreenRecording() {
 // Exponer globalmente
 window.toggleScreenRecording = toggleScreenRecording;
 window.takeScreenshot = takeScreenshot;
+// ==========================================================
+// 🦆 DUCKING DE MICRÓFONO EN GRABACIÓN
+// Evita el "doble TTS" acústico: cuando la voz IA suena,
+// el mic se atenúa al 30% → no capta el speaker → sin eco.
+// Solo afecta la GRABACIÓN, no el stream de Agora en vivo.
+// ==========================================================
+setInterval(() => {
+  if (!isRecordingActive || !_recMicGain || !audioCtx) return;
+  const ttsActive = isTtsPlaying || isSpookySpeaking || window._isAnnouncement;
+  if (_recMicDucked !== ttsActive) {
+    _recMicDucked = ttsActive;
+    const target = ttsActive ? 0.30 : 1.0;
+    try {
+      _recMicGain.gain.setTargetAtTime(target, audioCtx.currentTime, 0.15);
+      console.log('[REC] 🦆 Ducking mic:', ttsActive ? 'ATENUADO (-70%)' : 'RESTAURADO');
+    } catch(e){}
+  }
+}, 200);
+
 
 let mapSpriteCanvas = null, mapSpriteCtx = null, mapSpriteX = 0, mapSpriteY = 0;
 
