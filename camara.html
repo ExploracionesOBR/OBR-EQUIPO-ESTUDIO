@@ -49,8 +49,30 @@
 
     <style>
         * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; box-sizing: border-box; outline: none; touch-action: none; }
-        :root { --hud-primary: #ff3333; }
-        body { background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; width: 100vw; height: 100vh; margin: 0; padding: 0; }
+:root { --hud-primary: #ff3333; }
+
+/* 🔒 FIX C: anclar html+body al viewport real (Android WebView) */
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: none;
+}
+body { 
+  background: #000; 
+  overflow: hidden; 
+  font-family: 'Orbitron', sans-serif; 
+  width: 100%; 
+  height: 100%; 
+  margin: 0; 
+  padding: 0;
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
         
         #main-view-area { position: absolute; inset: 0; background: #000; overflow: hidden; transition: filter 0.2s; transform: translateZ(0); will-change: filter; }
         #zoom-container { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: center center;will-change: transform; backface-visibility: hidden; }
@@ -867,6 +889,8 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
         .modal-bg input, #loading input { -webkit-user-select: auto !important; user-select: auto !important; }
 
         .pulsing { animation: pulse 1.5s infinite; }
+
+  
         @keyframes pulse { 0% { opacity: 0.5; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.5; transform: scale(0.95); } }
         
         #chat-fullscreen-view { display:none; position:fixed; inset:0; z-index:10000; background:#000; flex-direction:column; }
@@ -1629,7 +1653,7 @@ body.split-active #obr-gl-video {
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '38'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '40'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -2041,7 +2065,7 @@ const AGORA_CHANNEL = 'obr-estudio';
 let CHAT_OVERLAY_URL = localStorage.getItem('obr_chat_url') || 'https://socialstream.ninja/dock.html?session=89yKRznESR';
 const RTM_TOKEN = undefined;
 const MIC_CHANNEL = 'obr-mic';
-const AI_SENSITIVITY = 0.35;
+const AI_SENSITIVITY = 0.25;
 const VOLUMEN_BARRIDO = 0.15;      // 🔒 FIX B: bajado de 0.25 → 0.15 para reducir feedback del mic
 const VOLUMEN_RESPUESTA = 0.20;    // ← Era 0.35, bajar un poco
 const VOLUMEN_EVP = 3.0;           // ← Era 2.2, subir para que se escuche mejor
@@ -2278,6 +2302,10 @@ document.getElementById('connect-modal').addEventListener('focusin', preventAuto
     let pareidoliaInterval = null;
     let lastPareidoliaCall = 0;
     let currentAiText = "";
+    window._recentVisionPhrases = []; // Anti-repetición: últimas 5 respuestas
+    let _aiRevealStart = 0;
+const AI_REVEAL_DURATION = 1800; // ms que dura la animación de revelado
+window._currentPreviewImgEl = null; // 🎬 imagen de preview durante análisis
     let currentAiImage = null;
     let currentAiImgEl = null;
     let aiScannerTimer = 0;
@@ -4456,9 +4484,11 @@ async function getElevenLabsAudio(text, voiceId) {
     const targetRenderFPS = 30; const fpsInterval = 1000 / targetRenderFPS; 
     let performanceLagging = false;
     
-    const analysisCanvas = document.createElement('canvas'); const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-    analysisCanvas.width = 96;  // 🔒 Más pequeño = más rápido
-analysisCanvas.height = 72; // 🔒 Más pequeño = más rápido
+    // 🔒 FIX E: resolución 2x para mejor detección a distancia
+const analysisCanvas = document.createElement('canvas'); 
+const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
+analysisCanvas.width = 192;   // era 96
+analysisCanvas.height = 144;  // era 72
     const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240; const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
 
     const scanBoxPool = [];
@@ -4867,7 +4897,14 @@ OBR_EVENT_MANAGER.add(window, 'orientationchange', handleOrientationChange);
         try {
             if (videoStream) videoStream.getVideoTracks().forEach(t => t.stop()); 
             
-            const safeVideoConfig = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 }, advanced: [{ focusMode: "continuous" }] };
+            const safeVideoConfig = { 
+    facingMode: { ideal: 'environment' }, 
+    width: { ideal: 1920, min: 1280 }, 
+    height: { ideal: 1080, min: 720 }, 
+    frameRate: { ideal: 30, max: 30 }, 
+    focusMode: 'continuous',  // 🔒 FIX F: principal
+    advanced: [{ focusMode: 'continuous' }]
+};
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: false, 
                 video: safeVideoConfig 
@@ -5084,7 +5121,7 @@ showToast("🔄 ESTABILIZANDO CÁMARA...", false);
     }
     // Pedimos solo video, mantenemos la configuración actual
     const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } 
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30 }, focusMode: 'continuous' } 
     });
     
     const newTrack = stream.getVideoTracks()[0];
@@ -5736,11 +5773,38 @@ async function initApp() {
   const qualitySettings = OBR_QUALITY.getCurrent();
   const targetResolution = qualitySettings.videoResolution;
 
-  const constraintSets = [
-    { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, advanced: [{ focusMode: "continuous" }] } },
-    { audio: false, video: { facingMode: 'environment', width: { exact: 1920 }, height: { exact: 1080 }, frameRate: { ideal: 60, max: 60 } } },
-    { audio: false, video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } } }
-  ];
+  // 🔒 FIX F: focusMode en constraints principales (no solo en advanced) + resolución más estable
+const constraintSets = [
+    // Intento 1: 1080p + continuous focus (constraint principal)
+    { audio: false, video: { 
+        facingMode: { ideal: 'environment' }, 
+        width: { ideal: 1920, min: 1280 }, 
+        height: { ideal: 1080, min: 720 }, 
+        frameRate: { ideal: 30, max: 60 },  // 30 es más estable que 60 en la mayoría de móviles
+        focusMode: 'continuous',  // 🔒 constraint PRINCIPAL (no advanced)
+        advanced: [
+            { focusMode: 'continuous' },
+            { whiteBalanceMode: 'continuous' },
+            { exposureMode: 'continuous' }
+        ]
+    } },
+    // Intento 2: con min/max explícito y focusMode como enum
+    { audio: false, video: { 
+        facingMode: 'environment', 
+        width: { exact: 1920 }, 
+        height: { exact: 1080 }, 
+        frameRate: { ideal: 30 },
+        focusMode: { ideal: 'continuous' },
+        advanced: [{ focusMode: 'continuous' }]
+    } },
+    // Intento 3: sin focusMode explícito (algunos dispositivos fallan si lo fuerzas)
+    { audio: false, video: { 
+        facingMode: 'environment', 
+        width: { ideal: 1920 }, 
+        height: { ideal: 1080 }, 
+        frameRate: { ideal: 30, max: 30 }
+    } }
+];
 
   let stream = null;
   let lastError = null;
@@ -5809,13 +5873,24 @@ async function initApp() {
       }
 
       if(window.poseDetection) {
-        aiDetector = await poseDetection.createDetector(
-          poseDetection.SupportedModels.MoveNet,
-          _isHighEndDevice
-            ? { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: true, maxPoses: 3, scoreThreshold: 0.4 }
-            : { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: false, maxPoses: 2, scoreThreshold: 0.45 }
-        );
-      }
+    aiDetector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      _isHighEndDevice
+        ? { 
+            modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, 
+            enableSmoothing: true, 
+            maxPoses: 3, 
+            scoreThreshold: 0.25,   // 🔒 FIX E: era 0.4 → 0.25
+            // inputResolution NO se especifica → MoveNet usa 192x192 ó 256x256 (mejor)
+          }
+        : { 
+            modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, 
+            enableSmoothing: false, 
+            maxPoses: 2, 
+            scoreThreshold: 0.30,   // 🔒 FIX E: era 0.45 → 0.30
+          }
+    );
+}
 
       if(window.SelfieSegmentation) {
         segmenter = new SelfieSegmentation({
@@ -5963,7 +6038,12 @@ else { targetPoses = []; currentPose = null; smoothedPoses = []; }
 };
 slsWorker.postMessage({
 type: 'init', tfUrl, pdUrl,
-cfg: { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableSmoothing: _isHighEndDevice, maxPoses: _isHighEndDevice ? 3 : 2, scoreThreshold: _isHighEndDevice ? 0.4 : 0.45 }
+cfg: { 
+  modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, 
+  enableSmoothing: _isHighEndDevice, 
+  maxPoses: _isHighEndDevice ? 3 : 2, 
+  scoreThreshold: _isHighEndDevice ? 0.25 : 0.30  // 🔒 FIX E
+}
 });
 } catch (e) { slsWorker = null; _warn('[SLS] Worker no disponible:', e && e.name); }
 }
@@ -7421,6 +7501,45 @@ ctx2.drawImage(tCanv, textX, pad + 2 * uiS + titleFS + 6 * uiS, tCanv.width / SS
 }
 
 
+// ==========================================================
+// 🔒 FIX D: CACHE DE HUD ESTÁTICO (solo se regenera cada minuto)
+// Reduce ~30-40% del trabajo de render por frame
+// ==========================================================
+let _hudStaticCache = null;
+let _hudStaticCacheCtx = null;
+let _hudStaticDate = '';
+let _hudStaticSize = '';
+
+function getCachedHUDStatic(width, height, scale) {
+  const sizeKey = `${width}x${height}@${scale.toFixed(2)}`;
+  const now = new Date();
+  const dateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+  
+  // Si no hay cache o cambió tamaño o cambió minuto → regenerar
+  if (!_hudStaticCache || _hudStaticSize !== sizeKey || _hudStaticDate !== dateKey) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round(width * dpr);
+    const h = Math.round(height * dpr);
+    
+    if (!_hudStaticCache) {
+      _hudStaticCache = document.createElement('canvas');
+      _hudStaticCacheCtx = _hudStaticCache.getContext('2d');
+    }
+    _hudStaticCache.width = w;
+    _hudStaticCache.height = h;
+    
+    // Dibujar HUD estático en el canvas cache
+    _hudStaticCacheCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawBurnInHUD(_hudStaticCacheCtx, width, height, scale);
+    
+    _hudStaticSize = sizeKey;
+    _hudStaticDate = dateKey;
+  }
+  
+  return _hudStaticCache;
+}
+
+
 function drawGlitchText(c, text, x, y, size = 12) { 
     const glitchOffset = Math.random() * 4 - 2; 
     c.font = `bold ${size}px 'Share Tech Mono'`; 
@@ -7464,6 +7583,301 @@ for (let i = canvasScanBoxes.length - 1; i >= 0; i--) {
 let _aiCacheCanvas = null;
 let _aiCacheSrc = '';
 
+// 🎨 CACHE de imágenes CON filtro (para reveal, boxes y panel final = coherencia visual total)
+const _aiFilteredCanvasCache = new Map();
+
+// Devuelve un canvas de targetW×targetH con la imagen en COVER + filtro análisis IA aplicado
+function getFilteredAiImage(imgEl, targetW, targetH) {
+    if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) return null;
+    const srcKey = (imgEl.src || '') + '|' + targetW + 'x' + targetH;
+    if (_aiFilteredCanvasCache.has(srcKey)) {
+        return _aiFilteredCanvasCache.get(srcKey);
+    }
+
+    const tmpC = document.createElement('canvas');
+    tmpC.width = targetW;
+    tmpC.height = targetH;
+    const tmpCtx = tmpC.getContext('2d');
+
+    const sW = imgEl.naturalWidth;
+    const sH = imgEl.naturalHeight;
+    const ratio = Math.max(targetW / sW, targetH / sH);
+    const cW = targetW / ratio;
+    const cH = targetH / ratio;
+    const cx = (sW - cW) / 2;
+    const cy = (sH - cH) / 2;
+
+    // Detectar luminancia real de la escena para elegir filtro
+    let useThermalFilter = true;
+    try {
+        tmpCtx.drawImage(imgEl, cx, cy, cW, cH, 0, 0, targetW, targetH);
+        const pts = [
+            [targetW * 0.3, targetH * 0.3],
+            [targetW * 0.5, targetH * 0.5],
+            [targetW * 0.7, targetH * 0.7]
+        ];
+        let totalLum = 0, validPts = 0;
+        for (const [px, py] of pts) {
+            try {
+                const d = tmpCtx.getImageData(px | 0, py | 0, 1, 1).data;
+                totalLum += (d[0] * 0.299 + d[1] * 0.587 + d[2] * 0.114);
+                validPts++;
+            } catch (e) {}
+        }
+        const avgLum = validPts > 0 ? totalLum / validPts : 128;
+        useThermalFilter = avgLum >= 90;
+    } catch (e) {}
+
+    // Aplicar el mismo filtro que el panel final (Fase 3) para coherencia total
+    tmpCtx.clearRect(0, 0, targetW, targetH);
+    if (useThermalFilter) {
+        tmpCtx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
+    } else {
+        tmpCtx.filter = 'brightness(2.0) contrast(1.4) saturate(1.5)';
+    }
+    tmpCtx.drawImage(imgEl, cx, cy, cW, cH, 0, 0, targetW, targetH);
+    tmpCtx.filter = 'none';
+
+    // Cache con límite (evita memory leak)
+    if (_aiFilteredCanvasCache.size > 6) {
+        const firstKey = _aiFilteredCanvasCache.keys().next().value;
+        _aiFilteredCanvasCache.delete(firstKey);
+    }
+    _aiFilteredCanvasCache.set(srcKey, tmpC);
+    return tmpC;
+}
+
+
+// ==========================================================
+// 🎬 PANEL IA v2 — Scanning + Reveal dentro del panel pequeño
+// ==========================================================
+
+// Fase 1: panel profesional con preview + boxes "analizando pixel por pixel"
+function drawAIScanningPanel(c, bx, by, pw, ph) {
+    const previewImg = window._currentPreviewImgEl;
+    const hasPreview = previewImg && previewImg.complete && previewImg.naturalWidth > 0;
+
+    c.save();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+
+    const cx = bx + pw / 2;
+    const cy = by + ph / 2;
+    const t = Date.now() / 1000;
+    const pulse = (Math.sin(t * 3) + 1) / 2;
+
+    // ── FONDO base
+    c.fillStyle = '#000';
+    c.fillRect(bx, by, pw, ph);
+
+    // ── IMAGEN DE PREVIEW (semi-transparente, DETRÁS de las letras)
+    let imgDx = 0, imgDy = 0, imgDw = 0, imgDh = 0;
+    if (hasPreview) {
+        const iw = previewImg.naturalWidth;
+        const ih = previewImg.naturalHeight;
+        const sc = Math.max(pw / iw, ph / ih);
+        imgDw = iw * sc;
+        imgDh = ih * sc;
+        imgDx = bx + (pw - imgDw) / 2;
+        imgDy = by + (ph - imgDh) / 2;
+
+        c.save();
+        c.globalAlpha = 0.55; // semitransparente
+        c.drawImage(previewImg, imgDx, imgDy, imgDw, imgDh);
+        c.restore();
+
+        // Tinte rojo sutil de análisis
+        c.fillStyle = `rgba(255, 20, 20, ${0.08 + pulse * 0.04})`;
+        c.fillRect(bx, by, pw, ph);
+    }
+
+    // ── RECUADROS "ANALIZANDO PÍXEL POR PÍXEL" (muestran crop NÍTIDO)
+    if (hasPreview) {
+        const cycleMs = 900;
+        const numBoxes = 3;
+
+        for (let i = 0; i < numBoxes; i++) {
+            const offset = i * (cycleMs / numBoxes);
+            const phase = ((Date.now() + offset) % cycleMs) / cycleMs;
+
+            // Semilla determinística por ciclo (cambia cada ~900ms)
+            const seed = Math.floor((Date.now() + offset) / cycleMs) * 37 + i * 13;
+            const rnd = (n) => {
+                const x = Math.sin(seed + n) * 10000;
+                return x - Math.floor(x);
+            };
+
+            const boxW = pw * (0.14 + rnd(1) * 0.14);
+            const boxH = boxW * (0.75 + rnd(2) * 0.35);
+            const boxX = bx + rnd(3) * (pw - boxW);
+            const boxY = by + rnd(4) * (ph - boxH);
+
+            // Fade-in/out
+            let alpha = 1;
+            if (phase < 0.2) alpha = phase / 0.2;
+            else if (phase > 0.75) alpha = (1 - phase) / 0.25;
+            alpha = Math.max(0, Math.min(1, alpha));
+
+            const boxPulse = 0.85 + Math.sin(phase * Math.PI * 4) * 0.15;
+
+            // 🎨 Imagen NÍTIDA dentro de la caja — CON FILTRO (coherente con el reveal final)
+            c.save();
+            c.globalAlpha = alpha * boxPulse;
+            c.beginPath();
+            c.rect(boxX, boxY, boxW, boxH);
+            c.clip();
+            const filteredPreview = getFilteredAiImage(previewImg, Math.round(pw), Math.round(ph));
+            if (filteredPreview) {
+                c.drawImage(filteredPreview, bx, by, pw, ph);
+            } else {
+                // Fallback: imagen cruda si el helper falló
+                c.drawImage(previewImg, imgDx, imgDy, imgDw, imgDh);
+            }
+            c.restore();
+
+            // Esquinas de la caja (look técnico)
+            c.save();
+            c.globalAlpha = alpha * boxPulse;
+            const cornerLen = Math.min(boxW, boxH) * 0.22;
+            c.strokeStyle = 'rgba(255, 60, 60, 0.95)';
+            c.lineWidth = 1.5;
+
+            c.beginPath(); c.moveTo(boxX, boxY + cornerLen); c.lineTo(boxX, boxY); c.lineTo(boxX + cornerLen, boxY); c.stroke();
+            c.beginPath(); c.moveTo(boxX + boxW - cornerLen, boxY); c.lineTo(boxX + boxW, boxY); c.lineTo(boxX + boxW, boxY + cornerLen); c.stroke();
+            c.beginPath(); c.moveTo(boxX, boxY + boxH - cornerLen); c.lineTo(boxX, boxY + boxH); c.lineTo(boxX + cornerLen, boxY + boxH); c.stroke();
+            c.beginPath(); c.moveTo(boxX + boxW - cornerLen, boxY + boxH); c.lineTo(boxX + boxW, boxY + boxH); c.lineTo(boxX + boxW, boxY + boxH - cornerLen); c.stroke();
+
+            // Etiqueta técnica
+            const lbl = `ID-${String((seed % 900) + 100).slice(-3)} ${Math.round(72 + rnd(5) * 28)}%`;
+            const lblFS = Math.max(4.5, Math.min(6.5, boxW * 0.11));
+            c.font = `${lblFS}px 'Share Tech Mono', monospace`;
+            c.textAlign = 'left';
+            c.textBaseline = 'bottom';
+            const lblW = c.measureText(lbl).width;
+            c.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            c.fillRect(boxX, boxY - lblFS - 3, lblW + 4, lblFS + 3);
+            c.fillStyle = 'rgba(255, 100, 100, 0.98)';
+            c.fillText(lbl, boxX + 2, boxY - 1);
+            c.restore();
+        }
+    }
+
+    // ── ETIQUETAS SEMI-TRANSPARENTES (sobre la imagen)
+    c.save();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    c.shadowBlur = 8;
+
+    // EXPLORACIONES
+    const labelFS = Math.max(7, ph * 0.055);
+    c.font = `bold ${labelFS}px 'Share Tech Mono', monospace`;
+    c.fillStyle = `rgba(255, 51, 51, ${0.85 + pulse * 0.15})`;
+    c.fillText('EXPLORACIONES', cx, by + ph * 0.22);
+
+    // OBR — semi-transparente (se ve la imagen detrás)
+    const obrFS = Math.max(20, Math.min(ph * 0.22, pw * 0.35));
+    c.font = `900 ${obrFS}px 'Orbitron', sans-serif`;
+    c.shadowColor = `rgba(255, 51, 51, ${0.7 + pulse * 0.3})`;
+    c.shadowBlur = 15 + pulse * 12;
+    c.fillStyle = `rgba(255, 255, 255, ${0.55 + pulse * 0.15})`;
+    c.fillText('OBR', cx, cy);
+    c.shadowBlur = 0;
+    c.strokeStyle = `rgba(255, 51, 51, ${0.85 + pulse * 0.15})`;
+    c.lineWidth = Math.max(1, obrFS * 0.018);
+    c.strokeText('OBR', cx, cy);
+
+    // ANALIZANDO...
+    const dots = '.'.repeat(Math.floor(t * 2) % 4);
+    const anaFS = Math.max(6, ph * 0.048);
+    c.font = `${anaFS}px 'Share Tech Mono', monospace`;
+    c.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    c.shadowBlur = 6;
+    c.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    c.fillText('ANALIZANDO' + dots, cx, by + ph * 0.78);
+    c.restore();
+
+    // ── SCANLINE horizontal
+    const scanY = by + ((t * 40) % ph);
+    c.strokeStyle = 'rgba(255, 60, 60, 0.4)';
+    c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(bx, scanY); c.lineTo(bx + pw, scanY); c.stroke();
+
+    // ── Borde pulsante
+    c.strokeStyle = `rgba(255, 51, 51, ${0.6 + pulse * 0.4})`;
+    c.lineWidth = 1.5;
+    c.strokeRect(bx, by, pw, ph);
+
+    c.restore();
+}
+
+// Fase 2: reveal del PANEL COMPLETO — CON FILTRO desde el primer frame
+function drawAIRevealPanel(c, bx, by, pw, ph, imgEl, progress) {
+    if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) return;
+
+    // 🎨 Imagen YA FILTRADA (coherente con panel final — sin salto visual)
+    const filtered = getFilteredAiImage(imgEl, Math.round(pw), Math.round(ph));
+    if (!filtered) return;
+
+    c.save();
+    c.fillStyle = '#000';
+    c.fillRect(bx, by, pw, ph);
+
+    // Efecto pixelado progresivo: 16px → 1px
+    const pixelSize = Math.max(1, Math.round(16 * (1 - progress)));
+
+    if (pixelSize > 2) {
+        // Escalar el canvas FILTRADO a baja resolución y estirar (pixelado)
+        const smallW = Math.max(2, Math.round(pw / pixelSize));
+        const smallH = Math.max(2, Math.round(ph / pixelSize));
+        const off = document.createElement('canvas');
+        off.width = smallW;
+        off.height = smallH;
+        const oCtx = off.getContext('2d');
+        oCtx.imageSmoothingEnabled = true;
+        oCtx.drawImage(filtered, 0, 0, smallW, smallH);
+
+        c.imageSmoothingEnabled = false;
+        c.drawImage(off, bx, by, pw, ph);
+        c.imageSmoothingEnabled = true;
+    } else {
+        // Ya nítido — usar el canvas filtrado
+        c.drawImage(filtered, bx, by, pw, ph);
+    }
+
+    // Línea de barrido que "revela" de arriba a abajo
+    if (progress < 1) {
+        const sweepY = by + ph * progress;
+        c.strokeStyle = `rgba(255, 60, 60, ${(1 - progress) * 0.9})`;
+        c.lineWidth = 2;
+        c.shadowColor = 'rgba(255, 60, 60, 0.8)';
+        c.shadowBlur = 8;
+        c.beginPath(); c.moveTo(bx, sweepY); c.lineTo(bx + pw, sweepY); c.stroke();
+        c.shadowBlur = 0;
+    }
+
+    // Etiqueta "EXPLORACIONES" que se desvanece en el primer 50%
+    if (progress < 0.5) {
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        const labelAlpha = (1 - progress / 0.5) * 0.9;
+        const labelFS = Math.max(7, ph * 0.055);
+        c.font = `bold ${labelFS}px 'Share Tech Mono', monospace`;
+        c.fillStyle = `rgba(255, 51, 51, ${labelAlpha})`;
+        c.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        c.shadowBlur = 6;
+        c.fillText('EXPLORACIONES', bx + pw / 2, by + ph * 0.1);
+        c.shadowBlur = 0;
+    }
+
+    // Borde que se asienta al final
+    c.strokeStyle = `rgba(255, 51, 51, ${0.5 + progress * 0.5})`;
+    c.lineWidth = 1.5;
+    c.strokeRect(bx, by, pw, ph);
+
+    c.restore();
+}
+
 function drawAIBurnIn(c, w, h, scale) {
     if (scale <= 0.01) return;
     const isPortrait = window.innerHeight > window.innerWidth;
@@ -7471,14 +7885,15 @@ function drawAIBurnIn(c, w, h, scale) {
     const smoothScale = 1 - Math.pow(1 - scale, 3);
     c.globalAlpha = Math.max(0, Math.min(1, scale * 1.5));
 
-    const verticalFactor = 0.72;
-    const horizontalFactor = 0.63;
-    const margin = Math.min(w, h) * 0.025;
-    const panelW = isPortrait ? w * 0.45 * verticalFactor : 320 * horizontalFactor;
-    const imgH = isPortrait ? h * 0.30 * verticalFactor : 240 * horizontalFactor;
-    const maxPanelH = isPortrait ? h * 0.50 * verticalFactor : 300 * horizontalFactor;
+    // 🔒 PANEL IA — compacto (reducido ~30% en celular, ~20% en PC)
+    const verticalFactor = 0.60;      // antes 0.72
+    const horizontalFactor = 0.58;    // antes 0.63
+    const margin = Math.min(w, h) * 0.018;  // antes 0.025
+    const panelW = isPortrait ? w * 0.38 * verticalFactor : 280 * horizontalFactor;
+    const imgH = isPortrait ? h * 0.24 * verticalFactor : 200 * horizontalFactor;
+    const maxPanelH = isPortrait ? h * 0.40 * verticalFactor : 260 * horizontalFactor;
     const finalImgH = Math.min(imgH, maxPanelH);
-    const finalPanelW = Math.min(panelW, w * 0.60);
+    const finalPanelW = Math.min(panelW, w * 0.50);  // antes 0.60
 
     const bx = margin;
     const by = margin;
@@ -7513,98 +7928,39 @@ function drawAIBurnIn(c, w, h, scale) {
         c.fillRect(bx, by, 4, totalH);
     }
 
+    // Detectar si estamos en fase "reveal" (imagen llegando)
+    const _timeSinceReveal = _aiRevealStart > 0 ? Date.now() - _aiRevealStart : Infinity;
+    const _isRevealing = !isScanning && _timeSinceReveal < AI_REVEAL_DURATION;
+    const _revealProgress = _isRevealing ? Math.min(1, _timeSinceReveal / AI_REVEAL_DURATION) : 1;
+
+    // FASE 1: sin imagen → panel "EXPLORACIONES / OBR / ANALIZANDO"
     if (isScanning) {
-        const radarScale = isPortrait ? 0.8 : 1.0;
-        const radarRadiusBase = Math.min(panelW_ * 0.25, 60) * radarScale;
-        const radarCx = bx + radarRadiusBase + 15;
-        const radarCy = by + radarRadiusBase + 15;
-        c.save();
-        c.translate(radarCx, radarCy);
-        c.strokeStyle = "rgba(0, 255, 100, 0.15)";
-        c.lineWidth = 1;
-        for (let r = 10; r <= radarRadiusBase; r += 10) {
-            c.beginPath();
-            c.arc(0, 0, r, 0, Math.PI * 2);
-            c.stroke();
-        }
-        c.beginPath();
-        c.moveTo(-radarRadiusBase, 0);
-        c.lineTo(radarRadiusBase, 0);
-        c.stroke();
-        c.beginPath();
-        c.moveTo(0, -radarRadiusBase);
-        c.lineTo(0, radarRadiusBase);
-        c.stroke();
-        const pulse = (Math.sin(performance.now() * 0.003) + 1) / 2;
-        const currentRadius = radarRadiusBase * (0.6 + pulse * 0.4);
-        radarAngle += 0.04;
-        c.rotate(radarAngle);
-        const drawBlade = (angleOffset) => {
-            c.save();
-            c.rotate(angleOffset);
-            c.beginPath();
-            c.moveTo(0, 0);
-            c.arc(0, 0, currentRadius, -0.4, 0.4);
-            c.lineTo(0, 0);
-            const grad = c.createRadialGradient(0, 0, 0, 0, 0, currentRadius);
-            grad.addColorStop(0, "rgba(0,0,0,0)");
-            if (pulse > 0.7) {
-                grad.addColorStop(0.5, "rgba(255, 100, 0, 0.3)");
-                grad.addColorStop(1, "rgba(255, 0, 0, 0.6)");
-            } else {
-                grad.addColorStop(0.5, "rgba(0, 150, 0, 0.3)");
-                grad.addColorStop(1, "rgba(200, 200, 0, 0.5)");
-            }
-            c.fillStyle = grad;
-            c.fill();
-            c.restore();
-        };
-        drawBlade(0);
-        drawBlade(Math.PI);
-        c.restore();
-        const txtX = radarCx + radarRadiusBase + 20;
-        const txtY = radarCy;
-        if (displayTxt && displayTxt.includes('\n')) {
-            const lines = displayTxt.split('\n');
-            let lineY = txtY - 15;
-            lines.forEach((l, idx) => {
-                drawGlitchText(c, l.toLowerCase(), txtX, lineY + (idx * 12), 9);
-            });
-        } else if (displayTxt) {
-            drawGlitchText(c, displayTxt.toLowerCase(), txtX, txtY + 5, 10);
-        }
-        c.restore();
+        drawAIScanningPanel(c, bx, by, panelW_, imgH_);
         return;
     }
 
-    // MODO RESPUESTA (imagen cacheada)
+    // FASE 2: imagen llegando → revelado a través de "OBR" creciendo
+    if (_isRevealing) {
+        drawAIRevealPanel(c, bx, by, panelW_, imgH_, currentAiImgEl, _revealProgress);
+        return;
+    }
+
+    // FASE 3: normal (imagen con texto debajo) — el código que ya tenías
+
+    // MODO RESPUESTA (imagen filtrada cacheada)
     if (!isScanning) {
         c.save();
         try {
             if (!currentAiImgEl || !currentAiImgEl.complete || currentAiImgEl.naturalWidth === 0) {
                 throw new Error("Imagen inválida");
             }
-            // Cachear la imagen procesada
-            const srcKey = currentAiImgEl.src;
-            if (!_aiCacheCanvas || _aiCacheSrc !== srcKey) {
-                const tmpC = document.createElement('canvas');
-                tmpC.width = panelW_;
-                tmpC.height = imgH_;
-                const tmpCtx = tmpC.getContext('2d');
-                let sW = currentAiImgEl.naturalWidth;
-                let sH = currentAiImgEl.naturalHeight;
-                let ratio = Math.max(panelW_ / sW, imgH_ / sH);
-                let cW = panelW_ / ratio;
-                let cH = imgH_ / ratio;
-                let cx = (sW - cW) / 2;
-                let cy = (sH - cH) / 2;
-                tmpCtx.filter = 'invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2)';
-                tmpCtx.drawImage(currentAiImgEl, cx, cy, cW, cH, 0, 0, panelW_, imgH_);
-                tmpCtx.filter = 'none';
-                _aiCacheCanvas = tmpC;
-                _aiCacheSrc = srcKey;
+            // 🎨 Usar helper cacheado (misma función que reveal y boxes → coherencia total)
+            const filtered = getFilteredAiImage(currentAiImgEl, Math.round(panelW_), Math.round(imgH_));
+            if (filtered) {
+                c.drawImage(filtered, bx, by, panelW_, imgH_);
+            } else if (currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0) {
+                c.drawImage(currentAiImgEl, bx, by, panelW_, imgH_);
             }
-            c.drawImage(_aiCacheCanvas, bx, by, panelW_, imgH_);
         } catch (e) {
             if (currentAiImgEl && currentAiImgEl.complete && currentAiImgEl.naturalWidth > 0) {
                 c.drawImage(currentAiImgEl, bx, by, panelW_, imgH_);
@@ -8063,7 +8419,7 @@ if (state.isLidar) {
     } else {
         drawLidarEffect(tctx, W, H, frameCount);
     }
-    drawSessionHUD(tctx, W, H, animState.hudScale);
+    drawSessionHUD(tctx, W, H, 1.0);
     drawTallyBorder(tctx, W, H);
     return;
 }
@@ -8090,7 +8446,7 @@ if (state.isLidar) {
 
     if (state.isPareidolia) drawCanvasScanBoxes(tctx, W, H);
     drawBurnInHUD(tctx, W, H, animState.hudScale);
-    drawSessionHUD(tctx, W, H, animState.hudScale);
+    drawSessionHUD(tctx, W, H, 1.0);
     if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) drawAIBurnIn(tctx, W, H, animState.aiScale);
     drawTallyBorder(tctx, W, H);
     drawMapToMaster(tctx, W, H);
@@ -8164,9 +8520,15 @@ if (_overlayDirty || isRecordingActive) {
   drawOverlayChain(ctx, W, H);
   _overlayDirty = false; //  Resetear flag después de dibujar
 } else {
-  // HUD estático (el canvas se limpia cada frame, hay que redibujar siempre)
-  drawBurnInHUD(ctx, W, H, animState.hudScale);
-  drawSessionHUD(ctx, W, H, animState.hudScale);
+  // 🔒 FIX D: usar cache de HUD (se regenera solo cada minuto)
+  const hudCache = getCachedHUDStatic(W, H, animState.hudScale);
+  if (hudCache) {
+    ctx.drawImage(hudCache, 0, 0, W, H);
+  } else {
+    drawBurnInHUD(ctx, W, H, animState.hudScale);
+  }
+  // Session HUD siempre visible (independiente del animState.hudScale)
+  drawSessionHUD(ctx, W, H, 1.0);
 }
   
   // ✅ 8. Audio visualizer: SOLO si está activo
@@ -8306,6 +8668,21 @@ else if (currentFps >= 25) performanceLagging = false;
 // 🔒 SIN wrapper fxActive: qualityScale nunca queda "congelado" para
 // restaurarse en el instante del toggle (eso causaba el reescalado).
 AI_FRAME_SKIP.adjustForPerformance(currentFps);
+// 🔒 FIX D: si FPS < 20 sostenido, reducir nitidez GL automáticamente
+if (typeof window._lowFpsCount === 'undefined') window._lowFpsCount = 0;
+if (currentFps < 20 && !isRecordingActive) {
+  window._lowFpsCount++;
+  if (window._lowFpsCount >= 3 && currentSharpness > 0) {
+    console.warn('[PERF] FPS bajo detectado, reduciendo nitidez a', currentSharpness - 1);
+    applySharpness(currentSharpness - 1);
+    const sl = document.getElementById('sharpness-slider');
+    if (sl) sl.value = currentSharpness;
+    window._lowFpsCount = 0;
+  }
+} else if (currentFps >= 25) {
+  window._lowFpsCount = 0;
+}
+
 // 🔒 NITIDEZ FIJA: no bajamos resolución automáticamente
 // (el resto de optimizaciones ya está en AI_FRAME_SKIP y detectionLoop)
 // ==========================================================
@@ -8636,15 +9013,111 @@ function compressImageForAI(sourceCanvas, maxWidth = 640, quality = 0.7) {
 
 // 🔒 Dibuja la fuente (video crudo o canvas GL procesado) en el snapshot, en COVER (sin aplastar)
 function fillAiSnapshot(destCtx, dw, dh) {
-  const src = (OBRL.ready && OBRL.canvas.width > 1) ? OBRL.canvas : el.video;
-  const sw = src.videoWidth ?? src.width;
-  const sh = src.videoHeight ?? src.height;
-  if (!sw || !sh) return false;
+  // 🔒 FIX A-V2: sincronizar GL antes de capturar
+  if (typeof OBRL !== 'undefined' && OBRL.ready) {
+    try { renderGLVideo(); } catch(e){}
+  }
+  
+  const videoOK = el.video && el.video.videoWidth > 0 && el.video.readyState >= 2;
+  const glOK = OBRL.ready && OBRL.canvas.width > 1;
+  
+  let src, sw, sh;
+  
+  // 🔒 FIX A-V2: PRIORIZAR GL (tiene filtro shader = pareidolia real)
+  // El video crudo da respuestas aburridas tipo "Veo la pared"
+  // El canvas GL tiene grain + contraste + filtro térmico/night/urbex del usuario
+  // → estimula al modelo a "ver" formas en el ruido
+  if (glOK) {
+    src = OBRL.canvas;
+    sw = OBRL.canvas.width;
+    sh = OBRL.canvas.height;
+  } else if (videoOK) {
+    src = el.video;
+    sw = el.video.videoWidth;
+    sh = el.video.videoHeight;
+  } else {
+    return false;
+  }
+  
   const dAR = dw / dh, sAR = sw / sh;
   let sW = sw, sH = sh, sx = 0, sy = 0;
   if (sAR > dAR) { sW = sh * dAR; sx = (sw - sW) / 2; }
   else           { sH = sw / dAR; sy = (sh - sH) / 2; }
   destCtx.drawImage(src, sx, sy, sW, sH, 0, 0, dw, dh);
+  
+  // 🔒 FIX A-V2: aplicar filtro EXTRA de pareidolia (solo al snapshot IA, no al display)
+  // Esto ayuda al modelo a "ver" formas en texturas y ruidos de la escena
+  try {
+    // Sample rápido para saber si es escena oscura
+    const probeC = destCtx.getImageData(dw >> 1, dh >> 1, 1, 1).data;
+    const avgLum = (probeC[0] * 0.299 + probeC[1] * 0.587 + probeC[2] * 0.114);
+    const isDarkScene = avgLum < 80;
+    
+    // Snapshot a canvas temporal para aplicar filtro sin corromper el original
+    const tmpP = document.createElement('canvas');
+    tmpP.width = dw; tmpP.height = dh;
+    const tmpPCtx = tmpP.getContext('2d');
+    tmpPCtx.drawImage(destCtx.canvas, 0, 0, dw, dh);
+    
+    destCtx.save();
+    // Escena oscura: realzar + grain + contraste (estimula pareidolia en sombras)
+    // Escena clara: ligera saturación + contraste + noise
+    if (isDarkScene) {
+      destCtx.filter = 'brightness(1.6) contrast(1.5) saturate(1.3)';
+    } else {
+      destCtx.filter = 'contrast(1.35) saturate(1.4) brightness(1.05)';
+    }
+    destCtx.drawImage(tmpP, 0, 0, dw, dh);
+    destCtx.filter = 'none';
+    destCtx.restore();
+    
+    // Añadir grain sutil (ruido aleatorio) para forzar pareidolia
+    try {
+      const imgData = destCtx.getImageData(0, 0, dw, dh);
+      const d = imgData.data;
+      const grainAmt = isDarkScene ? 12 : 8;
+      for (let i = 0; i < d.length; i += 4) {
+        // Solo añadir grain a píxeles no uniformes
+        const noise = (Math.random() - 0.5) * grainAmt;
+        d[i]   = Math.max(0, Math.min(255, d[i]   + noise));
+        d[i+1] = Math.max(0, Math.min(255, d[i+1] + noise));
+        d[i+2] = Math.max(0, Math.min(255, d[i+2] + noise));
+      }
+      destCtx.putImageData(imgData, 0, 0);
+    } catch(e) { /* getImageData puede fallar en canvas tainted */ }
+    
+    console.log('[AI SNAP] Filtro pareidolia aplicado | Escena:', isDarkScene ? 'OSCURA' : 'CLARA');
+  } catch(e) {
+    _warn('[AI SNAP] Filtro pareidolia falló:', e);
+  }
+  
+  // 🔒 FIX A: validar que la captura no sea blanca/negra uniforme
+  try {
+    const probe = destCtx.getImageData(dw >> 1, dh >> 1, 1, 1).data;
+    const avg = (probe[0] + probe[1] + probe[2]) / 3;
+    if (avg > 245 || avg < 8) {
+      console.warn('[AI SNAP] Captura uniforme detectada, tomando 4 puntos más...');
+      // Si uniforme, probar otros puntos
+      const pts = [
+        [dw * 0.25, dh * 0.25], [dw * 0.75, dh * 0.25],
+        [dw * 0.25, dh * 0.75], [dw * 0.75, dh * 0.75]
+      ];
+      let variance = 0;
+      for (const [px, py] of pts) {
+        try {
+          const p = destCtx.getImageData(px|0, py|0, 1, 1).data;
+          variance += Math.abs((p[0]+p[1]+p[2])/3 - avg);
+        } catch(e){}
+      }
+      if (variance < 5) {
+        console.warn('[AI SNAP] Imagen completamente uniforme — usando fallback video');
+        if (videoOK && src !== el.video) {
+          destCtx.drawImage(el.video, sx, sy, sW, sH, 0, 0, dw, dh);
+        }
+      }
+    }
+  } catch(e) { /* getImageData puede fallar en canvas tainted — silencioso */ }
+  
   return true;
 }
 
@@ -8704,7 +9177,11 @@ return;
             const url = URL.createObjectURL(blob);
             pendingAiImageSrc = url;
             const img = new Image();
-            img.onload = () => { pendingAiImgEl = img; };
+            img.onload = () => {
+                pendingAiImgEl = img;
+                // 🎬 EXPONER preview visible durante el análisis
+                window._currentPreviewImgEl = img;
+            };
             img.onerror = () => { _warn("Fallo carga AI img"); };
             img.src = url;
         }
@@ -8714,21 +9191,75 @@ return;
     
 
 // PROMPTS PROGRESIVOS DE SENSIBILIDAD PARANORMAL (FORZADO EN ESPAÑOL)
+// 🔒 FIX V3: prompts diseñados para imagen CRUDA (sin filtros)
+// Reglas: (1) prohibido objetos literales, (2) si escena parece vacía → describir energía del vacío,
+// (3) SIEMPRE pareidolia, (4) 22-26 palabras, una línea.
 const AI_PROMPTS = [
-`IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN ESPAÑOL. NO USES INGLÉS BAJO NINGUNA CIRCUNSTANCIA. Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Describe únicamente elementos claramente visibles. Si alguna forma resulta ligeramente inusual, puedes mencionarla como una apariencia. Usa entre 22 y 24 palabras. Devuelve únicamente texto plano.`,
 
-`IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN ESPAÑOL. NO USES INGLÉS. Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Describe elementos visibles y menciona discretamente formas que parezcan recordar un rostro, una silueta o una figura. Nunca lo afirmes como un hecho. Entre 22 y 24 palabras. Solo texto plano.`,
+// ─── PROMPT 1: variedad visual concreta ───
+`Investigador paranormal con cámara en vivo. RESPONDE SOLO EN ESPAÑOL, primera persona, UNA línea de 22-26 palabras. Comienza con "Veo".
 
-`IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN ESPAÑOL. NO USES INGLÉS. Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Prioriza sombras, reflejos o contornos ambiguos que parezcan adoptar una forma humana, manteniendo siempre la incertidumbre. Entre 22 y 24 palabras. Solo texto plano.`,
+REGLA DE VARIEDAD: cada respuesta debe usar un SUJETO distinto. Prohibido repetir "presencia" o "energía" más de 1 vez cada 5 respuestas.
 
-`IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN ESPAÑOL. NO USES INGLÉS. Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Busca anomalías visuales compatibles con pareidolia, como rostros, figuras o presencias apenas distinguibles, describiéndolas como simples apariencias. Entre 22 y 24 palabras. Solo texto plano.`,
+SUJETOS permitidos (elige UNO al azar, NO siempre el mismo):
+sombra, reflejo, silueta, bulto, figura, mancha, destello, brillo, rostro, ojos, contorno, masa oscura, niebla, velo, vapor, doble sombra, huella, grieta, movimiento, brisa.
 
-`IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN ESPAÑOL. NO USES INGLÉS. Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Da prioridad a cualquier sombra, figura, reflejo o contorno que pueda sugerir una presencia observándome, usando expresiones como "parece", "aparenta" o "da la impresión". Nunca afirmes que sea real. Entre 22 y 24 palabras. Solo texto plano.`,
+Estructura: "Veo [sujeto] que [acción] en [lugar] y [detalle]".
+Ejemplos guía (varíalos, no los copies literal):
+· "Veo una sombra que se arrastra por la pared del fondo y parece buscar algo."
+· "Veo un reflejo en el vidrio que no coincide con mi posición real."
+· "Veo un bulto oscuro agazapado en la esquina que respira muy despacio."
+· "Veo una silueta borrosa en la ventana que se disuelve al mirarla."
+· "Veo un destello fugaz entre las sombras del pasillo."
 
-`IMPORTANTE: DEBES RESPONDER EXCLUSIVAMENTE EN ESPAÑOL. NO USES INGLÉS. Eres un investigador paranormal describiendo en tiempo real exactamente lo que observas a través de una cámara corporal. Responde únicamente en español. Habla siempre en primera persona. La respuesta debe comenzar exactamente con "Veo". Examina cuidadosamente cualquier anomalía visual compatible con pareidolia y descríbela con un tono inquietante, como si algo pareciera ocultarse en la escena, sin asegurar nunca que exista una entidad paranormal. Entre 22 y 24 palabras. Solo texto plano.`
+Si la escena es normal o vacía, describe un reflejo, una sombra o un movimiento en el fondo.
+22-26 palabras. Solo texto plano.`,
+
+// ─── PROMPT 2: variedad de movimiento / anomalía ───
+`Médium viendo a través de cámara real. RESPONDE SOLO EN ESPAÑOL, primera persona, UNA línea de 22-26 palabras. Comienza con "Veo".
+
+VARIEDAD OBLIGATORIA: NUNCA uses la misma frase dos veces. Cambia siempre el sujeto y el verbo. PROHIBIDO repetir "presencia" o "energía".
+
+Esta respuesta debe describir ALGO EN MOVIMIENTO o una ANOMALÍA:
+· un movimiento en el fondo, una vibración en la pared, un temblor en el aire, una figura que cambia de forma, algo que se esconde tras un objeto, una silueta en el borde del encuadre.
+
+Usa verbos variados: se arrastra, se desliza, tiembla, pulsa, se disuelve, aparece, se oculta, acecha, respira, parpadea, se retuerce, se inclina.
+
+Si la escena parece vacía, describe lo que se mueve en los bordes o en las esquinas.
+22-26 palabras. Solo texto plano.`,
+
+// ─── PROMPT 3: variedad en detalles / texturas ───
+`Investigador del más allá con cámara en vivo. RESPONDE SOLO EN ESPAÑOL, primera persona, UNA línea de 22-26 palabras. Comienza con "Veo".
+
+VARIEDAD OBLIGATORIA: usa un SUJETO distinto cada vez. PROHIBIDO "presencia" o "energía".
+
+Enfócate en DETALLES VISUALES de la escena que sugieran algo anómalo:
+· una textura que parece rostro, un patrón en la pared, una mancha con forma, un brillo en un objeto, una sombra doble, un reflejo deformado, un contorno que no debería estar ahí, una grieta con forma extraña.
+
+Combina: "Veo [detalle visual] que [sugerencia] en [lugar]".
+Ejemplos variados:
+· "Veo una mancha en la pared que parece un rostro a medio formar y me observa."
+· "Veo un patrón en la textura del suelo que dibuja una silueta alargada."
+· "Veo un brillo anómalo en el objeto del fondo que no coincide con la luz."
+
+22-26 palabras. Solo texto plano.`
+
 ];
 
-const prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
+let prompt = AI_PROMPTS[Math.floor(Math.random() * AI_PROMPTS.length)];
+
+// 🔒 ANTI-REPETICIÓN: inyectar últimas frases para que la IA las evite
+const recentPhrases = window._recentVisionPhrases || [];
+if (recentPhrases.length > 0) {
+    prompt += `\n\nNO REPITAS estas frases recientes (varía sujeto y verbo):\n${recentPhrases.map(p => '- "' + p + '"').join('\n')}`;
+}
+// 🔒 FIX A: variar temperatura para más variedad en respuestas
+// 🔒 FIX A-V2: temperatura más adherente al prompt (22-24 palabras, formato estricto)
+// Antes 0.55-0.85 → IA ignoraba el formato y resumía ("Veo la pared")
+// Ahora 0.35-0.55 → adherencia alta + suficiente variación
+// 🔒 FIX V3: temperatura alta = más creatividad pareidolia (imagen cruda necesita inventiva)
+const AI_TEMPERATURES = [0.75, 0.82, 0.88, 0.92];
+const randomTemp = AI_TEMPERATURES[Math.floor(Math.random() * AI_TEMPERATURES.length)];
 
 try {
     let textResult = "Analizando...";
@@ -8737,76 +9268,161 @@ try {
 
     // 🔒 1. TIMEOUT GLOBAL DE SEGURIDAD: Si todo tarda > 15s, fuerza la liberación
     const _aiTimeout = setTimeout(() => {
-        if (isAIProcessing) {
-            _warn('[IA VISION] Timeout global forzado (15s) para evitar bloqueo');
+    if (isAIProcessing) {
+        _warn('[IA VISION] Timeout global forzado (25s) para evitar bloqueo');
             isAIProcessing = false;
             currentAiText = "señal interferida";
             stopScanningEffect();
             if (state.isPareidolia) startScanningEffect();
         }
-    }, 15000);
+    }, 25000);
 
     try {
-        // 🔒 2. BUCLE BLINDADO: 2 intentos, 500ms de espera entre ellos
-        while (attempts < 2 && !success) {
-            try {
-                const ac = new AbortController();
-                const reqTimer = setTimeout(() => {
-                    ac.abort();
-                    _warn(`[IA VISION] Abortando intento ${attempts + 1} por tiempo (8s)`);
-                }, 8000);
+        // 🔄 FALLBACK CON COOLDOWN POR PROVEEDOR (evita ping-pong)
+        if (!window._apiCooldown) window._apiCooldown = { groq: 0, gemini: 0 };
+        const _now = Date.now();
+        const _CD_MS = 5 * 60 * 1000; // 5 minutos de cooldown tras 429
 
-                if (CURRENT_AI_PROVIDER === 'groq') {
-                    const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model: CURRENT_AI_MODEL,
-                            messages: [
-                                { role: "system", content: `Eres un investigador paranormal de Exploraciones OBR. Reglas ABSOLUTAS:
-- Responde SOLO en español, primera persona. (DO NOT USE ENGLISH)
+        const _hasGroq = !!GROQ_API_KEY;
+        const _hasGemini = !!GEMINI_API_KEY;
+        const _groqReady = _hasGroq && (_now > window._apiCooldown.groq);
+        const _geminiReady = _hasGemini && (_now > window._apiCooldown.gemini);
+
+        // Si ambos en cooldown → fallar sin tocar red (ahorra batería/datos)
+        if (!_groqReady && !_geminiReady) {
+            console.warn('[IA VISION] ⏸ Ambos proveedores en cooldown (429). Esperando expiración.');
+            textResult = "señal interferida";
+        } else {
+            const _providersToTry = [];
+            let _primary = null;
+            if (AI_MODE === 'groq' && _groqReady) _primary = 'groq';
+            else if (AI_MODE === 'gemini' && _geminiReady) _primary = 'gemini';
+            else if (CURRENT_AI_PROVIDER === 'groq' && _groqReady) _primary = 'groq';
+            else if (CURRENT_AI_PROVIDER === 'gemini' && _geminiReady) _primary = 'gemini';
+            else _primary = _groqReady ? 'groq' : 'gemini';
+
+            _providersToTry.push(_primary);
+            const _secondary = _primary === 'groq' ? 'gemini' : 'groq';
+            if (_secondary === 'gemini' && _geminiReady) _providersToTry.push('gemini');
+            if (_secondary === 'groq' && _groqReady) _providersToTry.push('groq');
+
+            let _winnerProvider = null;
+            let _quotaHit = false;
+
+            for (const _provider of _providersToTry) {
+                if (success) break;
+                try {
+                    const ac = new AbortController();
+                    const reqTimer = setTimeout(() => {
+                        ac.abort();
+                        _warn(`[IA VISION] Abortando ${_provider} por tiempo (10s)`);
+                    }, 10000);
+
+                    if (_provider === 'groq') {
+                        const resp = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                model: GROQ_MODEL,
+                                messages: [
+                                    { role: "system", content: `Investigador paranormal OBR. Reglas:
+- SOLO español, primera persona, UNA línea de 22-26 palabras.
 - Comienza EXACTAMENTE con "Veo".
-- Una sola oración de 22-24 palabras.
-- Usa "parece", "aparenta" para formas ambiguas.
-- Nunca afirmes entidades paranormales como hecho.
-- Sin explicaciones, sin markdown, sin etiquetas.
-- SOLO texto plano.` },
-                                { role: "user", content: [ { type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } } ] }
-                            ],
-                            max_tokens: 60, temperature: 0.4
-                        }),
-                        signal: ac.signal
-                    });
-                    clearTimeout(reqTimer);
-                    if (resp.ok) {
+- VARIEDAD OBLIGATORIA: usa SUJETOS diferentes cada vez (sombra, reflejo, silueta, bulto, figura, mancha, destello, brillo, rostro, ojos, contorno, masa oscura, niebla).
+- PROHIBIDO repetir "presencia" o "energía" más de 1 vez cada 5 respuestas.
+- NUNCA digas "veo una pared", "veo una mesa", "veo el techo" como descripción literal.
+- Si la escena parece vacía, describe un reflejo, una sombra o un movimiento en el fondo.
+- Sin markdown, sin explicaciones, sin <think>, solo texto plano.
+- Empieza DIRECTAMENTE con "Veo", sin razonamiento previo.` },
+                                    { role: "user", content: [ { type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } } ] }
+                                ],
+                                max_tokens: 600, temperature: randomTemp, top_p: 0.95
+                            }),
+                            signal: ac.signal
+                        });
+                        clearTimeout(reqTimer);
+                        if (!resp.ok) {
+                            const errorBody = await resp.text().catch(() => '');
+                            console.error('[IA VISION] ❌ Groq HTTP', resp.status, '→', errorBody.substring(0, 250));
+                            if (resp.status === 429) {
+                                window._apiCooldown.groq = _now + _CD_MS;
+                                _quotaHit = true;
+                                console.warn('[IA VISION] ⏸ Groq en cooldown 5min (429)');
+                            }
+                            continue;
+                        }
                         const data = await resp.json();
-                        if (data.choices && data.choices[0]?.message?.content) { success = true; textResult = data.choices[0].message.content; }
+                        if (data.choices && data.choices[0]?.message?.content) {
+                            success = true;
+                            textResult = data.choices[0].message.content;
+                            _winnerProvider = 'groq';
+                            try {
+                                const _finish = data.choices[0].finish_reason || 'unknown';
+                                console.log('[IA VISION] Groq finish_reason:', _finish, _finish === 'length' ? '⚠️ CORTADO POR TOKENS' : '✅');
+                                if (data.choices[0].usage) console.log('[IA VISION] Tokens:', data.choices[0].usage);
+                                window._lastFinishReason = _finish;
+                            } catch(_) {}
+                        }
+                    } else {
+                        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
+                            method: 'POST', headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                contents: [{ role: "user", parts: [ { text: `INSTRUCCIONES: ${prompt}\n\nREGLAS ESTRICTAS: Responde DIRECTAMENTE en español, primera persona. Primera palabra: "Veo". Exactamente 22-26 palabras. Tono inquietante. Sin markdown. Sin razonamiento previo. Sin <think>. Solo texto plano.` }, { inlineData: { mimeType: "image/jpeg", data: base64 } } ] }],
+                                generationConfig: { temperature: randomTemp, maxOutputTokens: 600, topP: 0.98, topK: 60 }
+                            }),
+                            signal: ac.signal
+                        });
+                        clearTimeout(reqTimer);
+                        if (!resp.ok) {
+                            const errorBody = await resp.text().catch(() => '');
+                            console.error('[IA VISION] ❌ Gemini HTTP', resp.status, '→', errorBody.substring(0, 250));
+                            if (resp.status === 429) {
+                                window._apiCooldown.gemini = _now + _CD_MS;
+                                _quotaHit = true;
+                                console.warn('[IA VISION] ⏸ Gemini en cooldown 5min (429)');
+                            }
+                            continue;
+                        }
+                        const data = await resp.json();
+                        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                            success = true;
+                            textResult = data.candidates[0].content.parts[0].text;
+                            _winnerProvider = 'gemini';
+                            try {
+                                const _finish = data.candidates[0].finishReason || 'unknown';
+                                console.log('[IA VISION] Gemini finishReason:', _finish, _finish === 'MAX_TOKENS' ? '⚠️ CORTADO' : '✅');
+                                window._lastFinishReason = (_finish === 'MAX_TOKENS') ? 'length' : 'stop';
+                            } catch(_) {}
+                        }
                     }
-                } else {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_AI_MODEL}:generateContent?key=${AI_API_KEY}`, {
-                        method: 'POST', headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            contents: [{ role: "user", parts: [ { text: `INSTRUCCIONES: ${prompt}\n\nREGLAS: Responde en español, primera persona, comienza con "Veo", 22-24 palabras, tono inquietante, sin markdown, solo texto plano.` }, { inlineData: { mimeType: "image/jpeg", data: base64 } } ] }],
-                            generationConfig: { temperature: 0.4, maxOutputTokens: 80, topP: 0.8, topK: 32 }
-                        }),
-                        signal: ac.signal
-                    });
-                    clearTimeout(reqTimer);
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        if (data.candidates?.[0]?.content?.parts?.[0]?.text) { success = true; textResult = data.candidates[0].content.parts[0].text; }
+                } catch (err) {
+                    if (err && err.name === 'AbortError') {
+                        _warn(`[IA VISION] ${_provider} timeout (10s)`);
+                    } else {
+                        _warn(`[IA VISION] ${_provider} error:`, err.message);
                     }
                 }
-                if (!success) { attempts++; await new Promise(r => setTimeout(r, 500)); }
-            } catch (err) {
-                attempts++;
-                _warn(`[IA VISION] Error en intento ${attempts}:`, err.message);
-                await new Promise(r => setTimeout(r, 500));
             }
-        }
 
-        if (!success) {
-            textResult = "señal interferida";
+            // 🔄 Cambio de proveedor SOLO si el ganador no está en cooldown
+            if (success && _winnerProvider && _winnerProvider !== CURRENT_AI_PROVIDER) {
+                console.log(`[IA VISION] 🔄 FALLBACK: ${CURRENT_AI_PROVIDER || 'none'} → ${_winnerProvider}`);
+                CURRENT_AI_PROVIDER = _winnerProvider;
+                CURRENT_AI_MODEL = (_winnerProvider === 'groq') ? GROQ_MODEL : GEMINI_MODEL;
+                AI_API_KEY = (_winnerProvider === 'groq') ? GROQ_API_KEY : GEMINI_API_KEY;
+                localStorage.setItem('obr_ai_provider', _winnerProvider);
+                if (!window._lastFallbackToast || (Date.now() - window._lastFallbackToast > 60000)) {
+                    const _emoji = (_winnerProvider === 'groq') ? '🟠' : '🔵';
+                    const _name = (_winnerProvider === 'groq') ? 'GROQ' : 'GEMINI';
+                    showToast(`${_emoji} API cambiada a ${_name}`, false);
+                    window._lastFallbackToast = Date.now();
+                }
+            }
+
+            if (!success) {
+                textResult = "señal interferida";
+                console.warn('[IA VISION] Todos los proveedores disponibles fallaron');
+            }
         }
 
     } catch (e) {
@@ -8818,9 +9434,13 @@ try {
         clearTimeout(_aiTimeout);
         isAIProcessing = false;
     }
-
+    // 🔒 DIAGNÓSTICO: ver el RAW del modelo antes de cualquier limpieza
+    console.log('[IA VISION] 📥 RAW del modelo:', JSON.stringify(textResult));
+    console.log('[IA VISION] 📏 Longitud:', textResult.length, '| Palabras:', textResult.split(/\s+/).length);
+    
     // === 4. LIMPIEZA AGRESIVA DE RESPUESTAS (NO ELIMINAR ESTO) ===
     let text = textResult;
+
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     text = text.replace(/el usuario quiere que[\s\S]*?(?=\n|$)/gi, '').trim();
     text = text.replace(/the user wants[\s\S]*?(?=\n|$)/gi, '').trim();
@@ -8845,18 +9465,56 @@ try {
     if (text.length < 3 || text.toLowerCase().includes('error') || text.toLowerCase().includes('analizando') || text.toLowerCase().includes('usuario') || text.toLowerCase().includes('user')) {
         text = "señal interferida";
     }
-    
+
+        // 🧩 SALVAGE CONDICIONAL: solo si API confirmó MAX_TOKENS + 12+ palabras
+    // NO toca "señal interferida" (fallo real) NI respuestas completas (finish_reason: stop)
+    if (window._lastFinishReason === 'length' && text && text !== "señal interferida" && text !== "error de señal") {
+        const _w = text.trim().split(/\s+/).filter(w => w.length > 0);
+        if (_w.length >= 12) {
+            const _last = _w[_w.length - 1];
+            const _incomplete = !/[aeiounszáéíóúAEIOUNSZ.,!?]$/.test(_last);
+            let _fixed = _incomplete ? _w.slice(0, -1).join(' ') : text.trim();
+            _fixed = _fixed.replace(/[,\s]+$/, '');
+            if (!/[.!?]$/.test(_fixed)) _fixed += '.';
+            console.log('[IA VISION] 🧩 Salvage MAX_TOKENS →', _fixed.split(/\s+/).length, 'palabras');
+            text = _fixed;
+        }
+    }
+    window._lastFinishReason = null; // reset para el próximo ciclo
+
     // === 5. ASIGNACIÓN Y EJECUCIÓN DE VOZ (NO ELIMINAR ESTO) ===
     stopScanningEffect();
     currentAiText = text;
     currentAiImgEl = pendingAiImgEl;
     currentAiImage = pendingAiImageSrc;
 
-        // 📡 Contador de anomalías IA (funciona con cualquier filtro activo)
+        // 🎬 Iniciar animación de revelado del panel de IA
+    const _hasReveal = !!pendingAiImgEl && AI_REVEAL_DURATION > 0;
+    if (_hasReveal) {
+        _aiRevealStart = Date.now();
+    }
+
+    // 📡 Contador de anomalías IA (funciona con cualquier filtro activo)
     if (text && text !== "señal interferida" && text !== "error de señal") {
         window._detectionCount = (window._detectionCount || 0) + 1;
     }
-    
+    // 🔒 ANTI-REPETICIÓN: guardar esta frase para que la próxima IA la evite
+    if (text && text !== "señal interferida" && text !== "error de señal") {
+        window._recentVisionPhrases = window._recentVisionPhrases || [];
+        window._recentVisionPhrases.push(text);
+        if (window._recentVisionPhrases.length > 5) window._recentVisionPhrases.shift();
+    }
+
+    // 🎬 TTS: si hay reveal, esperar a que termine (imagen nítida + barrido completo)
+    if (_hasReveal) {
+        setTimeout(() => {
+            if (currentAiText === text) speakText(text);
+        }, AI_REVEAL_DURATION + 120);
+    } else {
+        speakText(text);
+    }
+
+    // 🎬 Timer de limpieza: arranca DESPUÉS del reveal para no borrar imagen/texto a mitad
     clearTimeout(aiTextTimer);
     aiTextTimer = setTimeout(() => {
         if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} }
@@ -8864,10 +9522,9 @@ try {
         currentAiImage = null;
         currentAiImgEl = null;
         window._aiImageCache = null;
+        window._currentPreviewImgEl = null;
         if (state.isPareidolia) startScanningEffect();
-    }, 9000);
-    
-    speakText(text); // 🔒 ESTA LÍNEA ES LA QUE HACE QUE LA IA HABLE
+    }, 9000 + (_hasReveal ? AI_REVEAL_DURATION : 0));
 
 } catch (e) {
     isAIProcessing = false;
@@ -8882,7 +9539,8 @@ try {
 isAIProcessing = false;
 }
 
-    function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
+
+function schedulePareidolia() { if(!isPareidoliaActive) return; triggerPareidolia(); let delay = 20000 + Math.random() * 5000; pareidoliaInterval = setTimeout(schedulePareidolia, delay); }
 
     function togglePareidolia(btnElement) {
       if (OBR_NET.offline) { showToast('📴 IA VISION no disponible en OFFLINE', true); return; }  // ← PRIMERA línea
@@ -8927,7 +9585,7 @@ if (!hasElevenLabs && !hasVoiceRSS) {
         state.isPareidolia = false;
         if(btn) btn.classList.remove('active-state'); animState.hudTarget = 1.0; animState.aiTarget = 0.0; clearTimeout(pareidoliaInterval); clearTimeout(_ttsWatchdog);
         if (_activeBufSrc) { try { _activeBufSrc.stop(); } catch(e){} _activeBufSrc = null; } if (cloudTTSPlayer) { cloudTTSPlayer.pause(); cloudTTSPlayer.src = ''; } if (window.speechSynthesis) window.speechSynthesis.cancel();
-        isTtsPlaying = false; isSpookySpeaking = false; isAIProcessing = false; stopScanningEffect(); currentAiText = ""; if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} } currentAiImage = null; currentAiImgEl = null; window._aiImageCache = null; lastPareidoliaCall = 0; aiScannerTimer = 0; aiScannerState = 0; speakAnnouncement('VISIÓN DESACTIVADA', true).catch(() => {});
+        isTtsPlaying = false; isSpookySpeaking = false; isAIProcessing = false; stopScanningEffect(); currentAiText = ""; if (currentAiImage) { try { URL.revokeObjectURL(currentAiImage); } catch(e){} } currentAiImage = null; currentAiImgEl = null; window._aiImageCache = null; window._currentPreviewImgEl = null; lastPareidoliaCall = 0; aiScannerTimer = 0; aiScannerState = 0; speakAnnouncement('VISIÓN DESACTIVADA', true).catch(() => {});
         showMenus(); sendScanDataToStudio();
     }
 
@@ -9082,9 +9740,23 @@ async function validateGeminiKey() {
             localStorage.setItem('obr_gemini_key', k);
             localStorage.setItem('obr_gemini_model', bestModel);
             
+            // 🔒 FIX A: si no hay proveedor activo, este pasa a ser el primario
+            if (!CURRENT_AI_PROVIDER || CURRENT_AI_PROVIDER === 'none' || !AI_API_KEY) {
+                AI_API_KEY = k;
+                CURRENT_AI_MODEL = bestModel;
+                CURRENT_AI_PROVIDER = 'gemini';
+                localStorage.setItem('obr_ai_provider', 'gemini');
+                localStorage.setItem('obr_ai_key', k);
+                localStorage.setItem('obr_ai_model', bestModel);
+            }
+            
+            // 🔒 FIX AUTO: guardar ping medido para el modo AUTO
+            apiPing.gemini = (fastestTime === Infinity || !fastestTime) ? 9999 : fastestTime;
+                        if (window._apiCooldown) window._apiCooldown.gemini = 0; // reset manual
+
             status.innerText = `✅ OK (${Math.round(fastestTime)}ms)`;
             status.style.color = '#00ff41';
-            modelInfo.innerText = `Modelo: ${bestModel}`;
+            modelInfo.innerText = `Modelo: ${bestModel} (${Math.round(apiPing.gemini)}ms)`;
             showToast(`GEMINI VALIDADO — ${bestModel}`, false);
         } else {
             status.innerText = "❌ SIN MODELOS DISPONIBLES";
@@ -9238,10 +9910,17 @@ async function validateGroqKey() {
         AI_API_KEY = k; 
         CURRENT_AI_MODEL = bestModel; 
         CURRENT_AI_PROVIDER = 'groq';
+        localStorage.setItem('obr_ai_provider', 'groq'); // 🔒 FIX A: persistir
+        localStorage.setItem('obr_ai_key', k);
+        localStorage.setItem('obr_ai_model', bestModel);
         
+        // 🔒 FIX AUTO: guardar ping medido para el modo AUTO
+        apiPing.groq = (fastestTime === Infinity || !fastestTime) ? 9999 : fastestTime;
+                if (window._apiCooldown) window._apiCooldown.groq = 0; // reset manual
+
         status.innerText = `✅ OK (${Math.round(fastestTime === Infinity ? 0 : fastestTime)}ms)`; 
         status.style.color = '#00ff41';
-        modelInfo.innerText = `Activo: ${bestModel}`;
+        modelInfo.innerText = `Activo: ${bestModel} (${Math.round(apiPing.groq)}ms)`;
         showToast(`GROQ VALIDADO — ${bestModel}`, false);
         
     } catch(e) { 
@@ -9978,13 +10657,25 @@ const combinedStream = new MediaStream(tracks);
 
 // 🔒 Escalera de configs: si el codificador rechaza una, prueba la siguiente en el mismo clic
 const sup = (m) => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } };
-const mp4 = ['video/mp4;codecs=avc1.64002A,mp4a.40.2', 'video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4'].find(sup) || '';
-const webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(sup) || '';
+// 🔒 FIX B: MP4 primero (maneja bien duración incluso con timeslice), WebM como fallback
+const mp4 = [
+  'video/mp4;codecs=avc1.64002A,mp4a.40.2',
+  'video/mp4;codecs=avc1.640028,mp4a.40.2',
+  'video/mp4;codecs=avc1.4d002a,mp4a.40.2',
+  'video/mp4;codecs=avc1',
+  'video/mp4'
+].find(sup) || '';
+const webm = [
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm'
+].find(sup) || '';
+
 const cfgs = [];
-if (mp4) cfgs.push({ mime: mp4, fps: RFPS });
-if (webm) cfgs.push({ mime: webm, fps: RFPS });
-if (webm) cfgs.push({ mime: webm, fps: 24 });
-cfgs.push({ mime: '', fps: 24 });
+if (mp4) cfgs.push({ mime: mp4, fps: RFPS, isMP4: true });  // ← MP4 primero
+if (webm) cfgs.push({ mime: webm, fps: RFPS, isMP4: false });
+if (webm) cfgs.push({ mime: webm, fps: 24, isMP4: false });
+cfgs.push({ mime: '', fps: 24, isMP4: false });
 
 const next = (i, err) => {
 if (i + 1 < cfgs.length) {
@@ -10046,18 +10737,30 @@ if (!isRecordingActive && recCanvas4K) { recCanvas4K.width = 0; recCanvas4K.heig
 }, 2000);
 };
 
-// 🔒 CRÍTICO: el onerror del intento anterior apagó isRecordingActive;
-// sin esto el renderLoop (paso 8.5) no compone el canvas de REC → "GRABACIÓN VACÍA"
-isRecordingActive = true;
-lastMapCapture = 0;
-if (typeof captureMapToMirror === 'function') captureMapToMirror();
-composeFullFrame(recCtx4K, RW, RH);
+        // 🔒 CRÍTICO: el onerror del intento anterior apagó isRecordingActive;
+        // sin esto el renderLoop (paso 8.5) no compone el canvas de REC → "GRABACIÓN VACÍA"
+        isRecordingActive = true;
+        lastMapCapture = 0;
+        if (typeof captureMapToMirror === 'function') captureMapToMirror();
+        composeFullFrame(recCtx4K, RW, RH);
 
-try { mediaRecorder.start(1000); } catch (e) {
-console.error('[REC] start() lanzó:', e);
-return next(i, e);
-}
-console.info('[REC] START OK', `${RW}x${RH}@${cfg.fps}`, cfg.mime || 'default');
+        // 🔒 FIX B: si es MP4, siempre sin timeslice (mejor header de duración)
+        const isMP4Cfg = cfg.isMP4 === true;
+        const recTimeslice = (isMP4Cfg || _isHighEndDevice) ? 0 : 30000;
+
+        try { 
+            if (recTimeslice > 0) {
+                mediaRecorder.start(recTimeslice);
+                console.log('[REC] Timeslice:', recTimeslice + 'ms (gama baja)');
+            } else {
+                mediaRecorder.start();  // ← sin timeslice → header correcto
+                console.log('[REC] Sin timeslice (MP4 o gama alta) → header de duración correcto');
+            }
+        } catch (e) {
+            console.error('[REC] start() lanzó:', e);
+            return next(i, e);
+        }
+        console.info('[REC] START OK', `${RW}x${RH}@${cfg.fps}`, cfg.mime || 'default');
 
 isRecording = true;
 _recStarting = false;
@@ -10495,6 +11198,33 @@ if (!state.isLidar && !state.isSLS && !state.isPareidolia && state.filter !== 'n
         window._detectionCount = (window._detectionCount || 0) + 1;
     }
 }
+
+
+// ==========================================================
+// 🔒 FIX C: ANTI-SCROLL para WebView/APK
+// ==========================================================
+// Bloquea el scroll del documento, permite scroll interno en .custom-scrollbar
+document.addEventListener('touchmove', function(e) {
+  // Permitir scroll solo dentro de contenedores con .custom-scrollbar
+  if (e.target && e.target.closest && e.target.closest('.custom-scrollbar')) return;
+  // Permitir si está dentro de un modal activo que necesita scroll
+  if (e.target && e.target.closest && e.target.closest('.modal-bg.active')) return;
+  // Bloquear el resto
+  if (e.cancelable) e.preventDefault();
+}, { passive: false });
+
+// Forzar altura de viewport con JS (fallback si 100% falla en WebView)
+function _fixViewportHeight() {
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+  document.documentElement.style.setProperty('--app-h', vh + 'px');
+  document.documentElement.style.setProperty('--app-w', vw + 'px');
+}
+window.addEventListener('resize', _fixViewportHeight);
+window.addEventListener('orientationchange', () => setTimeout(_fixViewportHeight, 300));
+_fixViewportHeight();
+console.log('[FIX C] Anti-scroll + viewport height activos');
+
 
 </script>
 </body>
