@@ -27,10 +27,10 @@
 <!-- Preload de fuentes (si las tienes locales, sino quita) -->
     <script src="https://cdn.tailwindcss.com"></script>
        <!-- Librerías de IA desde CDN (sin fallbacks problemáticos) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
     
     <!-- AGORA SDKs (RTC + RTM) -->
     <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N.js"></script>
@@ -292,7 +292,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
     display: none;
     align-items: center;
     gap: 8px;
-    backdrop-filter: blur(10px);
+    
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 4px 20px rgba(255, 0, 0, 0.4);
 }
@@ -374,7 +374,7 @@ body.hide-hud-text #hud-text-container { display: none !important; }
     justify-content: center;
     cursor: pointer;
     transition: all 0.3s;
-    backdrop-filter: blur(2px);
+    
 }
 .media-btn:active { transform: scale(0.9); }
 .media-btn:hover { background: rgba(255,51,51,0.3); border-color: rgba(255,51,51,0.5); color: rgba(255,255,255,0.8); }
@@ -875,7 +875,7 @@ width: 156px; height: 156px; /* 🔒 AUMENTADO 4%: De 150px a 156px */
         .map-pulse::after { content: ""; position: absolute; width: 100%; height: 100%; border-radius: 50%; background: red; animation: mapPulseAnim 1.5s infinite; opacity: 0.6; }
         @keyframes mapPulseAnim { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(3.5); opacity: 0; } }
 
-        #mini-map-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); mask-image: radial-gradient(circle at center, transparent 40%, black 80%); -webkit-mask-image: radial-gradient(circle at center, transparent 40%, black 80%); }
+        #mini-map-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.35) 100%); }
         #mini-map-glitch { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 998; opacity: 0; }
         #mini-map-glitch.hard { opacity: 0.4; background: rgba(255,255,255,0.05); animation: mapGlitchHard 0.05s infinite; }
         @keyframes mapGlitchHard { 0% { transform: translate(0,0); } 20% { transform: translate(-3px,2px); } 40% { transform: translate(3px,-2px); } 60% { transform: translate(-2px,1px); } 80% { transform: translate(2px,-1px); } 100% { transform: translate(0,0); } }
@@ -1653,7 +1653,7 @@ body.split-active #obr-gl-video {
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '41'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '42'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -2488,7 +2488,7 @@ self.addEventListener('message', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET' || e.request.headers.has('range') || /\.mp4(\?|$)/.test(e.request.url)) return;
   
   const url = e.request.url;
   
@@ -4861,8 +4861,9 @@ function handleOrientationChange() {
     }, 300);
 }
 
-OBR_EVENT_MANAGER.add(window, 'resize', handleOrientationChange);
-OBR_EVENT_MANAGER.add(window, 'orientationchange', handleOrientationChange);
+let _hocT; const _hocD = () => { clearTimeout(_hocT); _hocT = setTimeout(handleOrientationChange, 250); };
+OBR_EVENT_MANAGER.add(window, 'resize', _hocD);
+OBR_EVENT_MANAGER.add(window, 'orientationchange', _hocD);
 
     window.addEventListener('beforeunload', () => { 
         if (videoStream) videoStream.getTracks().forEach(track => track.stop()); 
@@ -5901,7 +5902,7 @@ const constraintSets = [
       }
 
       const vRatio = el.video.videoHeight / el.video.videoWidth;
-      analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+      { const _ah = Math.round(analysisCanvas.width * (vRatio || 0.75)); if (analysisCanvas.height !== _ah) analysisCanvas.height = _ah; }
       analysisCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
       initSLSWorker();
 
@@ -5919,7 +5920,7 @@ const constraintSets = [
     setTimeout(async () => {
       document.getElementById('loading').style.display = 'none';
       resize();
-      OBR_EVENT_MANAGER.add(window, 'resize', resize);
+      
       initDOMCache();
 
       // 🎬 DEMO: el clip arranca AQUÍ (ya dentro de la app), desde el segundo 0
@@ -6093,7 +6094,7 @@ const now = performance.now();
         const ensureImageDrawn = () => {
             if (!imageDrawnThisFrame) {
                 const vRatio = el.video.videoHeight / el.video.videoWidth;
-                analysisCanvas.height = analysisCanvas.width * (vRatio || 0.75);
+                { const _ah = Math.round(analysisCanvas.width * (vRatio || 0.75)); if (analysisCanvas.height !== _ah) analysisCanvas.height = _ah; }
                 const { ctx: offCtx } = getOffscreenAnalysisCanvas(analysisCanvas.width, analysisCanvas.height);
 offCtx.drawImage(el.video, 0, 0, analysisCanvas.width, analysisCanvas.height);
 
@@ -6971,7 +6972,7 @@ const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
 const sc = Math.max(width/sw, height/sh), dW = sw*sc, dH = sh*sc;
     // 🔒 FONDO MÁS CLARO: subimos opacidad y reducimos filtro oscuro
 c.save(); c.globalAlpha = 0.85; // Antes 0.5
-if (isHighEnd) c.filter = 'saturate(0.85) contrast(1.05) brightness(0.95)'; // Menos oscuro
+
 c.drawImage(src, (width-dW)/2, (height-dH)/2, dW, dH);
 c.restore(); c.filter = 'none'; c.globalAlpha = 1;
 if (!isHighEnd) { c.fillStyle = 'rgba(4,6,10,0.10)'; c.fillRect(0, 0, width, height); } // Casi transparente
@@ -7249,7 +7250,7 @@ for (let ox = -1; ox <= 1; ox++) {
         i ? c.lineTo(xx, yy) : c.moveTo(xx, yy);
     }
     c.strokeStyle = VL + '1)'; c.lineWidth = Math.max(1.2, u);
-    if (isHighEnd) { c.shadowColor = 'rgba(255,150,50,0.7)'; c.shadowBlur = 6; }
+    
     c.stroke(); c.shadowBlur = 0;
     c.lineTo(gx0+gw, gy0+gh); c.lineTo(gx0, gy0+gh); c.closePath();
     c.fillStyle = 'rgba(255,120,50,0.12)'; c.fill();
@@ -7278,13 +7279,14 @@ function computeSurfaceSize() {
 }
 
 function applyQualityScale() {
-el.masterCanvas.width = Math.round(window.innerWidth * qualityScale);
-el.masterCanvas.height = Math.round(window.innerHeight * qualityScale);
+{ const _w = Math.round(window.innerWidth * qualityScale), _h = Math.round(window.innerHeight * qualityScale);
+  if (el.masterCanvas.width !== _w) el.masterCanvas.width = _w;
+  if (el.masterCanvas.height !== _h) el.masterCanvas.height = _h; }
 ctx.imageSmoothingEnabled = true;
 ctx.imageSmoothingQuality = 'high';
 if (el.lidarCanvas) {
-el.lidarCanvas.width = el.masterCanvas.width;
-el.lidarCanvas.height = el.masterCanvas.height;
+if (el.lidarCanvas.width !== el.masterCanvas.width) el.lidarCanvas.width = el.masterCanvas.width;
+if (el.lidarCanvas.height !== el.masterCanvas.height) el.lidarCanvas.height = el.masterCanvas.height;
 }
 lastVW = 0; lastVH = 0; lastCW = 0; lastCH = 0;
 }
@@ -7513,7 +7515,7 @@ let _hudStaticSize = '';
 function getCachedHUDStatic(width, height, scale) {
   const sizeKey = `${width}x${height}@${scale.toFixed(2)}`;
   const now = new Date();
-  const dateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+  const dateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
   
   // Si no hay cache o cambió tamaño o cambió minuto → regenerar
   if (!_hudStaticCache || _hudStaticSize !== sizeKey || _hudStaticDate !== dateKey) {
@@ -8182,7 +8184,7 @@ function computeLetterbox(vw, vh, W, H) {
 
 function composeFullFrame(g, W, H) {
 // 🔒 Sincroniza el GL antes de leer (única línea nueva)
-if (typeof OBRL !== 'undefined' && OBRL.ready) {
+if (typeof OBRL !== 'undefined' && OBRL.ready && !(isRecordingActive && window._glStamp === frameCount)) {
   try { renderGLVideo(); } catch(e){}
 }
 g.setTransform(1, 0, 0, 1, 0, 0);
@@ -8282,6 +8284,7 @@ g.restore();
 }
 }
 }
+if (window._composeOffset) { g.restore(); window._composeOffset = null; }
 g.setTransform(1, 0, 0, 1, 0, 0);
 }
 
@@ -8445,7 +8448,7 @@ if (state.isLidar) {
     }
 
     if (state.isPareidolia) drawCanvasScanBoxes(tctx, W, H);
-    drawBurnInHUD(tctx, W, H, animState.hudScale);
+    { const _hc = getCachedHUDStatic(W, H, animState.hudScale); if (_hc) tctx.drawImage(_hc, 0, 0, W, H); else drawBurnInHUD(tctx, W, H, animState.hudScale); }
     drawSessionHUD(tctx, W, H, 1.0);
     if (animState.aiTarget > 0.01 || animState.aiScale > 0.01) drawAIBurnIn(tctx, W, H, animState.aiScale);
     drawTallyBorder(tctx, W, H);
@@ -8459,13 +8462,17 @@ let _lastDrawCoordsW = 0, _lastDrawCoordsH = 0, _lastDrawCoordsVW = 0, _lastDraw
 
 function renderLoop(now, metadata) {
   if (!now) now = performance.now();
-  if (document.hidden) return;
+  if (document.hidden) {
+    if ('requestVideoFrameCallback' in el.video) el.video.requestVideoFrameCallback(renderLoop);
+    else requestAnimationFrame(renderLoop);
+    return;
+  }
   lastFrameUpdateTime = now;
   lastFrameTime = now;
   frameCount++;
   
   // ✅ 1. WebGL: solo si está listo
-  if (OBRL.ready) { sizeGLCanvas(); renderGLVideo(); }
+  if (OBRL.ready) { sizeGLCanvas(); renderGLVideo(); window._glStamp = frameCount; }
   
   // ✅ 2. Detectar cambios (optimizado)
   const motionChanged = Math.abs(window.motionLevel - _lastMotionLevel) > 0.01;
@@ -8688,9 +8695,7 @@ if (currentFps < 20 && !isRecordingActive) {
 // ==========================================================
 // 2. THROTTLE DE DOM (Freno de mano: solo actualiza textos cada 500ms)
 // ==========================================================
-if (now - (window._lastDOMUpdate || 0) < 500) {
-return; // Salimos temprano, ahorramos el trabajo pesado del DOM
-}
+
 // ==========================================================
 // 3. ACTUALIZACIÓN DEL DOM (Solo se ejecuta cada 500ms)
 // ==========================================================
@@ -8714,6 +8719,8 @@ const vW = el.video.videoWidth || 0, vH = el.video.videoHeight || 0;
 if (DOM_CACHE.res) DOM_CACHE.res.innerText = `${vW}x${vH}`;
 // ===== FASE 2: BATCH DOM UPDATES (reduce reflows) =====
 const pendingDOMUpdates = [];
+const hasChanges = currentFps !== lastTelemetryValues.fps || Math.abs(window.motionLevel - lastTelemetryValues.motionLevel) > 0.1;
+const telemetryColor = hasStudio ? 'text-green-500' : 'text-gray-400';
 
 if (currentFps !== lastTelemetryValues.fps || Math.abs(window.motionLevel - lastTelemetryValues.motionLevel) > 0.1) {
   if (DOM_CACHE.fps) pendingDOMUpdates.push(() => DOM_CACHE.fps.innerText = `${currentFps} FPS`);
@@ -8917,7 +8924,7 @@ if (f === 'lidar') document.body.classList.add('lidar-fx-active');
 else document.body.classList.remove('lidar-fx-active');
 
 // 🔒 Flash blindado: si torch no existe (iOS/demo), NO rompe el resto de setFilter
-try { if (f !== 'normal') toggleTorch(true); else toggleTorch(false); } catch(e) { console.warn('[FILTER] torch no disponible:', e); }
+try { { const _tNow = (f !== 'normal'); if (window._torchOn !== _tNow) { window._torchOn = _tNow; toggleTorch(_tNow); } } } catch(e) { console.warn('[FILTER] torch no disponible:', e); }
     
     // 🔒 CRÍTICO: limpiar estado de IA al cambiar filtro
 targetPoses = [];
@@ -8947,10 +8954,7 @@ try {
     
     if (typeof showTelemetry === 'function') showTelemetry();
     // 🔒 FIX RESCALE: forzar resize del canvas al cambiar filtro (evita desalineación en iOS)
-setTimeout(() => {
-  if (typeof resize === 'function') resize();
-  console.log('[FILTER] Canvas reescalado tras cambio de filtro');
-}, 100);
+
     
     refreshLiveFilterCache();
     }
@@ -11295,14 +11299,7 @@ if (!state.isLidar && !state.isSLS && !state.isPareidolia && state.filter !== 'n
 // 🔒 FIX C: ANTI-SCROLL para WebView/APK
 // ==========================================================
 // Bloquea el scroll del documento, permite scroll interno en .custom-scrollbar
-document.addEventListener('touchmove', function(e) {
-  // Permitir scroll solo dentro de contenedores con .custom-scrollbar
-  if (e.target && e.target.closest && e.target.closest('.custom-scrollbar')) return;
-  // Permitir si está dentro de un modal activo que necesita scroll
-  if (e.target && e.target.closest && e.target.closest('.modal-bg.active')) return;
-  // Bloquear el resto
-  if (e.cancelable) e.preventDefault();
-}, { passive: false });
+
 
 // Forzar altura de viewport con JS (fallback si 100% falla en WebView)
 function _fixViewportHeight() {
