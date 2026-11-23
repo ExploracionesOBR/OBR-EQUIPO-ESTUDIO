@@ -1380,7 +1380,7 @@ body.split-active #obr-gl-video {
     <button id="main-cam-btn" class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">▶ INICIAR CÁMARA</button>
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
     <button id="immersive-toggle-btn" onclick="toggleImmersiveMode()" class="immersive-btn" title="Mostrar/ocultar barra de estado y navegación">
-<svg viewBox="0 0 24 24" aria-hidden="true">
+<svg viewBox="0 0 24 24" aria-hidden="false">
 <path class="fs-expand" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 <path class="fs-compress" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
@@ -1653,7 +1653,7 @@ body.split-active #obr-gl-video {
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '42'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '44'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
