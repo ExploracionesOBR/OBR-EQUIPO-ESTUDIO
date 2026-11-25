@@ -94,7 +94,7 @@ body {
         .interactive { pointer-events: auto; cursor: pointer; }
         
         body.filter-night-vision #shared-video-element { filter: grayscale(100%) sepia(100%) hue-rotate(90deg) saturate(2.0) contrast(1.2) brightness(1.0); }
-        body.filter-night-vision #main-view-area::after { content: " "; position: absolute; inset: 0; pointer-events: none; z-index: 10; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 3px); background-size: 100% 3px; }
+        body.filter-night-vision #main-view-area::after { content: " "; position: absolute; inset: 0; pointer-events: none; z-index: 10; background: none; /* líneas retro desactivadas */ }
         
         body.filter-thermal #shared-video-element { filter: invert(100%) sepia(80%) hue-rotate(260deg) saturate(300%) contrast(150%) brightness(1.2); }
         body.filter-urbex #shared-video-element { filter: invert(100%) hue-rotate(180deg) saturate(250%) contrast(115%) brightness(0.85); }
@@ -1066,12 +1066,12 @@ body:not(.gl-active) #obr-gl-video{ opacity:0 !important; pointer-events:none; v
 .immersive-btn svg { width: 20px; height: 20px; }
 .immersive-btn .fs-compress { display: none; }
 /* Estado "barras visibles" = verde, igual lenguaje visual que el avión */
-body.obr-no-immersive .immersive-btn {
+body.obr-is-fullscreen .immersive-btn {
   background: #2ecc5e; color: #fff;
   box-shadow: 0 0 12px rgba(46,204,94,.45);
 }
-body.obr-no-immersive .immersive-btn .fs-expand { display: none; }
-body.obr-no-immersive .immersive-btn .fs-compress { display: block; }
+body.obr-is-fullscreen .immersive-btn .fs-expand { display: none; }
+body.obr-is-fullscreen .immersive-btn .fs-compress { display: block; }
 
 
 /* ===== 🔒 OCULTAR SIEMPRE LOS NOMBRES DE FILTROS ===== */
@@ -1380,7 +1380,7 @@ body.split-active #obr-gl-video {
     <button id="main-cam-btn" class="mt-8 px-8 py-3 bg-red-900/20 border border-red-600 text-red-500 font-bold font-orbitron rounded hover:bg-red-900/50 transition load-btn" onclick="initApp()">▶ INICIAR CÁMARA</button>
     <button class="mt-4 px-6 py-2 bg-transparent border border-gray-700 text-gray-400 font-mono text-xs rounded hover:bg-gray-800 transition load-btn" onclick="initMicSenderMode()">🎤 MODO MIC SENDER</button>
     <button id="immersive-toggle-btn" onclick="toggleImmersiveMode()" class="immersive-btn" title="Mostrar/ocultar barra de estado y navegación">
-<svg viewBox="0 0 24 24" aria-hidden="false">
+<svg viewBox="0 0 24 24" aria-hidden="true">
 <path class="fs-expand" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 <path class="fs-compress" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
@@ -1605,6 +1605,17 @@ body.split-active #obr-gl-video {
     </div>
 </div>
 
+                <div class="bg-black/50 p-4 rounded border border-cyan-600 shadow-[0_0_15px_rgba(0,255,255,0.1)] mb-4">
+                    <h3 class="text-[12px] font-bold text-cyan-400 mb-3 border-b border-cyan-900/60 pb-2 uppercase tracking-wider text-center">🎯 ENFOQUE CÁMARA</h3>
+                    <div class="flex gap-2">
+                        <button id="focus-btn-auto" onclick="OBR_FOCUS.unlock()" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-cyan-500 text-cyan-300 bg-cyan-900/30">AUTO</button>
+                        <button id="focus-btn-lock" onclick="OBR_FOCUS.lock()" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-gray-700 text-gray-400">🔒 BLOQUEAR</button>
+                        <button onclick="OBR_FOCUS.refocusNow()" class="flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-yellow-600 text-yellow-300">ENFOCAR YA</button>
+                    </div>
+                    <div id="focus-status" class="text-center text-[10px] font-mono text-gray-400 mt-2">—</div>
+                    <p class="text-[8px] text-gray-600 font-mono mt-1 text-center">Toque corto en el centro de la pantalla = enfocar ese punto. BLOQUEAR congela la distancia actual.</p>
+                </div>
+
                 <details id="tts-filtros-details" class="bg-black/50 rounded border border-purple-600 shadow-[0_0_15px_rgba(128,0,128,0.1)] group">
                     <summary class="flex justify-between items-center p-3 cursor-pointer select-none list-none" onclick="loadTTSFilterPanel()">
                         <div class="flex items-center gap-2">
@@ -1653,7 +1664,9 @@ body.split-active #obr-gl-video {
 // ==========================================================
 // MANIFEST DINÁMICO CON PANTALLA COMPLETA Y CACHE BUSTING
 // ==========================================================
-const ASSET_VERSION = '44'; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
+const ASSET_VERSION = '46';
+// 🔦 true = el flash se enciende solo al activar un filtro (comportamiento original). false = nunca.
+const OBR_TORCH_WITH_FILTERS = true; // 🔒 CAMBIA ESTE NÚMERO cuando actualices obr-logo.png
 // ===== VERSIÓN GLOBAL: una sola fuente para título, carga, manifest y SW =====
 // 🎬 MODO DEMO (TEMPORAL): nombre del clip en la raíz del HTML (ej. 'demo.mp4').
 // Déjalo en '' para operación NORMAL con cámara real.
@@ -4487,8 +4500,8 @@ async function getElevenLabsAudio(text, voiceId) {
     // 🔒 FIX E: resolución 2x para mejor detección a distancia
 const analysisCanvas = document.createElement('canvas'); 
 const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true, alpha: false });
-analysisCanvas.width = 192;   // era 96
-analysisCanvas.height = 144;  // era 72
+analysisCanvas.width = 320;
+analysisCanvas.height = 240;
     const aiSnapCanvas = document.createElement('canvas'); aiSnapCanvas.width = 320; aiSnapCanvas.height = 240; const aiSnapCtx = aiSnapCanvas.getContext('2d', { alpha: false });
 
     const scanBoxPool = [];
@@ -4566,6 +4579,37 @@ const _yieldUI = () => new Promise(r => requestAnimationFrame(() => requestAnima
     let lastVW = 0, lastVH = 0, lastCW = 0, lastCH = 0; 
 
     let logoImg = new Image(); logoImg.src = 'obr-logo.png';
+
+    // 🎯 SLS — umbral intermedio con HISTÉRESIS:
+    //  · para ENTRAR: >=4 puntos con score>=0.25 y promedio >=0.30 (detector de primer plano: >=5 / 0.30 / 0.38)
+    //  · para MANTENERSE: basta con >=3 puntos con score>=0.20 y promedio >=0.25 (no se pierde de torso hacia arriba)
+    //  · si deja de detectarse, el esqueleto se conserva 1.5 s antes de borrarse
+    let _slsHits = 0, _slsLastValid = 0;
+    function commitSLSPoses(mapped) {
+        const tracking = targetPoses.length > 0;
+        const valid = (mapped || []).filter(p => {
+            const k = p.keypoints || [];
+            const th = tracking ? 0.20 : (p.single ? 0.30 : 0.25);
+            const needN = tracking ? 3 : (p.single ? 5 : 4);
+            const needAvg = tracking ? 0.25 : (p.single ? 0.38 : 0.30);
+            let n = 0, sum = 0;
+            for (let i = 0; i < k.length; i++) { if (k[i] && k[i].score >= th) { n++; sum += k[i].score; } }
+            return n >= needN && (sum / n) >= needAvg;
+        });
+        const now = performance.now();
+        if (valid.length > 0) {
+            _slsLastValid = now; _slsHits = Math.min(3, _slsHits + 1);
+            if (_slsHits >= 2 || tracking) {
+                const prevCount = targetPoses.length;
+                targetPoses = filterOverlapping(valid);
+                if (targetPoses.length > prevCount) window._detectionCount = (window._detectionCount || 0) + 1;
+                if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
+            }
+        } else {
+            _slsHits = Math.max(0, _slsHits - 1);
+            if (tracking && now - _slsLastValid > 1500) { targetPoses = []; currentPose = null; smoothedPoses = []; }
+        }
+    }
 
     function filterOverlapping(items) {
         const result = [];
@@ -4912,7 +4956,7 @@ OBR_EVENT_MANAGER.add(window, 'orientationchange', _hocD);
             });
             
             const newVideoTrack = stream.getVideoTracks()[0];
-            videoStream = new MediaStream([newVideoTrack]);
+            videoStream = new MediaStream([newVideoTrack]); try { OBR_FOCUS.init(newVideoTrack); } catch(e){}
             
             el.video.srcObject = videoStream; 
             await el.video.play();
@@ -5126,7 +5170,7 @@ showToast("🔄 ESTABILIZANDO CÁMARA...", false);
     });
     
     const newTrack = stream.getVideoTracks()[0];
-    videoStream = new MediaStream([newTrack]);
+    videoStream = new MediaStream([newTrack]); try { OBR_FOCUS.init(newTrack); } catch(e){}
     el.video.srcObject = videoStream;
     await el.video.play();
     
@@ -5843,7 +5887,7 @@ const constraintSets = [
     } else {
       localStorage.setItem("camPermission", "granted");
       try { sessionStorage.setItem("camPermission", "granted"); } catch(e){}
-      videoStream = new MediaStream(stream.getVideoTracks());
+      videoStream = new MediaStream(stream.getVideoTracks()); try { OBR_FOCUS.init(stream.getVideoTracks()[0]); } catch(e){}
       el.video.srcObject = videoStream;
       refreshLiveFilterCache();
       el.video.play().then(() => {}).catch(()=>{});
@@ -5881,14 +5925,14 @@ const constraintSets = [
             modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, 
             enableSmoothing: true, 
             maxPoses: 3, 
-            scoreThreshold: 0.25,   // 🔒 FIX E: era 0.4 → 0.25
+            minPoseScore: 0.15, multiPoseMaxDimension: 320,
             // inputResolution NO se especifica → MoveNet usa 192x192 ó 256x256 (mejor)
           }
         : { 
             modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, 
             enableSmoothing: false, 
             maxPoses: 2, 
-            scoreThreshold: 0.30,   // 🔒 FIX E: era 0.45 → 0.30
+            minPoseScore: 0.18, multiPoseMaxDimension: 256,
           }
     );
 }
@@ -5989,7 +6033,8 @@ const constraintSets = [
 // ==========================================================
 let slsWorker = null; let slsWorkerReady = false; let slsBusy = false;
 const SLS_WORKER_SRC = `
-let detector=null;
+let detector=null, detector2=null;
+const okCount=(p)=>{ let n=0; for(const k of p.keypoints){ if(k.score>=0.25) n++; } return n; };
 self.onmessage=async(e)=>{
 const m=e.data;
 if(m.type==='init'){
@@ -5999,15 +6044,24 @@ try{ await self.tf.setBackend('webgl'); }catch(_){ try{ await self.tf.setBackend
 await self.tf.ready();
 detector=await self.poseDetection.createDetector(self.poseDetection.SupportedModels.MoveNet,m.cfg);
 self.postMessage({type:'ready'});
+try{ detector2=await self.poseDetection.createDetector(self.poseDetection.SupportedModels.MoveNet,{modelType:self.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,enableSmoothing:true}); }catch(_){ detector2=null; }
 }catch(err){ self.postMessage({type:'initError',message:String(err&&err.message||err)}); }
 return;
 }
 if(m.type==='detect'){
 if(!detector){ self.postMessage({type:'poses',poses:[]}); return; }
+let out=[];
 try{
-const poses=await detector.estimatePoses(m.bitmap,{maxPoses:m.maxPoses,flipHorizontal:false,scoreThreshold:m.score});
-self.postMessage({type:'poses',poses:(poses||[]).map(p=>({keypoints:p.keypoints.map(k=>({x:k.x,y:k.y,score:k.score}))}))});
-}catch(err){ self.postMessage({type:'poses',poses:[]}); }
+const poses=(await detector.estimatePoses(m.bitmap,{maxPoses:m.maxPoses,flipHorizontal:false}))||[];
+if(!poses.some(p=>okCount(p)>=4) && detector2){
+try{
+const p2=await detector2.estimatePoses(m.bitmap,{flipHorizontal:false});
+if(p2&&p2.length){ out=p2.map(p=>({single:true,keypoints:p.keypoints.map(k=>({x:k.x,y:k.y,score:k.score}))})); }
+}catch(_){}
+}
+if(!out.length){ out=poses.map(p=>({single:false,keypoints:p.keypoints.map(k=>({x:k.x,y:k.y,score:k.score}))})); }
+}catch(err){ out=[]; }
+self.postMessage({type:'poses',poses:out});
 try{ m.bitmap.close(); }catch(_){}
 }
 };
@@ -6026,15 +6080,8 @@ if (d.type === 'initError') { console.warn('[SLS] Worker falló → fallback mai
 if (d.type === 'poses') {
 slsBusy = false;
 const AW = analysisCanvas.width, AH = analysisCanvas.height;
-const mapped = (d.poses || []).map(p => ({ keypoints: p.keypoints.map(k => ({ x: k.x / AW, y: k.y / AH, score: k.score })) }));
-const prevCount = targetPoses.length;
-targetPoses = filterOverlapping(mapped);
-// 📡 Contador SLS: nueva pose detectada (subió de 0 a 1+ o apareció una nueva)
-if (targetPoses.length > prevCount) {
-    window._detectionCount = (window._detectionCount || 0) + 1;
-}
-if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
-else { targetPoses = []; currentPose = null; smoothedPoses = []; }
+const mapped = (d.poses || []).map(p => ({ single: !!p.single, keypoints: p.keypoints.map(k => ({ x: k.x / AW, y: k.y / AH, score: k.score })) }));
+commitSLSPoses(mapped);
 }
 };
 slsWorker.postMessage({
@@ -6043,7 +6090,7 @@ cfg: {
   modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, 
   enableSmoothing: _isHighEndDevice, 
   maxPoses: _isHighEndDevice ? 3 : 2, 
-  scoreThreshold: _isHighEndDevice ? 0.25 : 0.30  // 🔒 FIX E
+  minPoseScore: _isHighEndDevice ? 0.15 : 0.18, multiPoseMaxDimension: _isHighEndDevice ? 320 : 256
 }
 });
 } catch (e) { slsWorker = null; _warn('[SLS] Worker no disponible:', e && e.name); }
@@ -6132,17 +6179,7 @@ maxPoses: _isHighEndDevice ? 3 : 2,
 flipHorizontal: false,
 scoreThreshold: AI_SENSITIVITY
 });
-if (newPoses && newPoses.length > 0) {
-let mappedPoses = newPoses.map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) }));
-const prevCount = targetPoses.length;
-targetPoses = filterOverlapping(mappedPoses);
-if (targetPoses.length > prevCount) {
-    window._detectionCount = (window._detectionCount || 0) + 1;
-}
-if (targetPoses.length > 0 && targetPoses[0].keypoints) updatePose(targetPoses[0].keypoints);
-} else {
-targetPoses = []; currentPose = null; smoothedPoses = [];
-}
+commitSLSPoses((newPoses || []).map(p => ({ keypoints: p.keypoints.map(kp => ({ ...kp, x: kp.x / analysisCanvas.width, y: kp.y / analysisCanvas.height })) })));
 } catch(e){}
 }
 }
@@ -6154,9 +6191,9 @@ targetPoses = []; currentPose = null; smoothedPoses = [];
     if (!aiActive) {
         delay = 2000;
     } else if (hasDetections) {
-        delay = state.isSLS ? 80 : 200; // un poco más lento que antes
+        delay = state.isSLS ? 50 : 200;
     } else {
-        delay = state.isSLS ? 400 : 800;
+        delay = state.isSLS ? 120 : 800;
     }
     // En gama baja, aumentar aún más
     if ((navigator.hardwareConcurrency || 4) <= 4) {
@@ -7279,7 +7316,10 @@ function computeSurfaceSize() {
 }
 
 function applyQualityScale() {
-{ const _w = Math.round(window.innerWidth * qualityScale), _h = Math.round(window.innerHeight * qualityScale);
+{ const _dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, _isHighEndDevice ? 2.5 : 1.5)); // nunca por debajo de 1 (zoom del navegador <100%)
+  window._ovDpr = _dpr; // resolución de overlays (HUD, logo, contador) = pantalla real
+  let _w = Math.round(window.innerWidth * qualityScale * _dpr), _h = Math.round(window.innerHeight * qualityScale * _dpr);
+  const _cap = Math.min(1, 2560 / Math.max(_w, _h)); if (_cap < 1) { _w = Math.round(_w * _cap); _h = Math.round(_h * _cap); }
   if (el.masterCanvas.width !== _w) el.masterCanvas.width = _w;
   if (el.masterCanvas.height !== _h) el.masterCanvas.height = _h; }
 ctx.imageSmoothingEnabled = true;
@@ -7479,7 +7519,7 @@ ctx2.shadowBlur = isPortrait ? 2 : 1.5; // 🔒 solo un halo sutil de contraste,
         }
         const tCanv = _hudTextCanvas, tCtx = _hudTextCtx;
         // Solo regenerar si cambió la fecha
-        const SS = 2; // 🔒 supersampling: se rasteriza 2x y se reduce → bordes nítidos
+        const SS = Math.max(2, Math.ceil(window._ovDpr || 2)); // 🔒 supersampling acorde a la pantalla real
 if (fullDate !== _lastHudDate || tCanv.width !== 1) {
 ctx2.font = `${dateFS}px 'Share Tech Mono', monospace`;
 const metrics = ctx2.measureText(fullDate);
@@ -7513,13 +7553,13 @@ let _hudStaticDate = '';
 let _hudStaticSize = '';
 
 function getCachedHUDStatic(width, height, scale) {
-  const sizeKey = `${width}x${height}@${scale.toFixed(2)}`;
+  const sizeKey = `${width}x${height}@${scale.toFixed(2)}@${(window._ovDpr || 1).toFixed(2)}`;
   const now = new Date();
   const dateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
   
   // Si no hay cache o cambió tamaño o cambió minuto → regenerar
   if (!_hudStaticCache || _hudStaticSize !== sizeKey || _hudStaticDate !== dateKey) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = window._ovDpr || Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round(width * dpr);
     const h = Math.round(height * dpr);
     
@@ -7527,10 +7567,11 @@ function getCachedHUDStatic(width, height, scale) {
       _hudStaticCache = document.createElement('canvas');
       _hudStaticCacheCtx = _hudStaticCache.getContext('2d');
     }
-    _hudStaticCache.width = w;
-    _hudStaticCache.height = h;
-    
-    // Dibujar HUD estático en el canvas cache
+    if (_hudStaticCache.width !== w || _hudStaticCache.height !== h) { _hudStaticCache.width = w; _hudStaticCache.height = h; }
+    _hudStaticCacheCtx.setTransform(1, 0, 0, 1, 0, 0);
+    _hudStaticCacheCtx.clearRect(0, 0, w, h);
+    _hudStaticCacheCtx.imageSmoothingEnabled = true;
+    _hudStaticCacheCtx.imageSmoothingQuality = 'high';
     _hudStaticCacheCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawBurnInHUD(_hudStaticCacheCtx, width, height, scale);
     
@@ -8055,7 +8096,7 @@ function drawHybrid(targetCtx, pose, targetIdx, coords) {
     
     for (let i = 0; i <= 4; i++) {
       const kp = pose.keypoints[i];
-      if (!kp || kp.score < AI_SENSITIVITY * 0.2) continue;
+      if (!kp || kp.score < 0.15) continue;
       const ax = mapX(kp.x), ay = mapY(kp.y);
       if (ax < pMinX) pMinX = ax;
       if (ay < pMinY) pMinY = ay;
@@ -8117,7 +8158,7 @@ function drawHybrid(targetCtx, pose, targetIdx, coords) {
   // 5. Dibujar Esqueleto (líneas ultra finas compensadas)
   if (drewPose && pose.keypoints && pose.keypoints.length > 0) {
     const k = pose.keypoints;
-    const bones = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+    const bones = [[0, 1], [0, 2], [1, 3], [2, 4], [5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
     
     targetCtx.save();
     targetCtx.strokeStyle = "#ff00ff";
@@ -8128,7 +8169,7 @@ targetCtx.shadowBlur = 0;
     
     bones.forEach(([a, b]) => {
       const p1 = k[a], p2 = k[b];
-      if (!p1 || !p2 || p1.score < AI_SENSITIVITY * 0.7 || p2.score < AI_SENSITIVITY * 0.7) return;
+      if (!p1 || !p2 || p1.score < 0.20 || p2.score < 0.20) return;
       targetCtx.beginPath();
       targetCtx.moveTo(mapX(p1.x), mapY(p1.y));
       targetCtx.lineTo(mapX(p2.x), mapY(p2.y));
@@ -8136,7 +8177,7 @@ targetCtx.shadowBlur = 0;
     });
     
     const nose = k[0], ls = k[5], rs = k[6];
-    if (nose && ls && rs && nose.score >= AI_SENSITIVITY * 0.6 && ls.score >= AI_SENSITIVITY * 0.6 && rs.score >= AI_SENSITIVITY * 0.6) {
+    if (nose && ls && rs && nose.score >= 0.20 && ls.score >= 0.20 && rs.score >= 0.20) {
       const midX = (mapX(ls.x) + mapX(rs.x)) / 2;
       const midY = (mapY(ls.y) + mapY(rs.y)) / 2;
       targetCtx.beginPath();
@@ -8147,10 +8188,10 @@ targetCtx.shadowBlur = 0;
     targetCtx.restore();
     
     // 6. Puntos clave (GLOW FALSO compensado)
-    const keypointsToDraw = [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    const keypointsToDraw = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     keypointsToDraw.forEach(i => {
       const p = k[i];
-      if (!p || p.score < AI_SENSITIVITY * 0.5) return;
+      if (!p || p.score < 0.18) return;
       const px = mapX(p.x), py = mapY(p.y);
 targetCtx.beginPath();
 targetCtx.arc(px, py, 3.4, 0, Math.PI * 2); // 🔒 Radio reforzado
@@ -8491,8 +8532,11 @@ function renderLoop(now, metadata) {
   const W = window.innerWidth, H = window.innerHeight;
   
   // ✅ 3. Configurar transform UNA SOLA VEZ
-  ctx.setTransform(cW / W, 0, 0, cH / H, 0, 0);
+  // 🔒 Limpiar SIEMPRE en píxeles reales (identidad). Si se limpia con la escala ya aplicada,
+  // solo se borra una parte del canvas y queda el "fantasma" del filtro anterior.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, cW, cH);
+  ctx.setTransform(cW / W, 0, 0, cH / H, 0, 0);
 
   // 🔀 SPLIT: dibuja mitad derecha con filtro (reframe a 50%)
   if (window._splitScreenActive) {
@@ -8548,9 +8592,13 @@ if (_overlayDirty || isRecordingActive) {
 // 🔒 Gama baja: compone 30fps reales (captureStream duplica a 60fps) → mitad de carga 2D
 if (isRecordingActive && recCtx4K && recCanvas4K && recCanvas4K.width > 1) {
 if (_isHighEndDevice || (frameCount & 1) === 0) {
+const _t0 = performance.now();
 composeFullFrame(recCtx4K, recCanvas4K.width, recCanvas4K.height);
+const _dt = performance.now() - _t0;
+window._recComposeMs = (window._recComposeMs == null) ? _dt : (window._recComposeMs * 0.9 + _dt * 0.1);
 }
 }
+window._glStamp = -1; // el sello GL solo vale dentro de este mismo frame
   
   // ✅ 9. Reset transform y continuar loop
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -8924,7 +8972,7 @@ if (f === 'lidar') document.body.classList.add('lidar-fx-active');
 else document.body.classList.remove('lidar-fx-active');
 
 // 🔒 Flash blindado: si torch no existe (iOS/demo), NO rompe el resto de setFilter
-try { { const _tNow = (f !== 'normal'); if (window._torchOn !== _tNow) { window._torchOn = _tNow; toggleTorch(_tNow); } } } catch(e) { console.warn('[FILTER] torch no disponible:', e); }
+try { { const _tNow = (f !== 'normal') && OBR_TORCH_WITH_FILTERS; if (window._torchOn !== _tNow) { window._torchOn = _tNow; toggleTorch(_tNow); } } } catch(e) { console.warn('[FILTER] torch no disponible:', e); }
     
     // 🔒 CRÍTICO: limpiar estado de IA al cambiar filtro
 targetPoses = [];
@@ -8959,7 +9007,100 @@ try {
     refreshLiveFilterCache();
     }
 
-    async function toggleTorch(force) { const t = videoStream?.getVideoTracks()[0]; if(!t) return; const on = (typeof force === 'boolean') ? force : !t.getSettings().torch; try { await t.applyConstraints({advanced:[{torch:on}]}); } catch(e){} }
+const OBR_FOCUS = {
+  track: null, caps: {}, lockedDistance: null, _wd: null,
+  mode: (localStorage.getItem('obr_focus_mode') === 'lock') ? 'lock' : 'auto',
+  init(track) {
+    this.track = track || null; this.caps = {};
+    if (!track) return;
+    try { this.caps = (track.getCapabilities && track.getCapabilities()) || {}; } catch (e) {}
+    console.log('[FOCUS] focusMode:', this.caps.focusMode, '| focusDistance:', this.caps.focusDistance);
+    this.updateUI();
+    setTimeout(() => { this.apply(); }, 500);
+    clearInterval(this._wd);
+    this._wd = setInterval(() => this.watchdog(), 5000);
+  },
+  supports(m) { const fm = this.caps && this.caps.focusMode; return Array.isArray(fm) && fm.indexOf(m) >= 0; },
+  async _apply(adv) {
+    if (!this.track || this.track.readyState !== 'live') return false;
+    try { await this.track.applyConstraints({ advanced: [adv] }); return true; } catch (e) { return false; }
+  },
+  currentMode() { try { return this.track.getSettings().focusMode || null; } catch (e) { return null; } },
+  async apply() {
+    if (this.mode === 'lock') {
+      if (this.lockedDistance != null && this.supports('manual')) return this._apply({ focusMode: 'manual', focusDistance: this.lockedDistance });
+      if (this.supports('single-shot')) return this._apply({ focusMode: 'single-shot' });
+    }
+    if (this.supports('continuous')) return this._apply({ focusMode: 'continuous' });
+    return false;
+  },
+  // Algunos equipos pierden el modo de enfoque tras encender el flash, grabar o cambiar restricciones
+  watchdog() {
+    if (!this.track || this.track.readyState !== 'live' || document.hidden || this.mode !== 'auto') return;
+    const cm = this.currentMode();
+    if (cm && cm !== 'continuous' && this.supports('continuous')) {
+      console.warn('[FOCUS] modo perdido (' + cm + ') → continuous');
+      this._apply({ focusMode: 'continuous' });
+    }
+  },
+  reassert(delay) {
+    setTimeout(() => {
+      if (this.mode === 'lock') { this.apply(); return; }
+      const cm = this.currentMode();
+      if (cm && cm !== 'continuous') this.apply();
+    }, delay || 300);
+  },
+  async lock(silent) {
+    if (!this.track || (!this.supports('single-shot') && !this.supports('manual'))) {
+      if (!silent) showToast('Este dispositivo no permite controlar el enfoque', true);
+      return false;
+    }
+    if (this.supports('single-shot')) { await this._apply({ focusMode: 'single-shot' }); await new Promise(r => setTimeout(r, 1200)); }
+    let d = null; try { d = this.track.getSettings().focusDistance; } catch (e) {}
+    if (this.supports('manual') && typeof d === 'number' && isFinite(d)) { this.lockedDistance = d; await this._apply({ focusMode: 'manual', focusDistance: d }); }
+    else { this.lockedDistance = null; }
+    this.mode = 'lock'; try { localStorage.setItem('obr_focus_mode', 'lock'); } catch (e) {}
+    this.updateUI();
+    if (!silent) showToast('🔒 ENFOQUE BLOQUEADO', false);
+    return true;
+  },
+  async unlock() {
+    this.mode = 'auto'; this.lockedDistance = null;
+    try { localStorage.setItem('obr_focus_mode', 'auto'); } catch (e) {}
+    await this.apply(); this.updateUI();
+    showToast('🎯 ENFOQUE AUTOMÁTICO', false);
+  },
+  async refocusNow(nx, ny) {
+    if (!this.track) return;
+    if (!this.supports('single-shot') && !this.supports('continuous')) { showToast('Este dispositivo no permite controlar el enfoque', true); return; }
+    const wasLock = this.mode === 'lock';
+    const poi = (typeof nx === 'number' && typeof ny === 'number') ? { pointsOfInterest: [{ x: nx, y: ny }] } : {};
+    let ok = false;
+    if (this.supports('single-shot')) ok = await this._apply(Object.assign({ focusMode: 'single-shot' }, poi));
+    if (!ok && this.supports('continuous')) ok = await this._apply(Object.assign({ focusMode: 'continuous' }, poi));
+    setTimeout(async () => {
+      if (wasLock) await this.lock(true);
+      else if (this.supports('continuous')) await this._apply({ focusMode: 'continuous' });
+    }, 1300);
+  },
+  updateUI() {
+    const st = document.getElementById('focus-status');
+    const on = 'flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-cyan-500 text-cyan-300 bg-cyan-900/30';
+    const off = 'flex-1 py-2 rounded text-[10px] font-bold font-mono border transition-all border-gray-700 text-gray-400';
+    const a = document.getElementById('focus-btn-auto'), l = document.getElementById('focus-btn-lock');
+    if (a) a.className = this.mode === 'auto' ? on : off;
+    if (l) l.className = this.mode === 'lock' ? on : off;
+    if (st) {
+      const fm = this.caps && this.caps.focusMode;
+      st.textContent = !this.track ? 'Cámara no iniciada'
+        : (!Array.isArray(fm) ? 'Este dispositivo no permite controlar el enfoque'
+        : (this.mode === 'lock' ? 'Enfoque BLOQUEADO' : 'Enfoque automático continuo'));
+    }
+  }
+};
+window.OBR_FOCUS = OBR_FOCUS;
+
+async function toggleTorch(force) { const t = videoStream?.getVideoTracks()[0]; if(!t) return; const on = (typeof force === 'boolean') ? force : !t.getSettings().torch; try { await t.applyConstraints({advanced:[{torch:on}]}); } catch(e){} try { OBR_FOCUS.reassert(350); } catch(e){} }
 
     function startScanningEffect() {
         const overlay = document.getElementById('ai-scan-overlay'); overlay.style.display = 'block';
@@ -10269,7 +10410,19 @@ touchSurface.addEventListener('pointercancel', () => clearTimeout(pressTimer));
 // Zona Segura (centro - solo zoom, no abre menús)
 safeTouchZone.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
-    pressTimer = setTimeout(() => performZoom(e), 800);
+    window._safeDown = { t: performance.now(), x: e.clientX, y: e.clientY };
+    pressTimer = setTimeout(() => { window._safeDown = null; performZoom(e); }, 800);
+});
+safeTouchZone.addEventListener('pointerup', (e) => {
+    const d = window._safeDown; window._safeDown = null;
+    if (!d) return;
+    if (performance.now() - d.t > 350 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 14) return;
+    const C = window.drawCoords;
+    const nx = Math.min(1, Math.max(0, C ? (e.clientX - C.dX) / C.dW : e.clientX / window.innerWidth));
+    const ny = Math.min(1, Math.max(0, C ? (e.clientY - C.dY) / C.dH : e.clientY / window.innerHeight));
+    try { OBR_FOCUS.refocusNow(nx, ny); } catch (err) {}
+    const ind = document.getElementById('zoom-target-indicator');
+    if (ind) { ind.style.left = e.clientX + 'px'; ind.style.top = e.clientY + 'px'; ind.classList.add('active'); setTimeout(() => ind.classList.remove('active'), 600); }
 });
 // 🔒 Limpieza GLOBAL del timer (el pointerup caiga donde caiga, cancela el zoom)
 window.addEventListener('pointerup', () => clearTimeout(pressTimer));
@@ -10836,11 +10989,13 @@ if (!isRecordingActive && recCanvas4K) { recCanvas4K.width = 0; recCanvas4K.heig
             console.error('[REC] start() lanzó:', e);
             return next(i, e);
         }
-        console.info('[REC] START OK', `${RW}x${RH}@${cfg.fps}`, cfg.mime || 'default');
+        try { OBR_FOCUS.reassert(600); } catch(e){}
+console.info('[REC] START OK', `${RW}x${RH}@${cfg.fps}`, cfg.mime || 'default');
 
 isRecording = true;
 _recStarting = false;
 recordingStartTime = Date.now();
+window._recComposeMs = null; window._recCamNoted = false; lowRecFpsCount = 0;
 
 const recInd = document.getElementById('recording-indicator'); if (recInd) recInd.classList.add('active');
 const btn = document.getElementById('btn-record'); if (btn) btn.classList.add('active-state');
@@ -10853,7 +11008,14 @@ const recElapsed = Date.now() - recordingStartTime;
 if (recElapsed > 5000 && typeof currentFps !== 'undefined' && currentFps < 15) { lowRecFpsCount++; } else { lowRecFpsCount = 0; }
 if (lowRecFpsCount >= 8) {
 lowRecFpsCount = 0;
+// Distinguir: ¿sobrecarga del equipo o simplemente la cámara entrega pocos fps (poca luz)?
+const _cost = window._recComposeMs || 0;
+if (_cost > 22) {
 showToast('⚠️ CARGA ALTA: apaga SLS/LiDAR para 1080p fluido', true);
+} else if (!window._recCamNoted) {
+window._recCamNoted = true;
+showToast('ℹ️ La cámara entrega ~' + currentFps + ' fps (poca luz). La grabación va bien.', false);
+}
 }
 }, 1000);
 
@@ -10975,7 +11137,11 @@ const OBRL = { gl: null, prog: null, tex: null, canvas: null, uni: {}, ready: fa
 const GL_VS = `attribute vec2 a_pos; varying vec2 v_uv;
 void main(){ v_uv = vec2((a_pos.x+1.0)*0.5, 1.0-(a_pos.y+1.0)*0.5); gl_Position = vec4(a_pos,0.0,1.0); }`;
 
-const GL_FS = `precision mediump float;
+const GL_FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
 varying vec2 v_uv;
 uniform sampler2D u_tex; uniform vec2 u_texel; uniform vec2 u_uvScale; uniform vec2 u_uvOff;
 uniform float u_sharp; uniform float u_grain; uniform float u_time; uniform float u_filter;
@@ -11014,22 +11180,20 @@ vec3 s = texture2D(u_tex, uv - vec2(0.0, t.y)).rgb;
 vec3 e = texture2D(u_tex, uv + vec2(t.x, 0.0)).rgb;
 vec3 w = texture2D(u_tex, uv - vec2(t.x, 0.0)).rgb;
 vec3 blur4 = (n + s + e + w) * 0.25;
-base = clamp(base + (base - blur4) * (u_sharp * 1.5), 0.0, 1.0);
+base = clamp(base + (base - blur4) * (u_sharp * 1.1), 0.0, 1.0);
 }
 vec3 col = applyFilter(clamp(base,0.0,1.0), u_filter);
 float L = luma(col);
 col = mix(vec3(L), col, u_saturate);
 col = (col - 0.5) * u_contrast + 0.5;
-col *= u_brightness * 1.10;   // 🔒 boost base 10% (brillo multiplicativo, respeta tonos)
+col *= u_brightness;
 float sAmt = clamp(u_sharp, 0.0, 1.0) * 0.25; // 🔒 curva S suave: piel natural, no amarilla
 col = mix(col, col*col*(3.0-2.0*col), sAmt);
 if (u_grain > 0.001) {
 // 🔒 GRANO DE PELÍCULA: celda 2×2 "gruesa" + detalle fino, parpadeo a 24fps (cine)
-float ft = floor(u_time * 24.0);
-vec2 cell = floor(gl_FragCoord.xy * 0.5);
-float gA = hash(cell + vec2(ft * 17.0, ft * 29.0)) - 0.5;   // grano grueso
-float gB = hash(gl_FragCoord.xy + vec2(ft * 61.7, ft * 83.3)) - 0.5; // fino
-float g = gA * 0.65 + gB * 0.35;
+float ft = mod(floor(u_time * 24.0), 16.0);
+vec2 gp = mod(gl_FragCoord.xy, 512.0) + vec2(ft * 7.0, ft * 13.0);
+float g = hash(gp) - 0.5;
 col += g * u_grain * (0.45 + 0.55 * (1.0 - L)); // más grano en sombras, como film real
 }
 gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
@@ -11091,7 +11255,7 @@ let w, h;
 if (isRecordingActive && recCanvas4K) {
 w = recCanvas4K.width; h = recCanvas4K.height;
 } else {
-const dpr = Math.min(window.devicePixelRatio || 1, _isHighEndDevice ? 2.0 : 1.5);
+const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, _isHighEndDevice ? 2.5 : 1.5));
 w = Math.round(window.innerWidth * dpr); h = Math.round(window.innerHeight * dpr);
 }
 if (OBRL.canvas.width !== w || OBRL.canvas.height !== h) { OBRL.canvas.width = w; OBRL.canvas.height = h; }
@@ -11113,15 +11277,15 @@ function renderGLVideo() {
     gl.uniform2f(OBRL.uni.u_uvScale, sX, sY);
     gl.uniform2f(OBRL.uni.u_uvOff, oX, oY);
     gl.uniform1f(OBRL.uni.u_sharp, [0, 0.35, 0.55, 0.75][currentSharpness] || 0);
-    const grainAmt = [0, 0.05, 0.065, 0.08][currentSharpness] || 0; // 🔒 grano escalonado por nivel
+    const grainAmt = [0, 0.022, 0.03, 0.04][currentSharpness] || 0; // 🔒 grano escalonado por nivel
 gl.uniform1f(OBRL.uni.u_grain, disableGrainOnIOS ? 0.0 : grainAmt);
     gl.uniform1f(OBRL.uni.u_time, (performance.now() / 1000) % 10);
     gl.uniform1f(OBRL.uni.u_filter, { normal: 0, night: 1, thermal: 2, urbex: 3 }[state.filter] || 0);
    const cs = {
-  0: [1.00, 1.00, 1.05],
-  1: [1.05, 1.08, 1.10],
-  2: [1.10, 1.15, 1.12],
-  3: [1.15, 1.22, 1.15]
+  0: [1.00, 1.00, 1.00],
+  1: [1.04, 1.05, 1.00],
+  2: [1.07, 1.09, 1.01],
+  3: [1.10, 1.13, 1.02]
 }[currentSharpness] || [1, 1, 1];
     gl.uniform1f(OBRL.uni.u_contrast, cs[0]);
     gl.uniform1f(OBRL.uni.u_saturate, cs[1]);
@@ -11215,46 +11379,63 @@ applyOfflineMode(false);
 }
 window.toggleOfflineMode = toggleOfflineMode;
 
-// ===== 📱 MODO INMERSIVO — toggle visual de pantalla completa =====
-const OBR_IMMERSIVE = { enabled: true };
+// ===== 📱 PANTALLA COMPLETA — el estado se lee SIEMPRE del sistema real =====
+const OBR_IMMERSIVE = { enabled: false };
+let _fsLast = null;
 
-// 🔒 CANDADO: ninguna llamada interna (init, orientación, etc.) podrá
-// re-activar fullscreen si el usuario lo desactivó. Sin esto, el botón
-// "pelearía" con el código existente que fuerza pantalla completa.
-(function patchFullscreen() {
-  const orig = Element.prototype.requestFullscreen;
-  if (orig) {
-    Element.prototype.requestFullscreen = function (...args) {
-      if (!OBR_IMMERSIVE.enabled) return Promise.resolve();
-      try { return orig.apply(this, args); } catch (e) { return Promise.reject(e); }
-    };
-  }
-  const webkit = Element.prototype.webkitRequestFullscreen;
-  if (webkit) {
-    Element.prototype.webkitRequestFullscreen = function (...args) {
-      if (!OBR_IMMERSIVE.enabled) return;
-      return webkit.apply(this, args);
-    };
-  }
-})();
+function isFullscreenNow() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) return true;
+  try { if (window.matchMedia('(display-mode: fullscreen)').matches) return true; } catch (e) {}
+  // APK/WebView inmersivo o F11: el viewport ocupa toda la pantalla física
+  const sw = screen.width || 0, sh = screen.height || 0;
+  return sw > 0 && sh > 0 && window.innerWidth >= sw - 1 && window.innerHeight >= sh - 1;
+}
 
-function toggleImmersiveMode() {
-  OBR_IMMERSIVE.enabled = !OBR_IMMERSIVE.enabled;
-  document.body.classList.toggle('obr-no-immersive', !OBR_IMMERSIVE.enabled);
-  if (OBR_IMMERSIVE.enabled) {
-    const p = document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : null;
-    if (p && p.catch) p.catch(() => {});
-    showToast('📺 PANTALLA COMPLETA ACTIVADA', false);
-  } else {
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      const p = document.exitFullscreen ? document.exitFullscreen() : null;
-      if (p && p.catch) p.catch(() => {});
+function syncImmersiveUI(announce) {
+  const fs = isFullscreenNow();
+  OBR_IMMERSIVE.enabled = fs;
+  document.body.classList.toggle('obr-is-fullscreen', fs);
+  const b = document.getElementById('immersive-toggle-btn');
+  if (b) {
+    b.title = fs ? 'Pantalla completa ACTIVA — toca para salir' : 'Pantalla completa INACTIVA — toca para entrar';
+    b.setAttribute('aria-pressed', fs ? 'true' : 'false');
+  }
+  if (announce && _fsLast !== null && _fsLast !== fs) {
+    showToast(fs ? '📺 PANTALLA COMPLETA ACTIVADA' : '📱 BARRAS DEL SISTEMA VISIBLES', false);
+  }
+  _fsLast = fs;
+}
+
+async function toggleImmersiveMode() {
+  const de = document.documentElement;
+  try {
+    if (!isFullscreenNow()) {
+      const req = de.requestFullscreen || de.webkitRequestFullscreen;
+      if (!req) { showToast('Este navegador no permite pantalla completa. Instala la app (PWA/APK).', true); return; }
+      await req.call(de, { navigationUI: 'hide' });
+    } else if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const ex = document.exitFullscreen || document.webkitExitFullscreen;
+      if (ex) await ex.call(document);
+    } else {
+      showToast('Modo inmersivo del sistema (APK/PWA): se sale desde el sistema', false);
     }
-    showToast('📱 BARRAS DEL SISTEMA VISIBLES', false);
+  } catch (e) {
+    showToast('No se pudo cambiar la pantalla completa', true);
   }
-  console.log('[UI] Modo inmersivo:', OBR_IMMERSIVE.enabled ? 'ON' : 'OFF');
+  setTimeout(() => syncImmersiveUI(true), 120);
 }
 window.toggleImmersiveMode = toggleImmersiveMode;
+
+(function initImmersiveSync() {
+  let raf = 0;
+  const soft = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; syncImmersiveUI(false); }); };
+  document.addEventListener('fullscreenchange', () => syncImmersiveUI(true));
+  document.addEventListener('webkitfullscreenchange', () => syncImmersiveUI(true));
+  window.addEventListener('resize', soft);
+  window.addEventListener('orientationchange', () => setTimeout(() => syncImmersiveUI(false), 350));
+  window.addEventListener('load', () => syncImmersiveUI(false));
+  syncImmersiveUI(false);
+})();
 
 window.addEventListener('offline', () => { OBR_NET.online = false; applyOfflineMode(true); });
 window.addEventListener('online', () => { probeConnectivity().then(ok => { OBR_NET.online = ok; applyOfflineMode(true); }); });
